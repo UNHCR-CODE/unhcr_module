@@ -14,7 +14,7 @@ Here's what I looked at during the review
 """
 setup(
     name='unhcr_module',
-    version='0.2',
+    version='0.3',
     packages=find_packages(),
     install_requires=[
         'python-dotenv',

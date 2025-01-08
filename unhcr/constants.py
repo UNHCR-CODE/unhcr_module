@@ -57,3 +57,12 @@ API_OUT_KEY = os.getenv('PROS_OUT_API_KEY')
 LOCAL_BASE_URL = os.getenv('PROS_LOCAL_BASE_URL')
 LOCAL_API_IN_KEY = os.getenv('PROS_IN_LOCAL_API_KEY')
 LOCAL_API_OUT_KEY = os.getenv('PROS_OUT_LOCAL_API_KEY')
+
+#SOLARMAN NIGERIA
+SM_APP_ID = os.getenv('SM_APP_ID')
+SM_APP_SECRET = os.getenv('SM_APP_SECRET')
+#token will expire every 2 months
+SM_BIZ_ACCESS_TOKEN = os.getenv('SM_BIZ_ACCESS_TOKEN')
+SM_URL = os.getenv('SM_URL')
+SM_TOKEN_URL = f"{SM_URL}/account/v1.0/token"
+SM_HISTORY_URL = f"{SM_URL}/device/v1.0/historical?language=en"

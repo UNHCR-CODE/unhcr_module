@@ -1,5 +1,7 @@
 # UNHCR Data Integration Module
 
+2024-01-06  v_0.3
+
 This module facilitates the integration of data from the Leonics API into UNHCR's systems, specifically a MySQL database, and the Prospect system.  It handles authentication with the Leonics API, data retrieval, filtering, and updates to both target systems.
 
 ## Key Features
@@ -32,7 +34,7 @@ For demonstration purposes I am using Windows and installing under: **_UNHCR\COD
     git clone https://github.com/unhcr-smh/unhcr_module.git
     cd _UNHCR\CODE\unhcr_module
 
-2. **Create a virtual environment:**
+2. **Create a virtual environment and activate it:**
    
     ```bash
     python3 -m venv .venv
@@ -54,32 +56,69 @@ For demonstration purposes I am using Windows and installing under: **_UNHCR\COD
    Here is the **.env** without values:
 
     ```plaintext
-    # Leonics API
-    LEONICS_BASE_URL = ''
-    LEONICS_USER_CODE = ''
-    LEONICS_KEY = ''
+    #[KOBO]
+    KOBO_CREATE_ENGINE=
+    KOBO_DATABASE=
+    KOBO_HOST=
+    KOBO_PASSWORD=
+    KOBO_PORT=
+    KOBO_SOURCE_FILE=
+    KOBO_TABLE_NAME=
+    KOBO_SHEET_NAME=
+    KOBO_USER=
+    KOBO_URL=
+    KOBO_PROJECT_URL=
+    KOBO_SSO_LOGIN=
 
-    # Verify SSL --- note that leonic's cert does not verify
-    VERIFY = False
+    #[GB_2024]
+    GB_2024_CREATE_ENGINE=
 
-    # Aiven Mysql DB
-    AIVEN_TAKUM_CONN_STR = ''
+    #[GB_MISC]
+    GB_MISC_CREATE_ENGINE=
 
-    # Eyedro S3
-    ACCESS_KEY = ''
-    SECRET_KEY = ''
-    BUCKET_NAME = ''
-    FOLDER_NAME = ''
+    #[GB_2023]
+    GB_2023_CREATE_ENGINE=
 
-    # Prospect API
-    PROS_BASE_URL = ''
-    PROS_API_IN_KEY = ''
-    PROS_API_OUT_KEY = ''
+    #[GB_API_V1]
+    GB_API_V1_API_BASE_URL=
+    GB_API_V1_GET_DATA=
+    GB_API_V1_GET_DEVICE_LIST=
+    GB_API_V1_USER_KEY=
 
-    # if you're running a local instance of Prospect
-    PROS_LOCAL_BASE_URL = ''
-    PROS_LOCAL_API_IN_KEY = ''
-    PROS_LOCAL_API_OUT_KEY = ''
+    #[GB_AWS]
+    GB_AWS_ACCESS_KEY=
+    GB_AWS_SECRET_KEY=
+    GB_AWS_BUCKET_NAME=
+    GB_AWS_FOLDER_NAME=
+
+    #[PROTON]
+    PROTON_RECOVERY_PHRASE=
+    PROTON_URL=
+    PROTON_USER=
+    PROTON_PW=
+
+    #[LEONICS]
+    LEONICS_BASE_URL=
+    LEONICS_USER_CODE=
+    LEONICS_KEY=
+
+    #[PROSPECT]
+    PROS_LOCAL_BASE_URL=
+    PROS_IN_LOCAL_API_KEY=
+    PROS_OUT_LOCAL_API_KEY=
+    PROS_BASE_URL=
+    PROS_IN_API_KEY=
+    PROS_OUT_API_KEY=
+
+    #[AIVEN]
+    AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR=
+
+    #[SOLARMAN NIGERIA]
+    SM_APP_ID=
+    SM_APP_SECRET=
+    #[SM_BIZ] will expire every 2 months
+    SM_BIZ_ACCESS_TOKEN=
+    SM_URL=
 
 7. Execute **run.bat** The output should be similar:
 
@@ -89,34 +128,111 @@ For demonstration purposes I am using Windows and installing under: **_UNHCR\COD
     E:\_UNHCR\CODE\unhcr_module>REM change to your venv path
 
     E:\_UNHCR\CODE\unhcr_module>call E:\_UNHCR\CODE\unhcr_module\.venv\Scripts\activate.bat
-    2025-01-06 13:41:47,541 - INFO - Process ID: 46944 Logging level: INFO
-    2025-01-06 13:41:47,543 - INFO - Getting auth token for date: 2025-01-06
-    2025-01-06 13:41:49,677 - INFO - Getting auth token for date: 2025-01-07
-    2025-01-06 13:41:51,766 - INFO - {
-    "API ver.": "v1.25",
-    "Pass": "Authentication successful"
-    }
+    ['__builtins__', '__cached__', '__doc__', '__file__', '__loader__', '__name__', '__package__', '__spec__', 'argparse', 'filter_nested_dict', 'get_module_version', 'log_setup', 'logging', 'str_to_float_or_zero', 'sys']
+2025-01-08 14:29:54,429 - INFO - INFO:  Logging level: INFO
+2025-01-08 14:29:54,429 - WARNING - WARNING:  Logging level: INFO
+2025-01-08 14:29:54,429 - ERROR - ERROR:  Logging level: INFO
+2025-01-08 14:29:54,430 - CRITICAL - CRITICAL:  Logging level: INFO
+2025-01-08 14:29:54,430 - INFO - Process ID: 66728   Log Level: INFO
+2025-01-08 14:29:54,432 - INFO - Version: 0.3   Error: None
+2025-01-08 14:29:54,432 - INFO - Getting auth token for date: 2025-01-08
+2025-01-08 14:29:56,502 - INFO - Getting auth token for date: 2025-01-09
+2025-01-08 14:29:58,476 - INFO - {
+  "API ver.": "v1.25",
+  "Pass": "Authentication successful"
+}
 
-    2025-01-06 13:42:04,307 - INFO - ROWS UPDATED: TAKUM_LEONICS_API_RAW  18
-    2025-01-06 13:42:04,308 - INFO - Starting update_prospect ts: 2090-11-14 01:52  local = True
-    2025-01-06 13:42:05,813 - INFO - 
+2025-01-08 14:30:11,271 - INFO - ROWS UPDATED: TAKUM_LEONICS_API_RAW  3
+2025-01-08 14:30:11,273 - INFO - Starting update_prospect ts: 2090-11-14 01:52  local = True
+2025-01-08 14:30:12,419 - INFO - 
 
-    74a1680a57a88fbd56e4af59576d7d3e
-    http://localhost:3000/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=1&q[s]=created_at+desc
-    2025-01-06 20:22
-    2025-01-06 13:42:12,245 - INFO - 201:  {"id":503,"created_at":"2025-01-06T19:42:12.136Z","status":"Import started"}
-    2025-01-06 13:42:12,245 - INFO - Data has been saved to 'py_pros'
-    2025-01-06 13:42:12,246 - INFO - Starting update_prospect ts: 2090-11-14 01:48  local = False
-    2025-01-06 13:42:12,997 - INFO - 
+74a1680a57a88fbd56e4af59576d7d3e
+http://localhost:3000/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=1&q[s]=created_at+desc
+2025-01-08 21:22
+2025-01-08 14:30:18,651 - INFO - 201:  {"id":518,"created_at":"2025-01-08T20:30:18.469Z","status":"Import started"}
+2025-01-08 14:30:18,651 - INFO - Data has been saved to 'py_pros'
+2025-01-08 14:30:18,652 - INFO - Starting update_prospect ts: 2090-11-14 01:48  local = False
+2025-01-08 14:30:19,472 - INFO - 
 
-    c91c1da9b43658800b079d52953d83f7
-    https://app.prospect.energy/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=421&q[s]=created_at+desc
-    2025-01-06 20:22
-    2025-01-06 13:42:19,566 - INFO - 201:  {"id":4935699,"created_at":"2025-01-06T19:42:19.550Z","status":"Import started"}
-    2025-01-06 13:42:19,567 - INFO - Data has been saved to 'py_pros'
+c91c1da9b43658800b079d52953d83f7
+https://app.prospect.energy/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=421&q[s]=created_at+desc
+2025-01-08 21:22
+2025-01-08 14:30:25,765 - INFO - 201:  {"id":4941976,"created_at":"2025-01-08T20:30:25.909Z","status":"Import started"}
+2025-01-08 14:30:25,765 - INFO - Data has been saved to 'py_pros'
 
 ## Notes
 
 Logging goes to **_UNHCR\CODE\unhcr_module\unhcr.module.log**
 
 If you set the log level to **DEBUG** your will get CSV files.
+
+There is a bug when there are no new records:
+
+    E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\unhcr\db.py:144: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise in a future error of pandas. Value '['2025-01-08 21:26']' has dtype incompatible with datetime64[ns], please explicitly cast to a compatible dtype first.
+    df_filtered.loc[:, 'DateTimeServer'] = df_filtered['DateTimeServer'].dt.strftime('%Y-%m-%d %H:%M')
+    Traceback (most recent call last):
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+        self.dialect.do_execute(
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 941, in do_execute
+        cursor.execute(statement, parameters)
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\MySQLdb\cursors.py", line 179, in execute
+        res = self._query(mogrified_query)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\MySQLdb\cursors.py", line 330, in _query
+        db.query(q)
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\MySQLdb\connections.py", line 265, in query
+        _mysql.connection.query(self, query)
+    MySQLdb.ProgrammingError: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '21:26)' at line 1")
+
+    The above exception was the direct cause of the following exception:
+
+    Traceback (most recent call last):
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\unhcr\db.py", line 104, in update_mysql
+        update_rows(max_dt, token)
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\unhcr\db.py", line 166, in update_rows
+        res = mysql_execute(sql_query)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\unhcr\db.py", line 76, in mysql_execute
+        raise e
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\unhcr\db.py", line 71, in mysql_execute
+        result = session.execute(text(sql), {"data": data})
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2362, in execute
+        return self._execute_internal(
+            ^^^^^^^^^^^^^^^^^^^^^^^
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2256, in _execute_internal
+        result = conn.execute(
+                ^^^^^^^^^^^^^
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1418, in execute
+        return meth(
+            ^^^^^
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\sql\elements.py", line 515, in _execute_on_connection
+        return connection._execute_clauseelement(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1640, in _execute_clauseelement
+        ret = self._execute_context(
+            ^^^^^^^^^^^^^^^^^^^^^^
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1846, in _execute_context
+        return self._exec_single_context(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1986, in _exec_single_context
+        self._handle_dbapi_exception(
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2355, in _handle_dbapi_exception
+        raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+        self.dialect.do_execute(
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 941, in do_execute
+        cursor.execute(statement, parameters)
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\MySQLdb\cursors.py", line 179, in execute
+        res = self._query(mogrified_query)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\MySQLdb\cursors.py", line 330, in _query
+        db.query(q)
+    File "E:\_UNHCR\CODE\unhcr_module\.venv\Lib\site-packages\MySQLdb\connections.py", line 265, in query
+        _mysql.connection.query(self, query)
+    sqlalchemy.exc.ProgrammingError: (MySQLdb.ProgrammingError) (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '21:26)' at line 1")
+    [SQL: INSERT INTO TAKUM_LEONICS_API_RAW (BDI1_ACinput_P1_kW, BDI1_ACinput_P2_kW, BDI1_ACinput_P3_kW, BDI1_ACinput_Total_kW, BDI1_ACinput_Voltage_L1, BDI1_ACinput_Voltage_L2, BDI1_ACinput_Voltage_L3, BDI1_Batt_Voltage, BDI1_Freq, BDI1_Power_P1_kW, BDI1_Power_P2_kW, BDI1_Power_P3_kW, BDI1_Todate_Supply_AC_kWh, BDI1_Today_Supply_AC_kWh, BDI1_Total_Power_kW, BDI2_ACinput_P1_kW, BDI2_ACinput_P2_kW, BDI2_ACinput_P3_kW, BDI2_ACinput_Total_kW, BDI2_ACinput_Voltage_L1, BDI2_ACinput_Voltage_L2, BDI2_ACinput_Voltage_L3, BDI2_Freq, BDI2_Power_P1_kW, BDI2_Power_P2_kW, BDI2_Power_P3_kW, BDI2_Todate_Batt_Chg_kWh, BDI2_Todate_Batt_DisChg_kWh, BDI2_Today_Batt_Chg_kWh, BDI2_Today_Batt_DisChg_kWh, BDI2_Total_Power_kW, DCgen_Alternator_Current, DCgen_Alternator_Power_kW, DCgen_Alternator_Temp, DCgen_Alternator_Voltage, DCgen_Ambient_Temp, DCgen_Coolant_Temp, DCgen_Diode_Temp, DCgen_Engine_Runtime, DCgen_Fuel_Level, DCgen_High_Voltage_Stop, DCgen_LoadBattery_Current, DCgen_LoadBattery_Power_kW, DCgen_LoadBattery_Voltage, DCgen_Low_Current_Stop, DCgen_Low_Voltage_Start, DCgen_Max_Current, DCgen_Max_RPM, DCgen_Max_Voltage, DCgen_Min_RPM, DCgen_Oil_Pressure, DCgen_RPM, DCgen_RPM_Frequency, DCgen_StartingBatteryVoltage, DCgen_Throttle_Stop, DCgen_Today_kWh, DCgen_Total_kWh, FlowMeter_Fuel_Temp, FlowMeter_Hourly_Fuel_consumptionRate, FlowMeter_Today_Fuel_consumption, FlowMeter_Total_Fuel_consumption, HVB1_Avg_V, HVB1_Batt_I, HVB1_SOC, In1_BDI_Fail, In2_ATS_Status, In3_door_sw, In4, In5, In6, In7, In8, LoadPM_Import_kWh, LoadPM_Power_P1_kW, LoadPM_Power_P2_kW, LoadPM_Power_P3_kW, LoadPM_Today_Import_kWh, LoadPM_Total_P_kW, Out1_CloseMC1, Out2_StartGen, Out3_EmergencyStop, Out4, Out5, Out6, Out7, Out8, SCC1_Chg_Current, SCC1_Chg_Power_kW, SCC1_Chg_Voltage, SCC1_PV_Current, SCC1_PV_Power_kW, SCC1_PV_Voltage, SCC1_Todate_Chg_kWh, SCC1_Todate_PV_kWh, SCC1_Today_Chg_kWh, SCC1_Today_PV_kWh, ana1_Inv_Room_Temp, ana2_Inv_room_RH, ana3_Batt_Room_Temp, ana4_Batt_room_RH, ana5_Fuel_Level1, ana6_Fuel_Level2, DateTimeServer) VALUES (0.0, 0.0, 0.0, 0.0, 0.6, 0.5, 0.4, 267.6, 50.0, 2.9, 1.3, 1.2, 15025.0, 136.0, 5.4, 0.0, 0.0, 0.0, 0.0, 0.2, 0.2, 0.7, 47.35, 0.0, 0.0, 0.0, 2736.52, 4261.7, 74.06, 68.74, 0.0, 64.17, 17.23, 77.38, 268.52, 84.68, 84.68, 51.08, 727.0, 24.37, 268.0, 64.17, 0.0, 0.0, 48.0, 260.0, 133.0, 28.0, 269.5, 6.5, 653.65, 22.8, 0.0, 13.66, 0.0, 139.0, 9342.0, NULL, NULL, 0.0, NULL, 267.6, 42.5, 86.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 16027.4, 2.96, 1.39, 1.12, 137.66, 5.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3, 0.07, 268.6, 0.5, 0.02, 44.9, 1231.4, 1208.6, 11.0, 10.5, 30.4, 21.4, 13.5, 53.8, 8.6, 3.9, 2025-01-08 21:26);]
+    (Background on this error at: https://sqlalche.me/e/20/f405)
+    2025-01-08 14:28:11,949 - ERROR - ?????????????????update_mysql Error occurred: (MySQLdb.ProgrammingError) (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '21:26)' at line 1")
+    [SQL: INSERT INTO TAKUM_LEONICS_API_RAW (BDI1_ACinput_P1_kW, BDI1_ACinput_P2_kW, BDI1_ACinput_P3_kW, BDI1_ACinput_Total_kW, BDI1_ACinput_Voltage_L1, BDI1_ACinput_Voltage_L2, BDI1_ACinput_Voltage_L3, BDI1_Batt_Voltage, BDI1_Freq, BDI1_Power_P1_kW, BDI1_Power_P2_kW, BDI1_Power_P3_kW, BDI1_Todate_Supply_AC_kWh, BDI1_Today_Supply_AC_kWh, BDI1_Total_Power_kW, BDI2_ACinput_P1_kW, BDI2_ACinput_P2_kW, BDI2_ACinput_P3_kW, BDI2_ACinput_Total_kW, BDI2_ACinput_Voltage_L1, BDI2_ACinput_Voltage_L2, BDI2_ACinput_Voltage_L3, BDI2_Freq, BDI2_Power_P1_kW, BDI2_Power_P2_kW, BDI2_Power_P3_kW, BDI2_Todate_Batt_Chg_kWh, BDI2_Todate_Batt_DisChg_kWh, BDI2_Today_Batt_Chg_kWh, BDI2_Today_Batt_DisChg_kWh, BDI2_Total_Power_kW, DCgen_Alternator_Current, DCgen_Alternator_Power_kW, DCgen_Alternator_Temp, DCgen_Alternator_Voltage, DCgen_Ambient_Temp, DCgen_Coolant_Temp, DCgen_Diode_Temp, DCgen_Engine_Runtime, DCgen_Fuel_Level, DCgen_High_Voltage_Stop, DCgen_LoadBattery_Current, DCgen_LoadBattery_Power_kW, DCgen_LoadBattery_Voltage, DCgen_Low_Current_Stop, DCgen_Low_Voltage_Start, DCgen_Max_Current, DCgen_Max_RPM, DCgen_Max_Voltage, DCgen_Min_RPM, DCgen_Oil_Pressure, DCgen_RPM, DCgen_RPM_Frequency, DCgen_StartingBatteryVoltage, DCgen_Throttle_Stop, DCgen_Today_kWh, DCgen_Total_kWh, FlowMeter_Fuel_Temp, FlowMeter_Hourly_Fuel_consumptionRate, FlowMeter_Today_Fuel_consumption, FlowMeter_Total_Fuel_consumption, HVB1_Avg_V, HVB1_Batt_I, HVB1_SOC, In1_BDI_Fail, In2_ATS_Status, In3_door_sw, In4, In5, In6, In7, In8, LoadPM_Import_kWh, LoadPM_Power_P1_kW, LoadPM_Power_P2_kW, LoadPM_Power_P3_kW, LoadPM_Today_Import_kWh, LoadPM_Total_P_kW, Out1_CloseMC1, Out2_StartGen, Out3_EmergencyStop, Out4, Out5, Out6, Out7, Out8, SCC1_Chg_Current, SCC1_Chg_Power_kW, SCC1_Chg_Voltage, SCC1_PV_Current, SCC1_PV_Power_kW, SCC1_PV_Voltage, SCC1_Todate_Chg_kWh, SCC1_Todate_PV_kWh, SCC1_Today_Chg_kWh, SCC1_Today_PV_kWh, ana1_Inv_Room_Temp, ana2_Inv_room_RH, ana3_Batt_Room_Temp, ana4_Batt_room_RH, ana5_Fuel_Level1, ana6_Fuel_Level2, DateTimeServer) VALUES (0.0, 0.0, 0.0, 0.0, 0.6, 0.5, 0.4, 267.6, 50.0, 2.9, 1.3, 1.2, 15025.0, 136.0, 5.4, 0.0, 0.0, 0.0, 0.0, 0.2, 0.2, 0.7, 47.35, 0.0, 0.0, 0.0, 2736.52, 4261.7, 74.06, 68.74, 0.0, 64.17, 17.23, 77.38, 268.52, 84.68, 84.68, 51.08, 727.0, 24.37, 268.0, 64.17, 0.0, 0.0, 48.0, 260.0, 133.0, 28.0, 269.5, 6.5, 653.65, 22.8, 0.0, 13.66, 0.0, 139.0, 9342.0, NULL, NULL, 0.0, NULL, 267.6, 42.5, 86.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 16027.4, 2.96, 1.39, 1.12, 137.66, 5.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3, 0.07, 268.6, 0.5, 0.02, 44.9, 1231.4, 1208.6, 11.0, 10.5, 30.4, 21.4, 13.5, 53.8, 8.6, 3.9, 2025-01-08 21:26);]
+    (Background on this error at: https://sqlalche.me/e/20/f405)
