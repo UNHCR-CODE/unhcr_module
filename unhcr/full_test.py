@@ -37,10 +37,8 @@ Key Components
 """
 
 import logging
-import argparse
 import re
 import os
-
 
 # circular issues
 # import sys
@@ -48,10 +46,12 @@ import os
 
 from unhcr import db
 from unhcr import api
+from unhcr import utils
 
 # test local
 #import db
 #import api
+#import utils
 
 # just to test S3
 # TODO waiting for new creds
@@ -60,47 +60,15 @@ from unhcr import api
 # s3.list_files_in_folder(s3.BUCKET_NAME, s3.FOLDER_NAME)
 # exit()
 
-
-# Parse the command-line arguments
-parser = argparse.ArgumentParser(description="Set logging level")
-parser.add_argument(
-    "--log", 
-    default="WARNING", 
-    help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)"
-)
-args = parser.parse_args()
-
-# Create a custom logger
-logger = logging.getLogger()
-
-# Create a formatter that outputs the log format
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-
-# Create a console handler to log to the terminal
-console_handler = logging.StreamHandler()
-level = getattr(logging, args.log.upper(), logging.WARNING)
-console_handler.setLevel(level)  # Set level to INFO for console
-console_handler.setFormatter(formatter)
-
-# Create a file handler to log to a file
-file_handler = logging.FileHandler('unhcr.module.log')
-file_handler.setLevel(level)  # Set level to INFO for file
-file_handler.setFormatter(formatter)
-
-# Add the handlers to the logger
-logger.addHandler(console_handler)
-logger.addHandler(file_handler)
-
-# Set the overall logging level
-logger.setLevel(level)
-
-logging.info(f"Process ID: {os.getpid()} Logging level: {logging.getLevelName(level)}")
+utils.log_setup()
+logging.info(f"Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
+ver, err = utils.get_module_version()
+logging.info(f"Version: {ver}   Error: {err}")
 
 
 mysql = True
 pros = True
 orc = False
-
 
 if orc:
     try:

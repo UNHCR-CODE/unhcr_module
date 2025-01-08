@@ -13,9 +13,8 @@ Key Components
         If no objects are found, it logs a message indicating this. Error handling is included to catch and log any exceptions during the process. 
         It relies on the BUCKET_NAME and FOLDER_NAME constants for default values.
     constants import: 
-        This file imports necessary credentials (ACCESS_KEY, SECRET_KEY) and S3 location information (BUCKET_NAME, FOLDER_NAME) used to 
-        configure the S3 client and specify the target location. This suggests a practice of separating sensitive information from the 
-        main code for better security and maintainability.
+        This file imports necessary credentials (ACCESS_KEY, SECRET_KEY) and S3 location information (BUCKET_NAME, FOLDER_NAME) 
+        from a separate constants module. This separation of credentials from the main code is a good security practice.
     Logging: 
         The code uses the logging module to provide information about the files found or any errors encountered. 
         This is crucial for monitoring and debugging.
@@ -23,16 +22,16 @@ Key Components
 
 import boto3
 import logging
-from constants import ACCESS_KEY, SECRET_KEY, BUCKET_NAME, FOLDER_NAME
+from unhcr import constants as const
 
 s3_client = boto3.client(
     's3',
-    aws_access_key_id=ACCESS_KEY,
-    aws_secret_access_key=SECRET_KEY
+    aws_access_key_id=const.ACCESS_KEY,
+    aws_secret_access_key=const.SECRET_KEY
 )
 
-
-"""
+def list_files_in_folder(bucket_name, folder_name):
+    """
     List files in a specific folder within the given S3 bucket.
 
     Args:
@@ -41,9 +40,7 @@ s3_client = boto3.client(
 
     Raises:
         Exception: If there is an issue connecting to S3 or listing the files.
-"""
-
-def list_files_in_folder(bucket_name, folder_name):
+    """
     try:
         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=folder_name)
         if 'Contents' in response:
@@ -55,47 +52,15 @@ def list_files_in_folder(bucket_name, folder_name):
         logging.error(f"Error: {e}")
 
 ###################################
-# Hey there - I've reviewed your changes and found some issues that need to be addressed.
+# Hey there - I've reviewed your changes - here's some feedback:
 
-# Blocking issues:
-
-# Avoid hardcoding AWS credentials directly in the code (e:_UNHCR\CODE\unhcr_module\unhcr\s3.py:6)
 # Overall Comments:
 
-# Storing AWS credentials in constants is not secure. Consider using AWS credentials provider chain, environment variables, or AWS IAM roles instead.
-# The docstring is floating and not properly attached to the function it documents. Move it directly above the function definition.
+# Consider using AWS credential provider chain (environment variables, IAM roles, or AWS credentials file) instead of storing credentials in constants for better security
+# Replace broad Exception handling with specific boto3 exceptions (e.g., boto3.exceptions.Boto3Error) for better error visibility and debugging
 # Here's what I looked at during the review
-# 🟡 General issues: 1 issue found
-# 🔴 Security: 1 blocking issue, 1 other issue
+# 🟢 General issues: all looks good
+# 🟢 Security: all looks good
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:_UNHCR\CODE\unhcr_module\unhcr\s3.py:24
-
-# suggestion(security): Use more specific exception handling instead of broad Exception catch
-#         Exception: If there is an issue connecting to S3 or listing the files.
-# """
-
-# def list_files_in_folder(bucket_name, folder_name):
-#     try:
-#         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=folder_name)
-# Resolve
-# e:_UNHCR\CODE\unhcr_module\unhcr\s3.py:6
-
-# issue(security): Avoid hardcoding AWS credentials directly in the code
-# import logging
-# from constants import ACCESS_KEY, SECRET_KEY, BUCKET_NAME, FOLDER_NAME
-
-# s3_client = boto3.client(
-#     's3',
-#     aws_access_key_id=ACCESS_KEY,
-# Resolve
-# e:_UNHCR\CODE\unhcr_module\unhcr\s3.py:29
-
-# suggestion(code_refinement): Consider returning the file list instead of just logging it
-#         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=folder_name)
-#         if 'Contents' in response:
-#             for item in response['Contents']:
-#                 logging.info(f"Item: {item['Key']}, Size: {item['Size']} bytes")
-#         else:
-#             logging.info(f"No files found in folder '{folder_name}'.")

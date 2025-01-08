@@ -38,9 +38,24 @@ import urllib3
 # Suppress InsecureRequestWarning
 urllib3.disable_warnings(InsecureRequestWarning)
 
-import constants as const
+from unhcr import constants as const
 
 def getAuthToken(dt = None):
+    """
+    Retrieves an authentication token from the Leonics system. It takes an optional date parameter (dt) for specifying the current date. 
+    If no date is provided, it defaults to the current date. The function constructs the authentication payload, including system credentials 
+    and the provided date, and sends a POST request to the /auth endpoint.
+
+    Parameters
+    ----------
+    dt: datetime.date
+        The date to use for authentication. If not provided, defaults to the current date.
+
+    Returns
+    -------
+    requests.Response
+        The response object containing the authentication token in its JSON content.
+    """
     if dt is None:
         dt = datetime.now().date()
     logging.info(f'Getting auth token for date: {dt}')
@@ -54,6 +69,24 @@ def getAuthToken(dt = None):
 # sorcery: skip
 def checkAuth(dt=None, x=0):
     #TODO check 2 times as date maybe one day off due to tz
+    """
+    Checks the validity of the authentication token. It attempts to retrieve a token using getAuthToken().
+    If successful, it verifies the token against the /check_auth endpoint. 
+    It handles potential date-related issues by recursively calling itself with the next day's date if the token is invalid due to a date mismatch. 
+    Includes a retry mechanism (up to 3 times) to handle potential transient errors.
+
+    Parameters
+    ----------
+    dt: datetime.date
+        The date to use for authentication. If not provided, defaults to the current date.
+    x: int
+        The number of retry attempts.
+
+    Returns
+    -------
+    str or None
+        The authentication token if valid, None otherwise.
+    """
     if x > 2:
         return None
     res = getAuthToken(dt)
@@ -78,6 +111,28 @@ def checkAuth(dt=None, x=0):
     return token
 
 def getData(start, end, token=None):
+    """
+    Retrieves data from the Leonics system within a specified time range using a valid authentication token.
+    Constructs a URL with the provided start and end times and sends a GET request to the /data endpoint.
+    Parses the retrieved JSON data into a Pandas DataFrame and preprocesses it by combining date and time
+    server columns into a single column named 'DateTimeServer'.
+
+    Parameters
+    ----------
+    start : str
+        The start date for data retrieval in the format 'YYYYMMDD'.
+    end : str
+        The end date for data retrieval in the format 'YYYYMMDD'.
+    token : str, optional
+        The authentication token required for accessing the data. If not provided, the function returns None.
+
+    Returns
+    -------
+    pd.DataFrame or None
+        A Pandas DataFrame containing the retrieved data with a combined 'DateTimeServer' column, or None
+        if the request fails or the token is not provided.
+    """
+
     if token is None:
         return None
     url = url = f"{const.LEONICS_BASE_URL}/data?API-KEY={token}&BEGIN={start}&END={end}&ZIP=NO"
@@ -92,6 +147,23 @@ def getData(start, end, token=None):
     return df
 
 def get_prospect_url_key(local, out=False):
+    """
+    Retrieves the Prospect API URL and key based on the provided flags.
+
+    Parameters
+    ----------
+    local : bool
+        A flag indicating whether to retrieve data from the local or external
+        Prospect API. When True, retrieves from the local API.
+    out : bool, optional
+        A flag indicating whether to retrieve the outgoing API key. Default is
+        False.
+
+    Returns
+    -------
+    str, str
+        A tuple containing the URL and key for the Prospect API.
+    """
     url = const.LOCAL_BASE_URL
     key = const.LOCAL_API_IN_KEY
     if local == False:
@@ -105,6 +177,25 @@ def get_prospect_url_key(local, out=False):
 
 # sorcery: skip
 def api_in_prospect(df, local=True, ):  # sourcery skip: extract-method
+    """
+    Sends data to the prospect API's inbound endpoint.
+
+    This function takes a Pandas DataFrame (df), converts it to JSON, and sends a POST request to the
+    appropriate URL with the necessary headers, including the API key. It includes basic error handling.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The Pandas DataFrame containing the data to be sent to the Prospect API.
+    local : bool, optional
+        A flag indicating whether to send data to the local or external Prospect API. When True, sends to the local API. Default is True.
+
+    Returns
+    -------
+    requests.Response or None
+        The response from the Prospect API, or None if the request fails.
+    """
+
     if df is None:
         return df
     try:

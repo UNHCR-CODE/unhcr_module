@@ -30,9 +30,8 @@ Key Components
         This helper function parses the Prospect API response and extracts the latest timestamp to determine which records need to be updated. 
         It also extracts the latest external_id.
 
-The script uses several constants defined in a separate constants.py file, including database connection string and API endpoints. 
-It also relies on functions from a separate api.py file for interacting with the Leonics and Prospect APIs. The script includes 
-error handling and logging to facilitate debugging and monitoring.
+The script uses the requests library for API interaction, pandas for data manipulation, and sqlalchemy for database operations. 
+It relies on constants defined in constants.py and API interaction functions from api.py. It also includes error handling and logging.
 """
 
 from datetime import datetime, timedelta
@@ -49,10 +48,22 @@ urllib3.disable_warnings(InsecureRequestWarning)
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-import constants as const
-import api
+from unhcr import constants as const
+from unhcr import api
 
 def mysql_execute(sql, data=None):
+    """Execute a SQL query against the Aiven MySQL database.
+
+    Args:
+        sql (str): The SQL query to execute. May contain placeholders for data.
+        data (dict): A dictionary containing values to substitute into the SQL query.
+
+    Returns:
+        sqlalchemy.engine.result.ResultProxy: The result of the query execution.
+
+    Raises:
+        Exception: If any error occurs while executing the query.
+    """
     engine = create_engine(const.AIVEN_TAKUM_CONN_STR)
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -67,6 +78,20 @@ def mysql_execute(sql, data=None):
         session.close()
 
 def update_mysql(token):
+    """
+    Updates the MySQL database by fetching the latest data from the Leonics API and inserting it.
+
+    This function retrieves the most recent timestamp from the MySQL database and uses it to
+    fetch new data entries from the Leonics API. The new data is then inserted into the database.
+
+    Args:
+        token (str): The authentication token required for accessing the Leonics API.
+
+    Raises:
+        Exception: If an error occurs during the retrieval of the database timestamp or during
+        the update process, an error is logged and the program exits with a specific error code.
+    """
+
     try:
         dt = mysql_execute('select max(DatetimeServer) FROM defaultdb.TAKUM_LEONICS_API_RAW')
         val = dt.scalar()
@@ -83,8 +108,21 @@ def update_mysql(token):
         exit()
 
 
-# TODO Rename this here and in `update_mysql`
 def update_rows(max_dt, token):
+    """
+    Updates the MySQL database by fetching the latest data from the Leonics API and inserting it.
+
+    This function retrieves the most recent timestamp from the MySQL database and uses it to
+    fetch new data entries from the Leonics API. The new data is then inserted into the database.
+
+    Args:
+        max_dt (datetime): The most recent timestamp in the MySQL database.
+        token (str): The authentication token required for accessing the Leonics API.
+
+    Raises:
+        Exception: If an error occurs during the retrieval of the database timestamp or during
+        the update process, an error is logged and the program exits with a specific error code.
+    """
     from unhcr import api
     st = (max_dt + timedelta(minutes=1)).date().isoformat()
     st = st.replace('-', '')
@@ -132,6 +170,21 @@ def update_rows(max_dt, token):
     logging.info(f'ROWS UPDATED: {table_name}  {res.rowcount}')
 
 def update_prospect(start_ts=None, local=True):
+    """
+    Updates the Prospect API with new data entries.
+
+    This function initiates the update process for the Prospect API by retrieving the 
+    necessary keys and URL based on the local flag. It logs the starting timestamp 
+    and handles any exceptions that occur during the process.
+
+    Args:
+        start_ts (str, optional): The starting timestamp for the update process. Defaults to None.
+        local (bool, optional): A flag indicating whether the update is local or not. Defaults to True.
+
+    Raises:
+        Exception: Logs any errors that occur during the prospect key retrieval process.
+    """
+
     logging.info(f'Starting update_prospect ts: {start_ts}  local = {local}')
     try:
         prospect_get_key(api.get_prospect_url_key, local)
@@ -140,6 +193,20 @@ def update_prospect(start_ts=None, local=True):
 
 
 def get_prospect_last_data(response):
+    """
+    Retrieves the latest timestamp from the Prospect API response.
+
+    This function takes a Prospect API response, parses it, and returns the latest timestamp
+    as a string in the format 'YYYY-MM-DD HH:MM:SS'.
+
+    Args:
+        response (requests.Response): The Prospect API response.
+
+    Returns:
+        str: The latest timestamp.
+
+    """
+    
     j = json.loads(response.text)
     # json.dumps(j, indent=2)
     # logging.info(f'\n\n{j['data'][0]}')
@@ -155,6 +222,27 @@ def get_prospect_last_data(response):
     logging.debug(f'!!!!!!!!!!!!!!!!!!!!!!!!!!!  {res,idd}')
     return res
 def prospect_get_key(func, local):
+    """
+    Retrieves data from the Prospect API and updates the MySQL database.
+
+    This function constructs a URL and fetches data from the Prospect API using the provided
+    function to get the necessary URL and API key. It then retrieves the latest timestamp
+    from the API response, queries the MySQL database for newer records, and sends this data
+    back to the Prospect API. If the API call fails, it logs an error and exits the program.
+
+    Args:
+        func (callable): A function that returns the API URL and key based on the 'local' flag.
+        local (bool): A flag indicating whether to retrieve data from the local or external
+                      Prospect API. When True, retrieves from the local API.
+
+    Raises:
+        SystemExit: Exits the program if the Prospect API call fails.
+
+    Logs:
+        Various debug and informational logs, including headers, keys, URLs, and response
+        statuses. Also logs errors if API calls or database operations fail.
+    """
+
     url, key = func(local, out=True)
     sid = 1 if local else 421
     url += f'/v1/out/custom/?size=50&page=1&q[source_id_eq]={sid}&q[s]=created_at+desc'
@@ -202,63 +290,131 @@ def prospect_get_key(func, local):
     logging.info("Data has been saved to 'py_pros'")
 
 ###################################################
-# Hey there - I've reviewed your changes - here's some feedback:
+# Hey there - I've reviewed your changes and found some issues that need to be addressed.
 
+# Blocking issues:
+
+# Remove SSL verification warning suppression (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:44)
+# Hardcoded Prospect API key found. (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:252)
 # Overall Comments:
 
-# Security concern: Disabling SSL verification (verify=False) is dangerous as it makes the application vulnerable to man-in-the-middle attacks. Consider fixing the SSL certificate issues properly instead.
-# Error handling is inconsistent throughout the code - mixing logging+exit with exception raising. Consider implementing a consistent error handling strategy, preferably using proper exception handling with specific exception types.
+# Security Risk: Disabling SSL verification (verify=False) makes the application vulnerable to man-in-the-middle attacks. Please fix the underlying SSL certificate issues rather than bypassing verification.
+# The error handling strategy is inconsistent throughout the codebase - mixing logging+exit() with exception raising. Consider implementing a consistent error handling approach using proper exception handling with specific exception types.
 # Here's what I looked at during the review
-# 🟡 General issues: 3 issues found
-# 🟡 Security: 1 issue found
+# 🟡 General issues: 1 issue found
+# 🔴 Security: 2 blocking issues, 1 other issue
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:_UNHCR\CODE\unhcr_module\unhcr\db.py:33
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:55
 
 # suggestion(bug_risk): Improve error handling to avoid abrupt exits
-#     finally:
-#         session.close()
+# from unhcr import constants as const
+# from unhcr import api
 
-# def update_mysql(token):
-#     try:
-#         dt = mysql_execute('select max(DatetimeServer) FROM defaultdb.TAKUM_LEONICS_API_RAW')
+# def mysql_execute(sql, data=None):
+#     """Execute a SQL query against the Aiven MySQL database.
+
 # Instead of using exit(), consider raising custom exceptions or returning error status that can be handled by the caller. This allows for more flexible error management and prevents unexpected termination of the application.
 
+# Suggested implementation:
+
+# from unhcr import constants as const
+# from unhcr import api
+# import mysql.connector
+# from mysql.connector import Error as MySQLError
+
+# class DatabaseExecutionError(Exception):
+#     """Custom exception for database execution errors."""
+#     pass
+
+# def mysql_execute(sql, data=None):
+#     """Execute a SQL query against the Aiven MySQL database.
+
+#     Args:
+#         sql (str): SQL query to execute
+#         data (tuple, optional): Parameters for parameterized query
+
+#     Returns:
+#         list: Query results if applicable
+
+#     Raises:
+#         DatabaseExecutionError: If there's an issue executing the database query
+#     """
+#     try:
+#         # Establish database connection (assuming connection details are managed elsewhere)
+#         connection = api.get_mysql_connection()
+
+#         with connection.cursor() as cursor:
+#             if data:
+#                 cursor.execute(sql, data)
+#             else:
+#                 cursor.execute(sql)
+
+#             # Commit for write operations, fetch for read operations
+#             if sql.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE')):
+#                 connection.commit()
+#                 return cursor.rowcount
+#             elif sql.strip().upper().startswith('SELECT'):
+#                 return cursor.fetchall()
+
+#             return None
+
+#     except MySQLError as e:
+#         # Log the error (consider using a proper logging mechanism)
+#         print(f"MySQL Error: {e}")
+#         raise DatabaseExecutionError(f"Database query failed: {e}")
+
+#     except Exception as e:
+#         # Catch any unexpected errors
+#         print(f"Unexpected error during database execution: {e}")
+#         raise DatabaseExecutionError(f"Unexpected database error: {e}")
+
+#     finally:
+#         # Ensure connection is closed
+#         if 'connection' in locals() and connection.is_connected():
+#             connection.close()
+
+# This implementation assumes there's an api.get_mysql_connection() method to retrieve database connection details. If this doesn't exist, you'll need to implement it or modify the connection logic.
+# Add proper logging instead of print statements in a production environment.
+# Ensure that the necessary MySQL connector library is installed (mysql-connector-python).
+# The function now returns:
+# rowcount for write operations (INSERT/UPDATE/DELETE)
+# fetchall() results for SELECT queries
+# None for other types of queries
+# Custom DatabaseExecutionError allows callers to catch and handle database-specific errors
 # Resolve
-# outdated
-# e:_UNHCR\CODE\unhcr_module\unhcr\db.py:70
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:44
 
-# suggestion(performance): Potential performance issue with datetime conversion
-#     # Convert the 'datetime_column' back to string format
-#     #####df_filtered['DateTimeServer'] = df_filtered['DateTimeServer'].dt.strftime('%Y-%m-%d %H:%M')
-
-#     df_filtered.loc[:, 'DateTimeServer'] = df_filtered['DateTimeServer'].dt.strftime('%Y-%m-%d %H:%M')
-#     logging.info('44444444')
-#     # logging.info(df_filtered['DateTimeServer'].dtype)
-# Multiple datetime conversions could be inefficient. Consider consolidating datetime transformations to minimize overhead and improve readability.
+# issue(security): Remove SSL verification warning suppression
+# import traceback
+# import pandas as pd
+# import requests
+# from urllib3.exceptions import InsecureRequestWarning
+# import urllib3
+# # Suppress InsecureRequestWarning
+# Disabling SSL verification warnings is a critical security risk. Instead, properly configure SSL certificates or investigate the root cause of certificate validation failures.
 
 # Resolve
-# e:_UNHCR\CODE\unhcr_module\unhcr\db.py:93
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:164
 
-# issue(security): Risky string replacement for NULL values
-#     logging.info(values[-40:])
-#     logging.info('222222',df_filtered['DateTimeServer'].dtype)
+# issue(security): Use proper SQL parameter binding
+
+#     logging.debug(f'222222  {df_filtered['DateTimeServer'].dtype}')
 
 #     values = values.replace("err", 'NULL')
 #     # Full MySQL INSERT statement
 #     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values};"
-# Replacing 'err' with NULL is error-prone. Use proper SQL parameter binding or type-based NULL handling to prevent potential data integrity issues.
+# Replacing 'err' with NULL via string replacement is error-prone. Use SQLAlchemy's parameter binding or type-based NULL handling to prevent potential data integrity issues.
 
 # Resolve
-# outdated
-# e:_UNHCR\CODE\unhcr_module\unhcr\db.py:60
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:252
 
-# suggestion(code_refinement): Remove debug logging statements
-#     df = api.getData(start=st,end=ed,token=token)
-#     # Convert the 'datetime_column' to pandas datetime
-#     df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
-#     logging.info('1111111',df['DateTimeServer'].dtype)
-#     # Define the threshold datetime
-#     threshold = pd.to_datetime(max_dt.isoformat())
-# Numbered logging statements with sequential numbers suggest temporary debugging. These should be removed or replaced with meaningful log messages before production.
+# issue(security): Hardcoded Prospect API key found.
+#     url += f'/v1/out/custom/?size=50&page=1&q[source_id_eq]={sid}&q[s]=created_at+desc'
+#     payload = {}
+#     headers = {
+#     'Authorization': f'Bearer {key}',
+#     }
+#     logging.debug(f'!!!!!!!!!!!!!!!!!!!!!  {headers}')
+# The Prospect API key is hardcoded in the headers dictionary. Store sensitive information like API keys securely, such as in environment variables or a dedicated secrets management service, and access them within the application. Avoid committing secrets directly into the codebase.
