@@ -162,6 +162,14 @@ https://app.prospect.energy/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=42
 
 ## Notes
 
+    Update to v_0.4
+    Allow running from local module files, or installed files. Note that constants has to initially be loaded from the installed version -- so install package before running the code locally
+    Find .env file automatically
+    Run using local files for development --- You must set PROD=1 in .env file before releasing to production
+    Default to INFO logging level if bad commandline args
+    Seperate code logically into modules --- move some misc logic into test code --- might put in misc module
+    Break apart API module for Leonics and Prospect -- TODO -- same for db module
+
 Logging goes to **_UNHCR\CODE\unhcr_module\unhcr.module.log**
 
 If you set the log level to **DEBUG** your will get CSV files.

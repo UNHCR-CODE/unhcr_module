@@ -15,12 +15,12 @@ Key Components
         from the Leonics API since the last update, and inserts the new data into the database.
 
     update_rows(max_dt, token): 
-        This function handles the core logic of fetching data from the Leonics API using the api.getData() function, filtering for 
+        This function handles the core logic of fetching data from the Leonics API using the api_leonics.getData() function, filtering for 
         new records based on the provided max_dt timestamp, formatting the data, and constructing and executing a bulk INSERT SQL query.
 
     update_prospect(start_ts=None, local=True): 
         This function manages the Prospect update process. It retrieves the latest timestamp from Prospect, queries the database 
-        for newer records, formats the data, and sends it to the Prospect API using api.api_in_prospect().
+        for newer records, formats the data, and sends it to the Prospect API using api_prospect.api_in_prospect().
 
     prospect_get_key(func, local): 
         This function retrieves the necessary URL and API key for interacting with the Prospect API based on the local flag. 
@@ -31,12 +31,14 @@ Key Components
         It also extracts the latest external_id.
 
 The script uses the requests library for API interaction, pandas for data manipulation, and sqlalchemy for database operations. 
-It relies on constants defined in constants.py and API interaction functions from api.py. It also includes error handling and logging.
+It relies on constants defined in constants.py and API interaction functions from api_leonics.py and api_prospect.py. 
+It also includes error handling and logging.
 """
 
 from datetime import datetime, timedelta
 import json
 import logging
+import os
 import traceback
 import pandas as pd
 import requests
@@ -49,7 +51,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from unhcr import constants as const
-from unhcr import api
+file_dir = os.path.dirname(os.path.abspath(__file__))
+const = const.import_utils('constants', file_dir)
+api_prospect =const.import_utils('api_prospect', file_dir)
+api_leonics = const.import_utils('api_leonics', file_dir)
 
 def mysql_execute(sql, data=None):
     """Execute a SQL query against the Aiven MySQL database.
@@ -77,59 +82,60 @@ def mysql_execute(sql, data=None):
     finally:
         session.close()
 
-def update_mysql(token):
+def get_mysql_max_date():
+
+    """Retrieves the most recent timestamp from the MySQL database.
+
+    Returns:
+        tuple: A tuple containing the most recent timestamp in the database and an error message if any.
     """
-    Updates the MySQL database by fetching the latest data from the Leonics API and inserting it.
-
-    This function retrieves the most recent timestamp from the MySQL database and uses it to
-    fetch new data entries from the Leonics API. The new data is then inserted into the database.
-
-    Args:
-        token (str): The authentication token required for accessing the Leonics API.
-
-    Raises:
-        Exception: If an error occurs during the retrieval of the database timestamp or during
-        the update process, an error is logged and the program exits with a specific error code.
-    """
-
     try:
         dt = mysql_execute('select max(DatetimeServer) FROM defaultdb.TAKUM_LEONICS_API_RAW')
         val = dt.scalar()
-        max_dt = datetime.strptime(val, '%Y-%m-%d %H:%M')
+        return datetime.strptime(val, '%Y-%m-%d %H:%M'), None
     except Exception as e:
         logging.error(f'Can not get DB max timsestanp   {e}')
-        exit(999)
+        return None, e
+
+def update_mysql(max_dt, df):
+
+    """
+    Updates the MySQL database with new data entries.
+    This function retrieves the latest timestamp from the MySQL database and updates
+    it with new data entries from a DataFrame. It logs any errors encountered during
+    the process.
+
+    Args:
+        max_dt (datetime): The maximum datetime to be used as a threshold for filtering new data.
+        df (pandas.DataFrame): The DataFrame containing new data to be inserted into the database.
+    Returns:
+        tuple: A tuple containing the most recent timestamp in the database and an error message if any.
+    """
 
     try:
-        update_rows(max_dt, token)
+        return update_rows(max_dt, df)
     except Exception as e:
         traceback.print_exc()
         logging.error(f"?????????????????update_mysql Error occurred: {e}")
-        exit()
+        return None, e
 
-
-def update_rows(max_dt, token):
+def update_rows(max_dt, df):
     """
-    Updates the MySQL database by fetching the latest data from the Leonics API and inserting it.
+    Updates the MySQL database with new data entries.
 
-    This function retrieves the most recent timestamp from the MySQL database and uses it to
-    fetch new data entries from the Leonics API. The new data is then inserted into the database.
+    This function filters the input DataFrame to contain only rows where the 'DateTimeServer'
+    column is greater than or equal to the input max_dt. It then converts the 'DateTimeServer'
+    column back to string format and generates a SQL bulk INSERT statement. The statement is
+    then executed against the MySQL database.
 
     Args:
-        max_dt (datetime): The most recent timestamp in the MySQL database.
-        token (str): The authentication token required for accessing the Leonics API.
+        max_dt (datetime): The maximum datetime to be used as a threshold for filtering new data.
+        df (pandas.DataFrame): The DataFrame containing new data to be inserted into the database.
 
-    Raises:
-        Exception: If an error occurs during the retrieval of the database timestamp or during
-        the update process, an error is logged and the program exits with a specific error code.
+    Returns:
+        tuple: A tuple containing the result of the update operation and an error message, if any.
     """
-    from unhcr import api
-    st = (max_dt + timedelta(minutes=1)).date().isoformat()
-    st = st.replace('-', '')
-    ed = (datetime.now() + timedelta(days=1)).date().isoformat()
-    ed = ed.replace('-', '')
-    df = api.getData(start=st,end=ed,token=token)
-    # Convert the 'datetime_column' to pandas datetime
+
     df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
     logging.debug(f"1111111  {df['DateTimeServer'].dtype}")
     # Define the threshold datetime
@@ -166,8 +172,9 @@ def update_rows(max_dt, token):
     res = mysql_execute(sql_query)
     if isinstance(res, str):
         logging.error(f'ERROR update_mysql: {res}')
-        exit(777)
+        return None, 'Error: query result is not a string'
     logging.info(f'ROWS UPDATED: {table_name}  {res.rowcount}')
+    return res, None
 
 def update_prospect(start_ts=None, local=True):
     """
@@ -187,7 +194,7 @@ def update_prospect(start_ts=None, local=True):
 
     logging.info(f'Starting update_prospect ts: {start_ts}  local = {local}')
     try:
-        prospect_get_key(api.get_prospect_url_key, local)
+        prospect_get_key(api_prospect.get_prospect_url_key, local)
     except Exception as e:
         logging.error(f"PROSPECT Error occurred: {e}")
 
@@ -206,7 +213,7 @@ def get_prospect_last_data(response):
         str: The latest timestamp.
 
     """
-    
+
     j = json.loads(response.text)
     # json.dumps(j, indent=2)
     # logging.info(f'\n\n{j['data'][0]}')
@@ -273,7 +280,7 @@ def prospect_get_key(func, local):
     df['external_id'] = df['external_id'].astype(str).apply(lambda x: 'py_' + x)
 
 
-    res = api.api_in_prospect(df, local)
+    res = api_prospect.api_in_prospect(df, local)
     if res is None:
         logging.error('Prospect API failed, exiting')
         exit()
@@ -294,109 +301,30 @@ def prospect_get_key(func, local):
 
 # Blocking issues:
 
-# Remove SSL verification warning suppression (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:44)
-# Hardcoded Prospect API key found. (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:252)
+# Use proper SQL parameter binding (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:165)
 # Overall Comments:
 
-# Security Risk: Disabling SSL verification (verify=False) makes the application vulnerable to man-in-the-middle attacks. Please fix the underlying SSL certificate issues rather than bypassing verification.
-# The error handling strategy is inconsistent throughout the codebase - mixing logging+exit() with exception raising. Consider implementing a consistent error handling approach using proper exception handling with specific exception types.
+# Critical security issues need to be addressed: 1) Remove SSL verification disabling and properly configure certificates 2) Move API keys to secure configuration management 3) Use proper SQL parameter binding instead of string concatenation for queries
+# Standardize error handling across the codebase - replace exit() calls with proper exception handling that can be managed by calling code
 # Here's what I looked at during the review
 # 🟡 General issues: 1 issue found
-# 🔴 Security: 2 blocking issues, 1 other issue
+# 🔴 Security: 1 blocking issue
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:55
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:56
 
 # suggestion(bug_risk): Improve error handling to avoid abrupt exits
-# from unhcr import constants as const
-# from unhcr import api
+# from unhcr import api_prospect
+# from unhcr import api_leonics
 
 # def mysql_execute(sql, data=None):
 #     """Execute a SQL query against the Aiven MySQL database.
 
-# Instead of using exit(), consider raising custom exceptions or returning error status that can be handled by the caller. This allows for more flexible error management and prevents unexpected termination of the application.
-
-# Suggested implementation:
-
-# from unhcr import constants as const
-# from unhcr import api
-# import mysql.connector
-# from mysql.connector import Error as MySQLError
-
-# class DatabaseExecutionError(Exception):
-#     """Custom exception for database execution errors."""
-#     pass
-
-# def mysql_execute(sql, data=None):
-#     """Execute a SQL query against the Aiven MySQL database.
-
-#     Args:
-#         sql (str): SQL query to execute
-#         data (tuple, optional): Parameters for parameterized query
-
-#     Returns:
-#         list: Query results if applicable
-
-#     Raises:
-#         DatabaseExecutionError: If there's an issue executing the database query
-#     """
-#     try:
-#         # Establish database connection (assuming connection details are managed elsewhere)
-#         connection = api.get_mysql_connection()
-
-#         with connection.cursor() as cursor:
-#             if data:
-#                 cursor.execute(sql, data)
-#             else:
-#                 cursor.execute(sql)
-
-#             # Commit for write operations, fetch for read operations
-#             if sql.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE')):
-#                 connection.commit()
-#                 return cursor.rowcount
-#             elif sql.strip().upper().startswith('SELECT'):
-#                 return cursor.fetchall()
-
-#             return None
-
-#     except MySQLError as e:
-#         # Log the error (consider using a proper logging mechanism)
-#         print(f"MySQL Error: {e}")
-#         raise DatabaseExecutionError(f"Database query failed: {e}")
-
-#     except Exception as e:
-#         # Catch any unexpected errors
-#         print(f"Unexpected error during database execution: {e}")
-#         raise DatabaseExecutionError(f"Unexpected database error: {e}")
-
-#     finally:
-#         # Ensure connection is closed
-#         if 'connection' in locals() and connection.is_connected():
-#             connection.close()
-
-# This implementation assumes there's an api.get_mysql_connection() method to retrieve database connection details. If this doesn't exist, you'll need to implement it or modify the connection logic.
-# Add proper logging instead of print statements in a production environment.
-# Ensure that the necessary MySQL connector library is installed (mysql-connector-python).
-# The function now returns:
-# rowcount for write operations (INSERT/UPDATE/DELETE)
-# fetchall() results for SELECT queries
-# None for other types of queries
-# Custom DatabaseExecutionError allows callers to catch and handle database-specific errors
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:44
-
-# issue(security): Remove SSL verification warning suppression
-# import traceback
-# import pandas as pd
-# import requests
-# from urllib3.exceptions import InsecureRequestWarning
-# import urllib3
-# # Suppress InsecureRequestWarning
-# Disabling SSL verification warnings is a critical security risk. Instead, properly configure SSL certificates or investigate the root cause of certificate validation failures.
+# Instead of using exit(), implement a more robust error handling strategy. Raise custom exceptions that can be caught and handled by the caller, allowing for more flexible error management and preventing unexpected application termination.
 
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:164
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:165
 
 # issue(security): Use proper SQL parameter binding
 
@@ -405,16 +333,4 @@ def prospect_get_key(func, local):
 #     values = values.replace("err", 'NULL')
 #     # Full MySQL INSERT statement
 #     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values};"
-# Replacing 'err' with NULL via string replacement is error-prone. Use SQLAlchemy's parameter binding or type-based NULL handling to prevent potential data integrity issues.
-
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:252
-
-# issue(security): Hardcoded Prospect API key found.
-#     url += f'/v1/out/custom/?size=50&page=1&q[source_id_eq]={sid}&q[s]=created_at+desc'
-#     payload = {}
-#     headers = {
-#     'Authorization': f'Bearer {key}',
-#     }
-#     logging.debug(f'!!!!!!!!!!!!!!!!!!!!!  {headers}')
-# The Prospect API key is hardcoded in the headers dictionary. Store sensitive information like API keys securely, such as in environment variables or a dedicated secrets management service, and access them within the application. Avoid committing secrets directly into the codebase.
+# Replacing 'err' with NULL via string replacement is error-prone and potentially introduces SQL injection risks. Use SQLAlchemy's parameter binding or type-based NULL handling to ensure data integrity and prevent potential security vulnerabilities.

@@ -20,9 +20,13 @@ Key Components
         This is crucial for monitoring and debugging.
 """
 
+import os
 import boto3
 import logging
+
 from unhcr import constants as const
+file_dir = os.path.dirname(os.path.abspath(__file__))
+const = const.import_utils('constants', file_dir)
 
 s3_client = boto3.client(
     's3',

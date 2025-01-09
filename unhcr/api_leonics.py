@@ -1,8 +1,8 @@
 """
 Overview
-    This Python file (api.py) provides an API client for interacting with the Leonics system and a prospect API. 
-    It handles authentication, data retrieval, and data submission. The primary functions facilitate getting an authentication token, 
-    checking its validity, retrieving data within a specified timeframe, and sending data to a prospect API endpoint.
+    This Python file (api_leonics.py) provides an API client for interacting with the Leonics system. It handles authentication, data retrieval, 
+    and data submission. The core functionality revolves around obtaining an authentication token, validating the token, 
+    fetching data within a specified time frame, and sending data to a prospect API endpoint.
 
 Key Components
     getAuthToken(dt=None): 
@@ -20,17 +20,10 @@ Key Components
         Retrieves data from the Leonics system within a specified time range. It requires a valid authentication token. 
         It constructs the data request URL with the start and end times and sends a GET request to the /data endpoint. 
         The retrieved data is parsed into a Pandas DataFrame and preprocessed to combine date and time columns.
-
-    get_prospect_url_key(local, out=False): 
-        Determines the correct URL and API key for interacting with the prospect API based on whether the request is for a local or external 
-        service and whether it's an inbound or outbound operation.
-
-    api_in_prospect(df, local=True): 
-        Sends data to the prospect API's inbound endpoint. It takes a Pandas DataFrame (df), converts it to JSON, and sends a POST request to the 
-        appropriate URL with the necessary headers, including the API key. It includes basic error handling.
 """
 from datetime import datetime, timedelta
 import logging
+import os
 import pandas as pd
 import requests
 from urllib3.exceptions import InsecureRequestWarning
@@ -39,6 +32,8 @@ import urllib3
 urllib3.disable_warnings(InsecureRequestWarning)
 
 from unhcr import constants as const
+file_dir = os.path.dirname(os.path.abspath(__file__))
+const = const.import_utils('constants', file_dir)
 
 def getAuthToken(dt = None):
     """
@@ -100,9 +95,7 @@ def checkAuth(dt=None, x=0):
     payload = {}
     headers = {}
     res = requests.request("GET", url, headers=headers, data=payload, verify=const.VERIFY)
-    if res.status_code == 200:
-        logging.info(res.text)
-    else:
+    if res.status_code != 200:
         if ('is not today' not in res.text):
             return None
         dt = datetime.now().date() + timedelta(days=1)
@@ -134,49 +127,21 @@ def getData(start, end, token=None):
     """
 
     if token is None:
-        return None
-    url = url = f"{const.LEONICS_BASE_URL}/data?API-KEY={token}&BEGIN={start}&END={end}&ZIP=NO"
+        return None, 'You must provide a token'
+    url = f"{const.LEONICS_BASE_URL}/data?API-KEY={token}&BEGIN={start}&END={end}&ZIP=NO"
     payload = {}
     headers = {}
-    res = requests.request("GET", url, headers=headers, data=payload, verify=const.VERIFY)
-    if res.status_code != 200:
-        return None
-    df = pd.DataFrame(res.json())
-    df['DateTimeServer'] = df.apply(lambda row: str(row['A_DateServer']) + ' ' + str(row['A_TimeServer']), axis=1)
-    df = df.drop(columns=['A_DateServer', 'A_TimeServer'])
-    return df
-
-def get_prospect_url_key(local, out=False):
-    """
-    Retrieves the Prospect API URL and key based on the provided flags.
-
-    Parameters
-    ----------
-    local : bool
-        A flag indicating whether to retrieve data from the local or external
-        Prospect API. When True, retrieves from the local API.
-    out : bool, optional
-        A flag indicating whether to retrieve the outgoing API key. Default is
-        False.
-
-    Returns
-    -------
-    str, str
-        A tuple containing the URL and key for the Prospect API.
-    """
-    url = const.LOCAL_BASE_URL
-    key = const.LOCAL_API_IN_KEY
-    if local == False:
-        url = const.BASE_URL
-        key = const.API_OUT_KEY if out else const.API_IN_KEY
-    elif out:
-        key = const.LOCAL_API_OUT_KEY
-
-    logging.debug(f'ZZZZZZZZZZZZZZZ\nlocal  {local}\n out {out}\nkey {key}\nZZZZZZZZZZZZZZ')
-    return url, key
-
-# sorcery: skip
-def api_in_prospect(df, local=True, ):  # sourcery skip: extract-method
+    try:
+        res = requests.request("GET", url, headers=headers, data=payload, verify=const.VERIFY)
+        if res.status_code != 200:
+            return None, res.status_code
+        df = pd.DataFrame(res.json())
+        df['DateTimeServer'] = df.apply(lambda row: str(row['A_DateServer']) + ' ' + str(row['A_TimeServer']), axis=1)
+        df = df.drop(columns=['A_DateServer', 'A_TimeServer'])
+        return df, None
+    except Exception as e:
+        logging.error('Leonics getData ERROR:', e)
+        return None, e
     """
     Sends data to the prospect API's inbound endpoint.
 
@@ -221,34 +186,34 @@ def api_in_prospect(df, local=True, ):  # sourcery skip: extract-method
 
 # Overall Comments:
 
-# Consider converting TODO comments into tracked issues/tickets and add more context about what needs to be done. Leaving untracked TODOs in production code makes it likely they'll be forgotten.
-# The error handling in api_in_prospect() and other functions could be more specific. Consider catching and handling specific exceptions (e.g., RequestException, ConnectionError) rather than using a broad Exception catch.
-# Replace the debug logging statement containing 'ZZZZ' with a more descriptive and professional message that clearly indicates what's being logged.
+# There appears to be a misplaced function definition inside the getData docstring at the end of the file. This needs to be fixed as it's currently unreachable code.
+# Consider removing the global SSL verification disable and properly handle certificates instead, as this is a security concern.
+# The generic try-except block should be replaced with specific exception handling to properly handle different error cases.
 # Here's what I looked at during the review
 # 🟡 General issues: 2 issues found
 # 🟢 Security: all looks good
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api.py:55
+# e:_UNHCR\CODE\unhcr_module\unhcr\api_leonics.py:137
 
-# suggestion(code_refinement): Recursive authentication check could be simplified
-#     )
-
-# # sorcery: skip
-# def checkAuth(dt=None, x=0):
-#     #TODO check 2 times as date maybe one day off due to tz
-#     if x > 2:
-# Consider replacing the recursive approach with a more straightforward date validation mechanism that doesn't rely on multiple recursive calls.
+# suggestion(performance): Inefficient datetime column creation
+#     if res.status_code != 200:
+#         return None
+#     df = pd.DataFrame(res.json())
+#     df['DateTimeServer'] = df.apply(lambda row: str(row['A_DateServer']) + ' ' + str(row['A_TimeServer']), axis=1)
+#     df = df.drop(columns=['A_DateServer', 'A_TimeServer'])
+#     return df
+# Using DataFrame.apply() with a lambda function can be slow for large datasets. Consider using more performant methods like pd.to_datetime() or vectorized string operations.
 
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api.py:123
+# e:_UNHCR\CODE\unhcr_module\unhcr\api_leonics.py:175
 
-# suggestion(bug_risk): Implement more specific exception handling
-#         }
+# issue(bug_risk): Overly broad exception handling
 
 #         return requests.request("POST", url, headers=headers, data=data, verify=const.VERIFY)
 #     #TODO more specific error trapping
 #     except Exception as e:
 #         logging.error('api_in_prospect ERROR', e)
-# Replace generic exception handling with specific exception types to improve error diagnostics and handling.
+#         return None
+# Catching all exceptions without specific error handling can mask important errors and make debugging difficult. Implement more granular exception handling.
