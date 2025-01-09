@@ -56,14 +56,26 @@ def filter_nested_dict(obj, val=-0.999):
     else:
         return obj
 
-def log_setup(level=None):
+def log_setup(level=None, log_file="unhcr.module.log"):
     """
-    Set up logging for the module. If level is None, it parses the command-line arguments and sets the logging level to the specified value. 
-    If no arguments are specified, it sets the logging level to INFO.
+    Set up logging for the module. If level is None, it parses command-line arguments to determine the logging level.
+    If no arguments are provided, it defaults to INFO level.
+    
     Usage:
-            full_test.py --log INFO
-    :param level: the logging level (default None)
+        script.py --log INFO
+    
+    Args:
+        level (str, optional): The logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Defaults to None.
+        log_file (str): The name of the log file. Defaults to 'unhcr.module.log'.
+
+    Returns:
+        logging.Logger: Configured logger instance.
     """
+    # Check if the logger already has handlers to prevent adding duplicates
+    logger = logging.getLogger()
+    if logger.hasHandlers():
+        return logger  # Return the logger if it already has handlers
+
     if level is None:
         # Parse the command-line arguments
         parser = argparse.ArgumentParser(description="Set logging level")
@@ -73,43 +85,56 @@ def log_setup(level=None):
             choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)"
         )
-        if len(sys.argv) == 1:
-            sys.argv.append('--log')
-            sys.argv.append('INFO')
-        elif sys.argv[1] == 'none':
+
+        # Add default logging arguments if none provided
+        l = len(sys.argv)
+        if l == 1:  # handle vscode debugging
+            sys.argv.extend(["--log", "INFO"])
+        else:
             sys.argv[1] = '--log'
             sys.argv.append('INFO')
 
         args = parser.parse_args()
+        level = args.log.upper()
+    else:
+        level = level.upper()
 
-    # Create a custom logger
-    logger = logging.getLogger()
+    # Validate logging level
+    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    if level not in valid_levels:
+        raise ValueError(f"Invalid logging level: {level}. Must be one of {valid_levels}.")
 
     # Create a formatter that outputs the log format
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
-    # Create a console handler to log to the terminal
+    # Console handler
     console_handler = logging.StreamHandler()
-    level = getattr(logging, args.log.upper(), logging.WARNING)
-    console_handler.setLevel(level)  # Set level to INFO for console
+    console_handler.setLevel(getattr(logging, level))
     console_handler.setFormatter(formatter)
-
-    # Create a file handler to log to a file
-    file_handler = logging.FileHandler('unhcr.module.log')
-    file_handler.setLevel(level)  # Set level to INFO for file
-    file_handler.setFormatter(formatter)
-
-    # Add the handlers to the logger
     logger.addHandler(console_handler)
+
+    # File handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(getattr(logging, level))
+    file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
     # Set the overall logging level
-    logger.setLevel(level)
-    logging.debug(f"DEBUG:  Logging level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
-    logging.info(f"INFO:  Logging level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
-    logging.warning(f"WARNING:  Logging level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
-    logging.error(f"ERROR:  Logging level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
-    logging.critical(f"CRITICAL:  Logging level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
+    logger.setLevel(getattr(logging, level))
+
+    # Log the effective logging level
+    logger.debug(f"DEBUG: Logging level set to {level}")
+    logger.info(f"INFO: Logging level set to {level}")
+    logger.warning(f"WARNING: Logging level set to {level}")
+    logger.error(f"ERROR: Logging level set to {level}")
+
+    return logger
+
+# Example usage:
+# if __name__ == "__main__":
+#     logger = log_setup()
+#     logger.info("Logger is successfully set up!")
+#     logging.critical(f"CRITICAL:  Logging level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
 
 def str_to_float_or_zero(value):
     """

@@ -25,11 +25,63 @@ SSL Verification:
     The VERIFY constant is set to False, indicating that SSL certificate verification is disabled for Leonics API calls. 
     This is explicitly mentioned in a comment, suggesting potential security implications that should be addressed.
 """
-import os
-from dotenv import load_dotenv
 
-# change the path to your .env file with the constants below
-load_dotenv(r'E:\_UNHCR\CODE\unhcr_module\.env', override=True)
+
+
+import logging
+import os
+import sys
+from dotenv import find_dotenv, load_dotenv
+import importlib
+
+if env_file := find_dotenv():
+    load_dotenv(env_file, override=True)
+else:
+    print("CONFIG file not found !!!!!!!")
+    exit(999)
+
+#TESTING
+PROD=os.getenv('PROD') == '1'
+DEBUG=os.getenv('DEBUG') == '1'
+LOCAL = os.getenv('LOCAL') == '1' and not PROD
+
+def import_utils(module_name, file_dir=os.path.dirname(os.path.abspath(__file__))):
+    """
+    Dynamically import a module from either the local directory or the unhcr package.
+
+    Args:
+        module_name (str): The name of the module to import.
+        file_dir (str, optional): The file directory to search for the local module. Defaults to the current file's directory.
+        LOCAL (bool, optional): A flag to determine if the local version of the module should be imported. Defaults to True.
+
+    Returns:
+        module: The imported module.
+    """
+    # Check if the module is already loaded in sys.modules
+    if module_name in sys.modules:
+        return sys.modules[module_name]
+
+    module_path = os.path.join(file_dir, f"{module_name}.py")
+
+    if os.path.exists(module_path) and LOCAL:
+        # Dynamically import the local module if it exists and LOCAL is True
+        try:
+            imported_module = importlib.import_module(module_name)
+        except ModuleNotFoundError:
+            raise ImportError(f"Module '{module_name}' could not be imported from the local directory.")
+    else:
+        # Import the module from the unhcr package
+        try:
+            imported_module = importlib.import_module(f"unhcr.{module_name}")
+        except ModuleNotFoundError:
+            raise ImportError(f"Module '{module_name}' could not be imported from the unhcr package.")
+
+    return imported_module
+
+utils = import_utils('utils')
+
+utils.log_setup()
+logging.info(f"Found CONFIG file at: {env_file[:-4]} \nPROD: {PROD}, DEBUG: {DEBUG}, LOCAL: {LOCAL} {os.getenv('LOCAL')}")
 
 # Leonics API
 LEONICS_BASE_URL = os.getenv('LEONICS_BASE_URL')
