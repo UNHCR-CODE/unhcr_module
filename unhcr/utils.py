@@ -90,7 +90,7 @@ def log_setup(level=None, log_file="unhcr.module.log"):
         l = len(sys.argv)
         if l == 1:  # handle vscode debugging
             sys.argv.extend(["--log", "INFO"])
-        else:
+        elif l == 2:
             sys.argv[1] = '--log'
             sys.argv.append('INFO')
 
