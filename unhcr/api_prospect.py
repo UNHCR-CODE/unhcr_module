@@ -17,8 +17,6 @@ import os
 import requests
 
 from unhcr import constants as const
-file_dir = os.path.dirname(os.path.abspath(__file__))
-const = const.import_utils('constants', file_dir)
 
 def get_prospect_url_key(local, out=False):
     """

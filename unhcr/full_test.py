@@ -38,17 +38,12 @@ import re
 import os
 import pandas as pd
 
-# circular issues
-# import sys
-# sys.path.append('E:/_UNHCR/CODE/unhcr_module/unhcr/')
+from unhcr import utils
+utils.log_setup()
 
 from unhcr import constants as const
-file_dir = os.path.dirname(os.path.abspath(__file__))
-const = const.import_utils('constants', file_dir)
-db = const.import_utils('db', file_dir)
-api_leonics = const.import_utils('api_leonics', file_dir)
-api_prospect = const.import_utils('api_prospect', file_dir)
-utils = const.import_utils('utils', file_dir)
+from unhcr import db
+from unhcr import api_leonics
 
 # just to test S3
 # TODO waiting for new creds
@@ -57,11 +52,9 @@ utils = const.import_utils('utils', file_dir)
 # s3.list_files_in_folder(s3.BUCKET_NAME, s3.FOLDER_NAME)
 # exit()
 
-utils.log_setup()
 logging.info(f"Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
 ver, err = utils.get_module_version()
 logging.info(f"Version: {ver}   Error: {err}")
-
 
 mysql = True
 pros = True

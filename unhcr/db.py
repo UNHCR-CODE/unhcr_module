@@ -51,10 +51,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from unhcr import constants as const
-file_dir = os.path.dirname(os.path.abspath(__file__))
-const = const.import_utils('constants', file_dir)
-api_prospect =const.import_utils('api_prospect', file_dir)
-api_leonics = const.import_utils('api_leonics', file_dir)
+from unhcr import api_prospect
+from unhcr import api_leonics
 
 def mysql_execute(sql, data=None):
     """Execute a SQL query against the Aiven MySQL database.

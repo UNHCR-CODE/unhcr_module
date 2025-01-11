@@ -32,8 +32,6 @@ import urllib3
 urllib3.disable_warnings(InsecureRequestWarning)
 
 from unhcr import constants as const
-file_dir = os.path.dirname(os.path.abspath(__file__))
-const = const.import_utils('constants', file_dir)
 
 def getAuthToken(dt = None):
     """

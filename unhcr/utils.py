@@ -1,8 +1,7 @@
 """
 Overview
-    This Python file (utils.py) provides a utility function filter_json designed to recursively remove a specific value (-0.999 by default) 
-    from JSON-like data structures (dictionaries and lists). This is likely used for data cleaning or preprocessing, where the value 
-    -0.999 represents missing or invalid data.
+    This file (utils.py) within the unhcr module provides a set of utility functions for data processing, logging setup, module version retrieval, 
+    and dynamic module importing. It focuses on cleaning JSON-like data, configuring logging, and managing module functionalities.
 
 Key Components
     filter_nested_dict(obj, val=-0.999): 
@@ -22,10 +21,20 @@ Key Components
         Retrieves the version number of the specified module (defaulting to 'unhcr_module'). 
         It returns the version number and any potential error message encountered during retrieval. 
         This is useful for tracking and managing module versions.
+
+    import_libs(mpath, mods): 
+        Dynamically imports modules, checking first if the module is already loaded. 
+        This function supports importing modules from both the local directory and the unhcr package.
+
+    load_env(path = '.env'): 
+        Loads environment variables from a .env file. Exits the program if the file is not found or cannot be loaded.
 """
 
 import argparse
+from dotenv import find_dotenv, load_dotenv
+import importlib
 import logging
+import os
 import sys
 
 def filter_nested_dict(obj, val=-0.999):
@@ -50,14 +59,19 @@ def filter_nested_dict(obj, val=-0.999):
         The filtered object
     """
     if isinstance(obj, dict):
-        return {k: filter_json(v) for k, v in obj.items() if v != val}
+        return {k: filter_nested_dict(v) for k, v in obj.items() if v != val}
     elif isinstance(obj, list):
-        return [filter_json(item) for item in obj]
+        return [filter_nested_dict(item) for item in obj]
     else:
         return obj
 
 def log_setup(level=None, log_file="unhcr.module.log"):
     """
+    Example usage:
+        logger = log_setup()
+        logger.info("Logger is successfully set up!")
+        logging.critical(f"CRITICAL:  Logging level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
+
     Set up logging for the module. If level is None, it parses command-line arguments to determine the logging level.
     If no arguments are provided, it defaults to INFO level.
     
@@ -76,29 +90,7 @@ def log_setup(level=None, log_file="unhcr.module.log"):
     if logger.hasHandlers():
         return logger  # Return the logger if it already has handlers
 
-    if level is None:
-        # Parse the command-line arguments
-        parser = argparse.ArgumentParser(description="Set logging level")
-        parser.add_argument(
-            "--log", 
-            default="INFO", 
-            choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-            help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)"
-        )
-
-        # Add default logging arguments if none provided
-        l = len(sys.argv)
-        if l == 1:  # handle vscode debugging
-            sys.argv.extend(["--log", "INFO"])
-        elif l == 2:
-            sys.argv[1] = '--log'
-            sys.argv.append('INFO')
-
-        args = parser.parse_args()
-        level = args.log.upper()
-    else:
-        level = level.upper()
-
+    level = create_cmdline_parser() if level is None else level.upper()
     # Validate logging level
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if level not in valid_levels:
@@ -109,16 +101,10 @@ def log_setup(level=None, log_file="unhcr.module.log"):
 
     # Console handler
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(getattr(logging, level))
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
+    config_log_handler(console_handler, level, formatter, logger)
     # File handler
     file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(getattr(logging, level))
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-
+    config_log_handler(file_handler, level, formatter, logger)
     # Set the overall logging level
     logger.setLevel(getattr(logging, level))
 
@@ -130,11 +116,61 @@ def log_setup(level=None, log_file="unhcr.module.log"):
 
     return logger
 
-# Example usage:
-# if __name__ == "__main__":
-#     logger = log_setup()
-#     logger.info("Logger is successfully set up!")
-#     logging.critical(f"CRITICAL:  Logging level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
+def create_cmdline_parser():
+    """
+    Parse the command-line arguments and return the logging level as a string.
+    If no arguments are provided, it defaults to INFO level.
+
+    Returns
+    -------
+    str
+        The logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    """
+
+    default_level = 'INFO'
+    if os.getenv('DEBUG') == '1':
+        default_level = 'DEBUG'
+    parser = argparse.ArgumentParser(description="Set logging level")
+    parser.add_argument(
+        "--log", 
+        default=default_level, 
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    )
+
+    # Add default logging arguments if none provided
+    l = len(sys.argv)
+    if l == 1:  # handle vscode debugging
+        sys.argv.extend(["--log", default_level])
+    elif l == 2:
+        sys.argv[1] = '--log'
+        sys.argv.append(default_level)
+
+    args = parser.parse_args()
+    return args.log.upper()
+
+def config_log_handler(handler, level, formatter, logger):
+    """
+    Configure a log handler with the specified level and formatter.
+
+    Parameters
+    ----------
+    handler : logging.Handler
+        The log handler to configure.
+    level : str
+        The logging level to set on the handler (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    formatter : logging.Formatter
+        The log formatter to use on the handler.
+    logger : logging.Logger
+        The logger that the handler will be added to.
+
+    Returns
+    -------
+    None
+    """
+    handler.setLevel(getattr(logging, level))
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 def str_to_float_or_zero(value):
     """
@@ -171,30 +207,72 @@ def get_module_version(name='unhcr_module'):
     err = None
     try:
         v_number = version("unhcr_module")
-    except Exception as e: 
+    except Exception as e:
         err = str(e)
     return v_number, err
+
+def import_libs(mpath, mods):
+    """
+    Dynamically import a module from either the local directory or the unhcr package.
+
+    Args:
+        mpath (str): The module path to search for the local module.
+        mods (List[Tuple[str, str]]): A list of tuples containing the module name to import 
+            and the module name to import as.
+
+    Returns:
+        module: The imported module.
+    """
+    
+    for mod in mods:
+        if mod[0] in sys.modules:
+            return sys.modules[mod[0]]
+
+        module_path = os.path.join(mpath, f"{mod[0]}.py")
+        spec = importlib.util.spec_from_file_location(mod[1], module_path)
+        loaded_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(loaded_mod)
+        globals()[mod[1]] = loaded_mod
+
+#sorcery skip
+def load_env(path = '.env'):
+    """Load environment variables from a .env file.
+
+    Parameters
+    ----------
+    path : str
+        The path to the .env file (default: '.env').
+
+    Returns
+    -------
+    str
+        The path to the .env file if it was found and loaded successfully, or None if not.
+
+    Raises
+    ------
+    SystemExit
+        Exits the program with error code 999 if the .env file is not found or cannot be loaded.
+    """
+    if env_file := find_dotenv(path):
+        if load_dotenv(env_file, override=True):
+            return env_file
+
+    print(f"CONFIG file not found OR LOADED: {env_file}")
+    exit(999)
+
+load_env()
+log_setup()
 
 ##################
 # Hey there - I've reviewed your changes - here's some feedback:
 
 # Overall Comments:
 
-# Function name mismatch: The docstring refers to filter_json but the implementation uses filter_nested_dict. These should be unified to prevent confusion.
-# Bug in recursive call: filter_nested_dict needs to pass the val parameter in its recursive call (change filter_json(v) to filter_nested_dict(v, val))
+# Consider removing the redundant logging statements in log_setup() that log the same message at different levels. A single log message at the appropriate level would be clearer and more efficient.
+# The import_libs() function should include try/except error handling around module imports to gracefully handle import failures and provide meaningful error messages.
 # Here's what I looked at during the review
 # 🟢 General issues: all looks good
 # 🟢 Security: all looks good
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/utils.py:55
-
-# issue(bug_risk): Incorrect recursive filtering of nested structures
-#     dict | list
-#         The filtered object
-#     """
-#     if isinstance(obj, dict):
-#         return {k: filter_json(v) for k, v in obj.items() if v != val}
-#     elif isinstance(obj, list):
-# Modify recursive calls to preserve the filtering value: {k: filter_json(v, val) for k, v in obj.items() if v != val} and [filter_json(item, val) for item in obj]
