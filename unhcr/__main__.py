@@ -11,6 +11,7 @@ if __name__ == '__main__': block:
     This standard Python construct ensures that the main() function is executed only when the script is run directly (e.g., python -m unhcr). 
     This prevents the main() function from being called if the module is imported as a dependency in another script.
 """
+
 import logging
 def main():
     logging.info("UNHCR module loaded successfully!")

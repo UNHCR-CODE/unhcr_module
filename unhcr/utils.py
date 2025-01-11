@@ -21,18 +21,10 @@ Key Components
         Retrieves the version number of the specified module (defaulting to 'unhcr_module'). 
         It returns the version number and any potential error message encountered during retrieval. 
         This is useful for tracking and managing module versions.
-
-    import_libs(mpath, mods): 
-        Dynamically imports modules, checking first if the module is already loaded. 
-        This function supports importing modules from both the local directory and the unhcr package.
-
-    load_env(path = '.env'): 
-        Loads environment variables from a .env file. Exits the program if the file is not found or cannot be loaded.
 """
 
 import argparse
-from dotenv import find_dotenv, load_dotenv
-import importlib
+from importlib.metadata import version
 import logging
 import os
 import sys
@@ -65,7 +57,7 @@ def filter_nested_dict(obj, val=-0.999):
     else:
         return obj
 
-def log_setup(level=None, log_file="unhcr.module.log"):
+def log_setup(level='INFO', log_file="unhcr.module.log", override=False):
     """
     Example usage:
         logger = log_setup()
@@ -87,10 +79,15 @@ def log_setup(level=None, log_file="unhcr.module.log"):
     """
     # Check if the logger already has handlers to prevent adding duplicates
     logger = logging.getLogger()
+    if override:
+        logger.handlers.clear()
+    
     if logger.hasHandlers():
         return logger  # Return the logger if it already has handlers
 
-    level = create_cmdline_parser() if level is None else level.upper()
+    level = create_cmdline_parser(level) if level is None else level.upper()
+    if os.getenv('DEBUG') == '1':
+        level = 'DEBUG'
     # Validate logging level
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if level not in valid_levels:
@@ -108,15 +105,9 @@ def log_setup(level=None, log_file="unhcr.module.log"):
     # Set the overall logging level
     logger.setLevel(getattr(logging, level))
 
-    # Log the effective logging level
-    logger.debug(f"DEBUG: Logging level set to {level}")
-    logger.info(f"INFO: Logging level set to {level}")
-    logger.warning(f"WARNING: Logging level set to {level}")
-    logger.error(f"ERROR: Logging level set to {level}")
-
     return logger
 
-def create_cmdline_parser():
+def create_cmdline_parser(level):
     """
     Parse the command-line arguments and return the logging level as a string.
     If no arguments are provided, it defaults to INFO level.
@@ -127,9 +118,7 @@ def create_cmdline_parser():
         The logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
 
-    default_level = 'INFO'
-    if os.getenv('DEBUG') == '1':
-        default_level = 'DEBUG'
+    default_level = level
     parser = argparse.ArgumentParser(description="Set logging level")
     parser.add_argument(
         "--log", 
@@ -147,7 +136,7 @@ def create_cmdline_parser():
         sys.argv.append(default_level)
 
     args = parser.parse_args()
-    return args.log.upper()
+    return level
 
 def config_log_handler(handler, level, formatter, logger):
     """
@@ -202,7 +191,6 @@ def get_module_version(name='unhcr_module'):
     Returns:
         tuple: (version_number, error_message)
     """
-    from importlib.metadata import version
     v_number = None
     err = None
     try:
@@ -210,58 +198,6 @@ def get_module_version(name='unhcr_module'):
     except Exception as e:
         err = str(e)
     return v_number, err
-
-def import_libs(mpath, mods):
-    """
-    Dynamically import a module from either the local directory or the unhcr package.
-
-    Args:
-        mpath (str): The module path to search for the local module.
-        mods (List[Tuple[str, str]]): A list of tuples containing the module name to import 
-            and the module name to import as.
-
-    Returns:
-        module: The imported module.
-    """
-    
-    for mod in mods:
-        if mod[0] in sys.modules:
-            return sys.modules[mod[0]]
-
-        module_path = os.path.join(mpath, f"{mod[0]}.py")
-        spec = importlib.util.spec_from_file_location(mod[1], module_path)
-        loaded_mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(loaded_mod)
-        globals()[mod[1]] = loaded_mod
-
-#sorcery skip
-def load_env(path = '.env'):
-    """Load environment variables from a .env file.
-
-    Parameters
-    ----------
-    path : str
-        The path to the .env file (default: '.env').
-
-    Returns
-    -------
-    str
-        The path to the .env file if it was found and loaded successfully, or None if not.
-
-    Raises
-    ------
-    SystemExit
-        Exits the program with error code 999 if the .env file is not found or cannot be loaded.
-    """
-    if env_file := find_dotenv(path):
-        if load_dotenv(env_file, override=True):
-            return env_file
-
-    print(f"CONFIG file not found OR LOADED: {env_file}")
-    exit(999)
-
-load_env()
-log_setup()
 
 ##################
 # Hey there - I've reviewed your changes - here's some feedback:

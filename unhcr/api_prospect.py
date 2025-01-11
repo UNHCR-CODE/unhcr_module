@@ -13,10 +13,12 @@ Key Components
         appropriate URL with the necessary headers, including the API key. It includes basic error handling.
 """
 import logging
-import os
 import requests
 
 from unhcr import constants as const
+
+if const.LOCAL: # testing with local python files
+    const, *rest = const.import_local_libs(mods=[ ["constants", "const"]])
 
 def get_prospect_url_key(local, out=False):
     """

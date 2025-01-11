@@ -20,18 +20,14 @@ Key Components
         This is crucial for monitoring and debugging.
 """
 
-import os
-import sys
 import boto3
 import logging
 
 from unhcr import constants as const
+if const.LOCAL: # testing with local python files
+    const, *rest = const.import_local_libs(mods=[["constants", "const"]])
 
-s3_client = boto3.client(
-    's3',
-    aws_access_key_id=const.ACCESS_KEY,
-    aws_secret_access_key=const.SECRET_KEY
-)
+#from unhcr import constants as const
 
 def list_files_in_folder(bucket_name, folder_name):
     """
@@ -45,6 +41,11 @@ def list_files_in_folder(bucket_name, folder_name):
         Exception: If there is an issue connecting to S3 or listing the files.
     """
     try:
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=const.ACCESS_KEY,
+            aws_secret_access_key=const.SECRET_KEY
+        )
         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=folder_name)
         if 'Contents' in response:
             for item in response['Contents']:
@@ -53,6 +54,8 @@ def list_files_in_folder(bucket_name, folder_name):
             logging.info(f"No files found in folder '{folder_name}'.")
     except Exception as e:
         logging.error(f"Error: {e}")
+
+#list_files_in_folder(const.BUCKET_NAME, const.FOLDER_NAME)
 
 ###################################
 # Hey there - I've reviewed your changes - here's some feedback:

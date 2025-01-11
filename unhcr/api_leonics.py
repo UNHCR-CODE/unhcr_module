@@ -23,7 +23,6 @@ Key Components
 """
 from datetime import datetime, timedelta
 import logging
-import os
 import pandas as pd
 import requests
 from urllib3.exceptions import InsecureRequestWarning
@@ -32,6 +31,9 @@ import urllib3
 urllib3.disable_warnings(InsecureRequestWarning)
 
 from unhcr import constants as const
+
+if const.LOCAL: # testing with local python files
+    const, *rest = const.import_local_libs(mods=[ ["constants", "const"]])
 
 def getAuthToken(dt = None):
     """

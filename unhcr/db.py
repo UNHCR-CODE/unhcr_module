@@ -34,11 +34,9 @@ The script uses the requests library for API interaction, pandas for data manipu
 It relies on constants defined in constants.py and API interaction functions from api_leonics.py and api_prospect.py. 
 It also includes error handling and logging.
 """
-
 from datetime import datetime, timedelta
 import json
 import logging
-import os
 import traceback
 import pandas as pd
 import requests
@@ -52,8 +50,9 @@ from sqlalchemy.orm import sessionmaker
 
 from unhcr import constants as const
 from unhcr import api_prospect
-from unhcr import api_leonics
 
+if const.LOCAL: # testing with local python files
+    const, api_prospect, *rest = const.import_local_libs(mods=[["constants", "const"], ["api_prospect", "api_prospect"]])
 def mysql_execute(sql, data=None):
     """Execute a SQL query against the Aiven MySQL database.
 

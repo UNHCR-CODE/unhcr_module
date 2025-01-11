@@ -31,19 +31,29 @@ Key Components
         The commented-out import statements suggest the script can be run with either local or production versions of the db and api modules. 
         This is a common pattern for facilitating development and testing.
 """
-
 from datetime import datetime, timedelta
 import logging
 import re
 import os
 import pandas as pd
 
-from unhcr import utils
-utils.log_setup()
-
 from unhcr import constants as const
+from unhcr import constants as const
+# OPTIONAL: set your own environment
+##ef = const.load_env(r'E:\_UNHCR\CODE\unhcr_module\.env')
+## print(ef)
+# OPTIONAL: set your own environment
+from unhcr import utils
 from unhcr import db
 from unhcr import api_leonics
+
+
+if const.LOCAL: # testing with local python files
+    mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
+    utils, const, db, api_leonics, *rest = mods
+
+utils.log_setup(override=True)
+logging.info(f"PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
 
 # just to test S3
 # TODO waiting for new creds
