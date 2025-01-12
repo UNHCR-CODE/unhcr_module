@@ -136,7 +136,7 @@ def create_cmdline_parser(level):
         sys.argv.append(default_level)
 
     args = parser.parse_args()
-    return level
+    return args.log
 
 def config_log_handler(handler, level, formatter, logger):
     """
@@ -204,8 +204,6 @@ def get_module_version(name='unhcr_module'):
 
 # Overall Comments:
 
-# Consider removing the redundant logging statements in log_setup() that log the same message at different levels. A single log message at the appropriate level would be clearer and more efficient.
-# The import_libs() function should include try/except error handling around module imports to gracefully handle import failures and provide meaningful error messages.
 # Here's what I looked at during the review
 # 🟢 General issues: all looks good
 # 🟢 Security: all looks good

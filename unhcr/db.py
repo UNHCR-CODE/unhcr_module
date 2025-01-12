@@ -298,36 +298,48 @@ def prospect_get_key(func, local):
 
 # Blocking issues:
 
-# Use proper SQL parameter binding (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:165)
+# Direct string replacement for NULL values is error-prone (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:166)
 # Overall Comments:
 
-# Critical security issues need to be addressed: 1) Remove SSL verification disabling and properly configure certificates 2) Move API keys to secure configuration management 3) Use proper SQL parameter binding instead of string concatenation for queries
-# Standardize error handling across the codebase - replace exit() calls with proper exception handling that can be managed by calling code
+# The update_rows() function is vulnerable to SQL injection attacks. Use parameterized queries instead of string concatenation when building the SQL statement.
+# Add proper connection error handling in mysql_execute() to gracefully handle database connectivity issues.
 # Here's what I looked at during the review
-# 🟡 General issues: 1 issue found
+# 🟡 General issues: 2 issues found
 # 🔴 Security: 1 blocking issue
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:56
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:164
 
-# suggestion(bug_risk): Improve error handling to avoid abrupt exits
-# from unhcr import api_prospect
-# from unhcr import api_leonics
+# suggestion(performance): Excessive debug logging might impact performance
+#     )
+#     logging.debug('66666666')
 
-# def mysql_execute(sql, data=None):
-#     """Execute a SQL query against the Aiven MySQL database.
+#     logging.debug(f'222222  {df_filtered['DateTimeServer'].dtype}')
 
-# Instead of using exit(), implement a more robust error handling strategy. Raise custom exceptions that can be caught and handled by the caller, allowing for more flexible error management and preventing unexpected application termination.
+#     values = values.replace("err", 'NULL')
+# Remove or conditionally include debug logging statements in production code to minimize overhead.
 
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:165
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:166
 
-# issue(security): Use proper SQL parameter binding
+# issue(security): Direct string replacement for NULL values is error-prone
 
 #     logging.debug(f'222222  {df_filtered['DateTimeServer'].dtype}')
 
 #     values = values.replace("err", 'NULL')
 #     # Full MySQL INSERT statement
 #     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values};"
-# Replacing 'err' with NULL via string replacement is error-prone and potentially introduces SQL injection risks. Use SQLAlchemy's parameter binding or type-based NULL handling to ensure data integrity and prevent potential security vulnerabilities.
+# Use proper SQL parameter binding or database-specific NULL handling to prevent potential SQL injection or data corruption.
+
+# Resolve
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:277
+
+# suggestion(performance): Inefficient external_id transformation
+#     columns = res.keys()  # Get column names
+#     df = pd.DataFrame(rows, columns=columns)
+
+#     df['external_id'] = df['external_id'].astype(str).apply(lambda x: 'py_' + x)
+
+
+# Consider using vectorized operations like df['external_id'] = 'py_' + df['external_id'].astype(str) for better performance.

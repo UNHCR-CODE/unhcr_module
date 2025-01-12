@@ -13,10 +13,13 @@ if __name__ == '__main__': block:
 """
 
 import logging
+
+
 def main():
     logging.info("UNHCR module loaded successfully!")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
 
 ##########################

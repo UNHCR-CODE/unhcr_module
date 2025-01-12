@@ -1,9 +1,9 @@
 # sorcery: disable
 """
 Overview
-    This Python file (constants.py) defines and initializes various constants used for configuring connections to external services and APIs. 
-    These services include Leonics, Aiven MySQL database, Eyedro S3 storage, and the Prospect API. 
-    The file leverages environment variables loaded from a .env file to store sensitive information like API keys and connection strings.
+    This file, constants.py, centralizes configuration constants for the UNHCR module. It loads environment variables from a .env file 
+    to populate these constants, which are used for connecting to various external services like Leonics API, Aiven MySQL database, 
+    Eyedro S3 storage, and the Prospect API. It also dynamically imports local modules.
 
 Key Components
 Environment Variable Loading: 
@@ -296,14 +296,18 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
 
 # Blocking issues:
 
-# Hardcoded SSL verification disable is a security risk (e:_UNHCR\CODE\unhcr_module\unhcr\constants.py:102)
+# Hardcoded SSL verification disable is a security risk (e:/_UNHCR/CODE/unhcr_module/unhcr/constants.py:154)
+# Overall Comments:
+
+# SECURITY ISSUE: Disabling SSL verification (VERIFY=False) creates a significant security vulnerability. Either obtain a valid certificate from Leonics or implement certificate pinning if dealing with a known self-signed certificate.
+# The generic exception handling in import_local_libs() should catch specific exceptions (e.g., ImportError, ModuleNotFoundError) rather than catching all exceptions. This will make debugging easier and prevent masking unexpected errors.
 # Here's what I looked at during the review
 # 🟡 General issues: 1 issue found
 # 🔴 Security: 1 blocking issue
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:_UNHCR\CODE\unhcr_module\unhcr\constants.py:102
+# e:/_UNHCR/CODE/unhcr_module/unhcr/constants.py:154
 
 # issue(security): Hardcoded SSL verification disable is a security risk
 #     LEONICS_KEY = os.getenv('LEONICS_KEY')
@@ -312,12 +316,16 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
 #     VERIFY=False
 
 #     # Aiven Mysql DB
-# Resolve
-# e:_UNHCR\CODE\unhcr_module\unhcr\constants.py:189
+# SSL verification should be configurable and default to True. Disabling SSL verification exposes the application to man-in-the-middle attacks and other security vulnerabilities.
 
-# suggestion(bug_risk): Generic exception handling lacks specificity and proper error management
+# Resolve
+# e:/_UNHCR/CODE/unhcr_module/unhcr/constants.py:283
+
+# suggestion(bug_risk): Generic exception handling lacks specificity
 
 #             # if not exists:
 #             loaded_modules.append(loaded_mod)
 #         except Exception as e:
 #             print(f"Failed to load module {module_name}: {e}")
+
+# Replace generic exception handling with specific exception types. Log the full traceback and consider more granular error handling to prevent silent failures.
