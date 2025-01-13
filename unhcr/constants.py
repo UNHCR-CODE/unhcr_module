@@ -57,6 +57,7 @@ VERIFY=None
 
 # Aiven Mysql DB
 AIVEN_TAKUM_CONN_STR = None
+LEONICS_RAW_TABLE = None
 
 # Eyedro S3
 ACCESS_KEY = None
@@ -118,6 +119,7 @@ def set_environ():
     global VERIFY
 
     global AIVEN_TAKUM_CONN_STR
+    global LEONICS_RAW_TABLE
 
     global ACCESS_KEY
     global SECRET_KEY
@@ -155,6 +157,7 @@ def set_environ():
 
     # Aiven Mysql DB
     AIVEN_TAKUM_CONN_STR = os.getenv('AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR')
+    LEONICS_RAW_TABLE = os.getenv('LEONICS_RAW_TABLE')
 
     #Eyedro S3
     ACCESS_KEY = os.getenv('GB_AWS_ACCESS_KEY')
