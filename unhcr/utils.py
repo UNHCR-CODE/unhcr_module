@@ -1,22 +1,24 @@
 """
 Overview
-    This Python file (utils.py) provides a utility function filter_json designed to recursively remove a specific value (-0.999 by default) 
-    from JSON-like data structures (dictionaries and lists). This is likely used for data cleaning or preprocessing, where the value 
-    -0.999 represents missing or invalid data.
+    This file (utils.py) within the unhcr module provides a set of utility functions for data processing, 
+    logging setup, module version retrieval, and dynamic module importing. It focuses on cleaning JSON-like data, 
+    configuring logging, and managing module functionalities.
 
 Key Components
     filter_nested_dict(obj, val=-0.999): 
         Recursively removes a specified value (val, defaulting to -0.999) from nested dictionaries and lists. 
-        This function is crucial for cleaning JSON-like data by removing placeholder values representing missing or invalid data.
+        This function is crucial for cleaning JSON-like data by removing placeholder values representing missing 
+        or invalid data.
 
     log_setup(level=None): 
-        This function configures the logging for the module. It allows setting the logging level via command-line arguments 
-        (using --log followed by the desired level, e.g., INFO, DEBUG, etc.). If no level is provided, it defaults to INFO. 
-        The logs are outputted to both the console and a file named 'unhcr.module.log'.
+        This function configures the logging for the module. It allows setting the logging level via command-line 
+        arguments (using --log followed by the desired level, e.g., INFO, DEBUG, etc.). If no level is provided, 
+        it defaults to INFO. The logs are outputted to both the console and a file named 'unhcr.module.log'.
 
     str_to_float_or_zero(value): 
-        This function attempts to convert a given value to a float. If the conversion fails due to a ValueError or TypeError, 
-        it logs the error and returns 0.0. This provides a safe way to handle potential data type issues during processing.
+        This function attempts to convert a given value to a float. If the conversion fails due to a ValueError 
+        or TypeError, it logs the error and returns 0.0. This provides a safe way to handle potential 
+        data type issues during processing.
         
     get_module_version(name='unhcr_module'): 
         Retrieves the version number of the specified module (defaulting to 'unhcr_module'). 
@@ -25,16 +27,18 @@ Key Components
 """
 
 import argparse
+from importlib.metadata import version
 import logging
-import sys
+import optparse
+import os
+
 
 def filter_nested_dict(obj, val=-0.999):
- 
     """
-    Recursively remove all entries of a nested dict that have a value equal to val. If the object is a dictionary, 
-    it creates a new dictionary containing only key-value pairs where the value is not equal to val. If the object is a list, 
-    it creates a new list containing only items that are not equal to val. Otherwise, it returns the object unchanged. 
-    The default value for val is -0.999. This function is crucial for cleaning JSON-like data by removing a specific placeholder value 
+    Recursively remove all entries of a nested dict that have a value equal to val. If the object is a dictionary,
+    it creates a new dictionary containing only key-value pairs where the value is not equal to val. If the object is a list,
+    it creates a new list containing only items that are not equal to val. Otherwise, it returns the object unchanged.
+    The default value for val is -0.999. This function is crucial for cleaning JSON-like data by removing a specific placeholder value
     representing missing or unwanted data.
 
     Parameters
@@ -50,91 +54,138 @@ def filter_nested_dict(obj, val=-0.999):
         The filtered object
     """
     if isinstance(obj, dict):
-        return {k: filter_json(v) for k, v in obj.items() if v != val}
+        return {k: filter_nested_dict(v) for k, v in obj.items() if v != val}
     elif isinstance(obj, list):
-        return [filter_json(item) for item in obj]
+        return [filter_nested_dict(item) for item in obj]
     else:
         return obj
 
-def log_setup(level=None, log_file="unhcr.module.log"):
-    """
-    Set up logging for the module. If level is None, it parses command-line arguments to determine the logging level.
-    If no arguments are provided, it defaults to INFO level.
-    
-    Usage:
-        script.py --log INFO
-    
-    Args:
-        level (str, optional): The logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Defaults to None.
-        log_file (str): The name of the log file. Defaults to 'unhcr.module.log'.
 
-    Returns:
-        logging.Logger: Configured logger instance.
-    """
+def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
     # Check if the logger already has handlers to prevent adding duplicates
+    """
+    Configure the logging for the module. If level is None, it will look for a command-line argument --log followed by the desired level, e.g., INFO, DEBUG, etc.
+    If no level is provided, it defaults to INFO. The logs are outputted to both the console and a file named 'unhcr.module.log'.
+
+    Parameters
+    ----------
+    level : str, optional
+        The desired logging level, by default 'INFO'
+    log_file : str, optional
+        The name of the log file, by default 'unhcr.module.log'
+    override : bool, optional
+        If True, it will clear the existing handlers and set up new ones, by default False
+
+    Returns
+    -------
+    logging.Logger
+        The configured logger
+    """
     logger = logging.getLogger()
+    if override:
+        logger.handlers.clear()
+
     if logger.hasHandlers():
         return logger  # Return the logger if it already has handlers
 
-    if level is None:
-        # Parse the command-line arguments
-        parser = argparse.ArgumentParser(description="Set logging level")
-        parser.add_argument(
-            "--log", 
-            default="INFO", 
-            choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-            help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)"
-        )
-
-        # Add default logging arguments if none provided
-        l = len(sys.argv)
-        if l == 1:  # handle vscode debugging
-            sys.argv.extend(["--log", "INFO"])
-        elif l == 2:
-            sys.argv[1] = '--log'
-            sys.argv.append('INFO')
-
-        args = parser.parse_args()
-        level = args.log.upper()
-    else:
-        level = level.upper()
-
+    args = create_cmdline_parser(level) if level is None else level.upper()
+    level = args
+    if os.getenv("DEBUG") == "1":
+        level = "DEBUG"
     # Validate logging level
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if level not in valid_levels:
-        raise ValueError(f"Invalid logging level: {level}. Must be one of {valid_levels}.")
+        raise ValueError(
+            f"Invalid logging level: {level}. Must be one of {valid_levels}."
+        )
 
     # Create a formatter that outputs the log format
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
     # Console handler
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(getattr(logging, level))
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
+    config_log_handler(console_handler, level, formatter, logger)
     # File handler
     file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(getattr(logging, level))
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-
+    config_log_handler(file_handler, level, formatter, logger)
     # Set the overall logging level
     logger.setLevel(getattr(logging, level))
 
-    # Log the effective logging level
-    logger.debug(f"DEBUG: Logging level set to {level}")
-    logger.info(f"INFO: Logging level set to {level}")
-    logger.warning(f"WARNING: Logging level set to {level}")
-    logger.error(f"ERROR: Logging level set to {level}")
-
     return logger
 
-# Example usage:
-# if __name__ == "__main__":
-#     logger = log_setup()
-#     logger.info("Logger is successfully set up!")
-#     logging.critical(f"CRITICAL:  Logging level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
+
+def create_cmdline_parser(level="INFO"):
+    """
+    Creates a command-line parser to read environment and logging options from the command line.
+
+    Parameters
+    ----------
+    level : str, optional
+        The default logging level, by default 'INFO'
+
+    Returns
+    -------
+    optparse.Values or None
+        An object containing the parsed command-line options if successful,
+        or None if an error occurs during parsing.
+
+    Raises
+    ------
+    None
+    """
+    parser = optparse.OptionParser()
+    # parser = argparse.ArgumentParser(description="Process some environment and log options.")
+    # Add command-line arguments
+    parser.add_option(
+        "--env",
+        dest="env",
+        default=".env",
+        type="string",
+        help="Path to environment directory",
+    )
+    parser.add_option(
+        "--log",
+        dest="log",
+        default=level,
+        type="string",
+        help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+    try:
+        (options, args) = parser.parse_args()
+        # List of valid choices
+        valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+
+        # Validate the log level
+        if options.log not in valid_log_levels:
+            parser.error(
+                f"Invalid log level: {options.log}. Valid options are: {', '.join(valid_log_levels)}"
+            )
+
+        return options
+    except Exception as e:
+        print(f"ERROR: {e}")
+        return None
+
+
+def config_log_handler(handler, level, formatter, logger):
+    """
+    Configure a log handler with the given level, formatter, and add it to the given logger.
+
+    Parameters
+    ----------
+    handler : logging.Handler
+        The log handler to be configured
+    level : str
+        The logging level to set for the handler
+    formatter : logging.Formatter
+        The formatter to set for the handler
+    logger : logging.Logger
+        The logger to add the handler to
+    """
+    handler.setLevel(getattr(logging, level))
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
 
 def str_to_float_or_zero(value):
     """
@@ -149,10 +200,11 @@ def str_to_float_or_zero(value):
     try:
         return float(value)
     except (ValueError, TypeError):
-        logging.error(f'str_to_float_or_zero !!!!!!  {ValueError}, {TypeError}')
+        logging.error(f"str_to_float_or_zero !!!!!!  {ValueError}, {TypeError}")
         return 0.0
 
-def get_module_version(name='unhcr_module'):
+
+def get_module_version(name="unhcr_module"):
     """
     Retrieve the version number of the specified module (default: 'unhcr_module').
 
@@ -166,35 +218,35 @@ def get_module_version(name='unhcr_module'):
     Returns:
         tuple: (version_number, error_message)
     """
-    from importlib.metadata import version
     v_number = None
     err = None
     try:
         v_number = version("unhcr_module")
-    except Exception as e: 
+    except Exception as e:
         err = str(e)
     return v_number, err
+
 
 ##################
 # Hey there - I've reviewed your changes - here's some feedback:
 
 # Overall Comments:
 
-# Function name mismatch: The docstring refers to filter_json but the implementation uses filter_nested_dict. These should be unified to prevent confusion.
-# Bug in recursive call: filter_nested_dict needs to pass the val parameter in its recursive call (change filter_json(v) to filter_nested_dict(v, val))
+# Consider replacing the deprecated optparse with argparse throughout the codebase for better maintainability and consistency with modern Python practices.
 # Here's what I looked at during the review
-# 🟢 General issues: all looks good
+# 🟡 General issues: 1 issue found
 # 🟢 Security: all looks good
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/utils.py:55
+# outdated
+# e:_UNHCR\CODE\unhcr_module\unhcr\utils.py:198
 
-# issue(bug_risk): Incorrect recursive filtering of nested structures
-#     dict | list
-#         The filtered object
+# suggestion(code_refinement): Hardcoded module name in version retrieval
+#         logging.error(f'str_to_float_or_zero !!!!!!  {ValueError}, {TypeError}')
+#         return 0.0
+
+# def get_module_version(name='unhcr_module'):
 #     """
-#     if isinstance(obj, dict):
-#         return {k: filter_json(v) for k, v in obj.items() if v != val}
-#     elif isinstance(obj, list):
-# Modify recursive calls to preserve the filtering value: {k: filter_json(v, val) for k, v in obj.items() if v != val} and [filter_json(item, val) for item in obj]
+#     Retrieve the version number of the specified module (default: 'unhcr_module').
+# The function accepts a 'name' parameter, but internally always uses 'unhcr_module'. Consider using the passed name parameter for more flexibility.

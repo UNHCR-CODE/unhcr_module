@@ -1,7 +1,8 @@
 """
 Overview
-    This file (api_prospect.py) provides a Python API client for interacting with the Prospect system. Its main purpose is to handle authentication, 
-    retrieve data within a given timeframe, and submit data to the Prospect API.
+    This file (api_prospect.py) provides a Python API client for interacting with the Prospect system. 
+    It handles authentication and facilitates data retrieval within a specified timeframe, as well as data submission to the Prospect API. 
+    It supports interacting with both local and external Prospect instances.
 
 Key Components
     get_prospect_url_key(local, out=False): 
@@ -13,12 +14,12 @@ Key Components
         appropriate URL with the necessary headers, including the API key. It includes basic error handling.
 """
 import logging
-import os
 import requests
 
 from unhcr import constants as const
-file_dir = os.path.dirname(os.path.abspath(__file__))
-const = const.import_utils('constants', file_dir)
+
+if const.LOCAL: # testing with local python files
+    const, *rest = const.import_local_libs(mods=[ ["constants", "const"]])
 
 def get_prospect_url_key(local, out=False):
     """
@@ -91,78 +92,44 @@ def api_in_prospect(df, local=True, ):  # sourcery skip: extract-method
         return None
 
 ########################################
-# Hey there - I've reviewed your changes and found some issues that need to be addressed.
+# Hey there - I've reviewed your changes - here's some feedback:
 
-# Blocking issues:
-
-# Hardcoded API key found. (e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:39)
-# Hardcoded API keys found. (e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:42)
-# Hardcoded API key found. (e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:44)
 # Overall Comments:
 
-# Replace the debug logging containing 'ZZZZ' with a more descriptive and professional message that clearly indicates what's being logged
-# Consider catching and handling specific exceptions (e.g., RequestException, ConnectionError) rather than using a broad Exception catch in api_in_prospect()
+# Consider moving API keys to environment variables or a secrets management service rather than storing them in constants to improve security
+# Replace generic Exception handling with specific exception types (e.g., requests.exceptions.RequestException) to better handle different failure modes
 # Here's what I looked at during the review
-# 🟡 General issues: 1 issue found
-# 🔴 Security: 3 blocking issues, 1 other issue
+# 🟢 General issues: all looks good
+# 🟡 Security: 3 issues found
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:86
+# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:89
 
-# suggestion(security): Use specific exception handling instead of generic Exception catch
+# suggestion(security): Use specific exception handling instead of generic Exception
 
 #         return requests.request("POST", url, headers=headers, data=data, verify=const.VERIFY)
 #     #TODO more specific error trapping
 #     except Exception as e:
 #         logging.error('api_in_prospect ERROR', e)
 #         return None
-# Catch specific exceptions like requests.exceptions.RequestException or ConnectionError to provide more precise error handling and logging
-
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:84
+# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:87
 
-# suggestion(bug_risk): Consider adding response validation and error checking
+# suggestion(security): Add response validation and error checking
 #         'Content-Type': 'application/json'
 #         }
 
 #         return requests.request("POST", url, headers=headers, data=data, verify=const.VERIFY)
 #     #TODO more specific error trapping
 #     except Exception as e:
-# Add checks for response status code and potential error conditions before returning the response
-
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:39
+# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:41
 
-# issue(security): Hardcoded API key found.
+# issue(security): Avoid hardcoding API keys, use secure storage
+#     str, str
 #         A tuple containing the URL and key for the Prospect API.
 #     """
 #     url = const.LOCAL_BASE_URL
 #     key = const.LOCAL_API_IN_KEY
 #     if local == False:
-#         url = const.BASE_URL
-# The local API key is hardcoded in the get_prospect_url_key function. Avoid hardcoding sensitive information like API keys directly in your code. Consider storing them securely in environment variables or a dedicated secrets management service.
-
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:42
-
-# issue(security): Hardcoded API keys found.
-#     key = const.LOCAL_API_IN_KEY
-#     if local == False:
-#         url = const.BASE_URL
-#         key = const.API_OUT_KEY if out else const.API_IN_KEY
-#     elif out:
-#         key = const.LOCAL_API_OUT_KEY
-# The API keys are hardcoded in the get_prospect_url_key function. Avoid hardcoding sensitive information like API keys directly in your code. Consider storing them securely in environment variables or a dedicated secrets management service.
-
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:44
-
-# issue(security): Hardcoded API key found.
-#         url = const.BASE_URL
-#         key = const.API_OUT_KEY if out else const.API_IN_KEY
-#     elif out:
-#         key = const.LOCAL_API_OUT_KEY
-
-#     logging.debug(f'ZZZZZZZZZZZZZZZ\nlocal  {local}\n out {out}\nkey {key}\nZZZZZZZZZZZZZZ')
-# The local API key is hardcoded in the get_prospect_url_key function. Avoid hardcoding sensitive information like API keys directly in your code. Consider storing them securely in environment variables or a dedicated secrets management service.

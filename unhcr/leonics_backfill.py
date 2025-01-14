@@ -38,6 +38,7 @@ import os
 import pandas as pd
 
 from unhcr import constants as const
+from unhcr import constants as const
 # OPTIONAL: set your own environment
 ##ef = const.load_env(r'E:\_UNHCR\CODE\unhcr_module\.env')
 ## print(ef)
@@ -52,14 +53,7 @@ if const.LOCAL: # testing with local python files
     utils, const, db, api_leonics, *rest = mods
 
 utils.log_setup(override=True)
-logging.info(f"PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
-
-# just to test S3
-# TODO waiting for new creds
-# import s3
-# # Call the function to list files in the 'Archive' folder
-# s3.list_files_in_folder(s3.BUCKET_NAME, s3.FOLDER_NAME)
-# exit()
+logging.info(f"LEONICS_BACKFILL:  PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
 
 logging.info(f"Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
 ver, err = utils.get_module_version()
@@ -103,21 +97,19 @@ if mysql or pros:
 logging.debug(f'!!!!!!!!!!! {token}')
 if token:
     if mysql:
-        max_dt, err = db.get_mysql_max_date()
-        if err:
-            logging.error(f"get_mysql_max_date Error occurred: {err}")
-            exit(1)
-        st = (max_dt + timedelta(minutes=1)).date().isoformat()
+        date_str = '2025-01-04'
+        data_dt = date_object = datetime.strptime(date_str, '%Y-%m-%d')
+        st = (data_dt + timedelta(minutes=1)).date().isoformat()
         st = st.replace('-', '')
-        ed = (datetime.now() + timedelta(days=1)).date().isoformat()
-        ed = ed.replace('-', '')
-        df, err = api_leonics.getData(start=st,end=ed,token=token)
+        # ed = (datetime.now() + timedelta(days=1)).date().isoformat()
+        # ed = ed.replace('-', '')
+        df, err = api_leonics.getData(start=st,end=st,token=token)
         if err:
             logging.error(f"api_leonics.getData Error occurred: {err}")
             exit(2)
         # Convert the 'datetime_column' to pandas datetime
         df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
-        res, err = db.update_mysql(max_dt,df, const.LEONICS_RAW_TABLE)
+        res, err = db.update_mysql(data_dt,df, const.LEONICS_RAW_TABLE)
         if err:
             logging.error(f"update_mysql Error occurred: {err}")
             exit(3)
@@ -130,8 +122,8 @@ else:
 if pros:
     # set start_time to highest DateTimeServer in Prospect
     # TODO get from out API
-    db.update_prospect(local=True)
-    db.update_prospect(local=False)
+    db.backfill_prospect(start_ts=data_dt.date().isoformat(), local=True)
+    db.backfill_prospect(start_ts=data_dt.date().isoformat(), local=False)
 
 ################################################################
 # Hey there - I've reviewed your changes - here's some feedback:
@@ -178,8 +170,8 @@ if pros:
 # if pros:
 #     # set start_time to highest DateTimeServer in Prospect
 #     # TODO get from out API
-#     db.update_prospect(local=True)
-#     db.update_prospect(local=False)
+#     db.update_prospect(start_ts=data_dt.date().isoformat(), local=True)
+#     db.update_prospect(start_ts=data_dt.date().isoformat(), local=False)
 
 # ################################################################
 # Similar to the MySQL update, this test lacks assertions. It's unclear why specific timestamps are hardcoded, especially so far in the future. Clarify the purpose of these timestamps and add assertions to verify the correct behavior of db.update_prospect() for both local=True and local=False scenarios.
