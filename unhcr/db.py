@@ -1,39 +1,39 @@
 """
 Overview
-    This Python script db.py is responsible for extracting data from a Leonics API, storing it in a MySQL database, and subsequently 
-    updating a Prospect system with new entries. It uses the requests library for API interaction, pandas for data manipulation, 
-    and sqlalchemy for database operations. The script is designed to incrementally update both the database and Prospect, 
-    minimizing redundant data transfer.
+    This script db.py extracts data from a Leonics API, stores it in a MySQL database (Aiven), and updates 
+    a Prospect system with new entries. It uses requests for API interaction, pandas for data manipulation, 
+    and sqlalchemy for database operations. The script is designed for incremental updates to both the database 
+    and Prospect to avoid redundant data transfer.
 
 Key Components
     mysql_execute(sql, data=None): 
-        This function provides a reusable interface for executing SQL queries against the MySQL database. It handles session creation, 
-        execution, commit, rollback, and closure, simplifying database interactions within the script.
-
-    update_mysql(token): 
-        This function orchestrates the database update process. It retrieves the latest timestamp from the database, fetches new data 
-        from the Leonics API since the last update, and inserts the new data into the database.
-
-    update_rows(max_dt, token): 
-        This function handles the core logic of fetching data from the Leonics API using the api_leonics.getData() function, filtering for 
-        new records based on the provided max_dt timestamp, formatting the data, and constructing and executing a bulk INSERT SQL query.
-
-    update_prospect(start_ts=None, local=True): 
-        This function manages the Prospect update process. It retrieves the latest timestamp from Prospect, queries the database 
-        for newer records, formats the data, and sends it to the Prospect API using api_prospect.api_in_prospect().
-
-    prospect_get_key(func, local): 
-        This function retrieves the necessary URL and API key for interacting with the Prospect API based on the local flag. 
-        It also retrieves the latest timestamp from Prospect to avoid sending duplicate data.
-
-    get_prospect_last_data(response): 
-        This helper function parses the Prospect API response and extracts the latest timestamp to determine which records need to be updated. 
-        It also extracts the latest external_id.
-
-The script uses the requests library for API interaction, pandas for data manipulation, and sqlalchemy for database operations. 
-It relies on constants defined in constants.py and API interaction functions from api_leonics.py and api_prospect.py. 
-It also includes error handling and logging.
+        Executes SQL queries against the MySQL database. It handles session creation, execution, commit/rollback, 
+        and closure.
+update_mysql(max_dt, df, table_name): 
+    Orchestrates the database update process. It retrieves the latest timestamp from the database, 
+    fetches new data from the Leonics API since the last update, and inserts it into the database.
+update_rows(max_dt, df, table_name): 
+    Handles fetching data from the Leonics API via api_leonics.getData(), filters for new records based on the 
+    max_dt timestamp, formats the data, and performs a bulk INSERT into the MySQL database.
+update_prospect(start_ts=None, local=True): 
+    Manages the Prospect update process. It retrieves the latest timestamp from Prospect, queries the database 
+    for newer records, formats them, and sends them to the Prospect API using api_prospect.api_in_prospect().
+prospect_get_key(func, local, start_ts=None): 
+    Retrieves the Prospect API URL and key based on the local flag. It also gets the latest timestamp from 
+    Prospect to avoid duplicates.
+get_prospect_last_data(response): 
+    Parses the Prospect API response to extract the latest timestamp and external_id.
+backfill_prospect(start_ts=None, local=True): 
+    Similar to update_prospect, but designed for backfilling data into Prospect, using prospect_backfill_key.
+prospect_backfill_key(func, local, start_ts): 
+    Retrieves a larger batch of data from the database (limited to 1450 rows) and sends it to Prospect, 
+    primarily for backfilling purposes.
+    
+The script relies on constants.py for configuration, api_leonics.py for Leonics API interaction 
+(not shown in the provided code), and api_prospect.py for Prospect API interaction. 
+It includes error handling and logging.
 """
+
 from datetime import datetime, timedelta
 import json
 import logging
@@ -42,6 +42,7 @@ import pandas as pd
 import requests
 from urllib3.exceptions import InsecureRequestWarning
 import urllib3
+
 # Suppress InsecureRequestWarning
 urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -51,14 +52,18 @@ from sqlalchemy.orm import sessionmaker
 from unhcr import constants as const
 from unhcr import api_prospect
 
-if const.LOCAL: # testing with local python files
-    const, api_prospect, *rest = const.import_local_libs(mods=[["constants", "const"], ["api_prospect", "api_prospect"]])
+if const.LOCAL:  # testing with local python files
+    const, api_prospect, *rest = const.import_local_libs(
+        mods=[["constants", "const"], ["api_prospect", "api_prospect"]]
+    )
+
+
 def mysql_execute(sql, data=None):
     """Execute a SQL query against the Aiven MySQL database.
 
     Args:
         sql (str): The SQL query to execute. May contain placeholders for data.
-        data (dict): A dictionary containing values to substitute into the SQL query.
+        data (dict, optional): A dictionary containing values to substitute into the SQL query.
 
     Returns:
         sqlalchemy.engine.result.ResultProxy: The result of the query execution.
@@ -66,6 +71,7 @@ def mysql_execute(sql, data=None):
     Raises:
         Exception: If any error occurs while executing the query.
     """
+
     engine = create_engine(const.AIVEN_TAKUM_CONN_STR)
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -79,34 +85,36 @@ def mysql_execute(sql, data=None):
     finally:
         session.close()
 
-def get_mysql_max_date():
 
+def get_mysql_max_date():
     """Retrieves the most recent timestamp from the MySQL database.
 
     Returns:
         tuple: A tuple containing the most recent timestamp in the database and an error message if any.
     """
     try:
-        dt = mysql_execute(text('select max(DatetimeServer) FROM defaultdb.TAKUM_LEONICS_API_RAW'))
+        dt = mysql_execute(
+            text("select max(DatetimeServer) FROM defaultdb.TAKUM_LEONICS_API_RAW")
+        )
         val = dt.scalar()
-        return datetime.strptime(val, '%Y-%m-%d %H:%M'), None
+        return datetime.strptime(val, "%Y-%m-%d %H:%M"), None
     except Exception as e:
-        logging.error(f'Can not get DB max timsestanp   {e}')
+        logging.error(f"Can not get DB max timsestanp   {e}")
         return None, e
 
-def update_mysql(max_dt, df, table_name):
 
+def update_mysql(max_dt, df, table_name):
     """
-    Updates the MySQL database with new data entries.
-    This function retrieves the latest timestamp from the MySQL database and updates
-    it with new data entries from a DataFrame. It logs any errors encountered during
-    the process.
+    Orchestrates the database update process. It retrieves the latest timestamp from the database,
+    fetches new data from the Leonics API since the last update, and inserts it into the database.
 
     Args:
         max_dt (datetime): The maximum datetime to be used as a threshold for filtering new data.
         df (pandas.DataFrame): The DataFrame containing new data to be inserted into the database.
+        table_name (str): The name of the database table to update.
+
     Returns:
-        tuple: A tuple containing the most recent timestamp in the database and an error message if any.
+        tuple: A tuple containing the result of the update operation and an error message, if any.
     """
 
     try:
@@ -116,41 +124,36 @@ def update_mysql(max_dt, df, table_name):
         logging.error(f"update_mysql Error occurred: {e}")
         return None, e
 
+
 def update_rows(max_dt, df, table_name):
     """
-    Updates the MySQL database with new data entries.
+    Updates the specified MySQL table with new data from a DataFrame.
 
-    This function filters the input DataFrame to contain only rows where the 'DateTimeServer'
-    column is greater than or equal to the input max_dt. It then converts the 'DateTimeServer'
-    column back to string format and generates a SQL bulk INSERT statement. The statement is
-    then executed against the MySQL database.
+    This function processes and inserts new data into a MySQL table by filtering
+    the input DataFrame for records with 'DateTimeServer' greater than the specified
+    max_dt. The filtered data is formatted and used to generate a SQL bulk INSERT
+    statement with an ON DUPLICATE KEY UPDATE clause to handle existing records.
 
     Args:
         max_dt (datetime): The maximum datetime to be used as a threshold for filtering new data.
         df (pandas.DataFrame): The DataFrame containing new data to be inserted into the database.
+        table_name (str): The name of the MySQL table to update.
 
     Returns:
-        tuple: A tuple containing the result of the update operation and an error message, if any.
+        tuple: A tuple containing the result of the SQL execution and an error message if any.
     """
 
-    df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
-    logging.debug(f"1111111  {df['DateTimeServer'].dtype}")
+    df["DateTimeServer"] = pd.to_datetime(df["DateTimeServer"])
     # Define the threshold datetime
     threshold = pd.to_datetime(max_dt.isoformat())
-    logging.debug(f'222222   {threshold.isoformat()}')
     # Filter rows where datetime_column is greater than or equal to the threshold
-    df_filtered = df[df['DateTimeServer'] > threshold]
-    logging.debug('3333333')
+    df_filtered = df[df["DateTimeServer"] > threshold]
 
-    df_filtered.loc[:, 'DateTimeServer'] = df_filtered['DateTimeServer'].dt.strftime('%Y-%m-%d %H:%M')
-    logging.debug('44444444')
+    df_filtered.loc[:, "DateTimeServer"] = df_filtered["DateTimeServer"].dt.strftime(
+        "%Y-%m-%d %H:%M"
+    )
 
-    # Generate a SQL bulk INSERT statement
-    
-   
-    logging.debug('66666666')
-
-# TODO not substituting params correctly
+    # TODO not substituting params correctly
     # # Prepare columns and placeholders for a single insert statement
     # columns = ', '.join(df_filtered.columns)  # Get the column names as comma-separated values
     # placeholders = f"({', '.join([':' + col for col in df_filtered.columns])})"
@@ -185,18 +188,16 @@ def update_rows(max_dt, df, table_name):
     # else:
     #     print("No data to insert.")
 
-
-
-    logging.debug(f'222222  {df_filtered['DateTimeServer'].dtype}')
-
     # Construct the SQL query
-    columns = ', '.join(df_filtered.columns)  # Get the column names as comma-separated values
-    logging.debug('555555555')
-    values = ', '.join(
+    columns = ", ".join(
+        df_filtered.columns
+    )  # Get the column names as comma-separated values
+
+    values = ", ".join(
         f"({', '.join(f'\'{val.strftime('%Y-%m-%d %H:%M')}\'' if isinstance(val, pd.Timestamp) else str(val) for val in df_filtered.loc[idx])})"
         for idx in df_filtered.index
     )
-    values = values.replace("err", 'NULL')
+    values = values.replace("err", "NULL")
     # Full MySQL INSERT statement
     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values}"
     sql_query += """ ON DUPLICATE KEY UPDATE
@@ -302,29 +303,21 @@ def update_rows(max_dt, df, table_name):
     In6 = VALUES(In6),
     In7 = VALUES(In7),
     In8 = VALUES(In8);"""
-    
-    class DotDict:
-        def __init__(self, dictionary):
-            self.__dict__.update(dictionary)
 
-    # Define your dictionary
-    res = DotDict({'rowcount': 999})
-
-    return res, None
-    
     res = mysql_execute(text(sql_query))
     if isinstance(res, str):
-        logging.error(f'ERROR update_mysql: {res}')
-        return None, 'Error: query result is not a string'
-    logging.debug(f'ROWS UPDATED: {table_name}  {res.rowcount}')
+        logging.error(f"ERROR update_mysql: {res}")
+        return None, "Error: query result is not a string"
+    logging.debug(f"ROWS UPDATED: {table_name}  {res.rowcount}")
     return res, None
+
 
 def update_prospect(start_ts=None, local=True):
     """
     Updates the Prospect API with new data entries.
 
-    This function initiates the update process for the Prospect API by retrieving the 
-    necessary keys and URL based on the local flag. It logs the starting timestamp 
+    This function initiates the update process for the Prospect API by retrieving the
+    necessary keys and URL based on the local flag. It logs the starting timestamp
     and handles any exceptions that occur during the process.
 
     Args:
@@ -335,19 +328,20 @@ def update_prospect(start_ts=None, local=True):
         Exception: Logs any errors that occur during the prospect key retrieval process.
     """
 
-    logging.info(f'Starting update_prospect ts: {start_ts}  local = {local}')
+    logging.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
     try:
         prospect_get_key(api_prospect.get_prospect_url_key, local, start_ts)
     except Exception as e:
         logging.error(f"PROSPECT Error occurred: {e}")
 
 
+# WIP
 def backfill_prospect(start_ts=None, local=True):
     """
     Updates the Prospect API with new data entries.
 
-    This function initiates the update process for the Prospect API by retrieving the 
-    necessary keys and URL based on the local flag. It logs the starting timestamp 
+    This function initiates the update process for the Prospect API by retrieving the
+    necessary keys and URL based on the local flag. It logs the starting timestamp
     and handles any exceptions that occur during the process.
 
     Args:
@@ -358,12 +352,14 @@ def backfill_prospect(start_ts=None, local=True):
         Exception: Logs any errors that occur during the prospect key retrieval process.
     """
 
-    logging.info(f'Starting update_prospect ts: {start_ts}  local = {local}')
+    logging.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
     try:
         prospect_backfill_key(api_prospect.get_prospect_url_key, local, start_ts)
     except Exception as e:
         logging.error(f"PROSPECT Error occurred: {e}")
 
+
+# WIP
 def prospect_backfill_key(func, local, start_ts):
     """
     Retrieves data from the Prospect API and updates the MySQL database.
@@ -388,23 +384,23 @@ def prospect_backfill_key(func, local, start_ts):
 
     url, key = func(local, out=True)
     sid = 1 if local else 421
-    url += f'/v1/out/custom/?size=50&page=1&q[source_id_eq]={sid}&q[s]=created_at+desc'
+    url += f"/v1/out/custom/?size=50&page=1&q[source_id_eq]={sid}&q[s]=created_at+desc"
     payload = {}
     headers = {
-    'Authorization': f'Bearer {key}',
+        "Authorization": f"Bearer {key}",
     }
-    logging.debug(f'!!!!!!!!!!!!!!!!!!!!!  {headers}')
 
     # response = requests.request("GET", url, headers=headers, data=payload, verify=const.VERIFY)
     # if start_ts is None:
     #     start_ts = get_prospect_last_data(response)
     # j = json.loads(response.text)
     # # json.dumps(j, indent=2)
-    logging.info(f'\n\n{key}\n{url}\n{start_ts}')
-
+    logging.info(f"\n\n{key}\n{url}\n{start_ts}")
 
     res = mysql_execute(
-        text("select * FROM defaultdb.TAKUM_LEONICS_API_RAW where DatetimeServer > :data order by DatetimeServer limit 1450"),
+        text(
+            "select * FROM defaultdb.TAKUM_LEONICS_API_RAW where DatetimeServer > :data order by DatetimeServer limit 1450"
+        ),
         start_ts,
     )
     # Fetch all results as a list of dictionaries
@@ -414,28 +410,28 @@ def prospect_backfill_key(func, local, start_ts):
     columns = res.keys()  # Get column names
     df = pd.DataFrame(rows, columns=columns)
 
-    df['external_id'] = df['external_id'].astype(str).apply(lambda x: 'py_' + x)
-
+    df["external_id"] = df["external_id"].astype(str).apply(lambda x: "py_" + x)
 
     res = api_prospect.api_in_prospect(df, local)
     if res is None:
-        logging.error('Prospect API failed, exiting')
+        logging.error("Prospect API failed, exiting")
         exit()
-    logging.info(f'{res.status_code}:  {res.text}')
+    logging.info(f"{res.status_code}:  {res.text}")
 
-    sts = start_ts.replace(' ','_').replace(':', 'HM')
+    sts = start_ts.replace(" ", "_").replace(":", "HM")
     sts += str(local)
-    df.to_csv(f'py_pros_{sts}.csv', index=False)
-        
+    df.to_csv(f"py_pros_{sts}.csv", index=False)
+
     # Save the DataFrame to a CSV file
     logger = logging.getLogger()
     if logger.getEffectiveLevel() < logging.INFO:
-        sts = start_ts.replace(' ','_').replace(':', 'HM')
+        sts = start_ts.replace(" ", "_").replace(":", "HM")
         sts += str(local)
-        df.to_csv(f'py_pros_{sts}.csv', index=False)
-        #df.to_json(f'py_pros_{sts}.json', index=False)
+        df.to_csv(f"py_pros_{sts}.csv", index=False)
+        # df.to_json(f'py_pros_{sts}.json', index=False)
 
     logging.info(f"Data has been saved to 'py_pros'   LOCAL: {local}")
+
 
 def get_prospect_last_data(response):
     """
@@ -455,17 +451,16 @@ def get_prospect_last_data(response):
     j = json.loads(response.text)
     # json.dumps(j, indent=2)
     # logging.info(f'\n\n{j['data'][0]}')
-    res = ''
-    idd = ''
-    for d in j['data']:
-        if(d['custom']['DatetimeServer'] > res):
-            logging.debug('dddddd')
-            res = d['custom']['DatetimeServer']
-        if (d['external_id'] > idd):
-            logging.debug(f'iiiiii {d['custom']['DatetimeServer']}  {d['external_id']}')
-            idd = d['external_id']
-    logging.debug(f'!!!!!!!!!!!!!!!!!!!!!!!!!!!  {res,idd}')
+    res = ""
+    idd = ""
+    for d in j["data"]:
+        if d["custom"]["DatetimeServer"] > res:
+            res = d["custom"]["DatetimeServer"]
+        if d["external_id"] > idd:
+            idd = d["external_id"]
     return res
+
+
 def prospect_get_key(func, local, start_ts=None):
     """
     Retrieves data from the Prospect API and updates the MySQL database.
@@ -479,6 +474,8 @@ def prospect_get_key(func, local, start_ts=None):
         func (callable): A function that returns the API URL and key based on the 'local' flag.
         local (bool): A flag indicating whether to retrieve data from the local or external
                       Prospect API. When True, retrieves from the local API.
+        start_ts (str, optional): The timestamp to start retrieval from. If not provided (default),
+                                  retrieves the latest timestamp from the Prospect API.
 
     Raises:
         SystemExit: Exits the program if the Prospect API call fails.
@@ -487,26 +484,28 @@ def prospect_get_key(func, local, start_ts=None):
         Various debug and informational logs, including headers, keys, URLs, and response
         statuses. Also logs errors if API calls or database operations fail.
     """
-
     url, key = func(local, out=True)
     sid = 1 if local else 421
-    url += f'/v1/out/custom/?size=50&page=1&q[source_id_eq]={sid}&q[s]=created_at+desc'
+    url += f"/v1/out/custom/?size=50&page=1&q[source_id_eq]={sid}&q[s]=created_at+desc"
     payload = {}
     headers = {
-    'Authorization': f'Bearer {key}',
+        "Authorization": f"Bearer {key}",
     }
-    logging.debug(f'!!!!!!!!!!!!!!!!!!!!!  {headers}')
 
-    response = requests.request("GET", url, headers=headers, data=payload, verify=const.VERIFY)
+    response = requests.request(
+        "GET", url, headers=headers, data=payload, verify=const.VERIFY
+    )
     if start_ts is None:
         start_ts = get_prospect_last_data(response)
     j = json.loads(response.text)
     # json.dumps(j, indent=2)
-    logging.info(f'\n\n{key}\n{url}\n{start_ts}')
+    logging.info(f"\n\n{key}\n{url}\n{start_ts}")
     start_ts
 
     res = mysql_execute(
-        text("select * FROM defaultdb.TAKUM_LEONICS_API_RAW where DatetimeServer > :data order by DatetimeServer"),
+        text(
+            "select * FROM defaultdb.TAKUM_LEONICS_API_RAW where DatetimeServer > :data order by DatetimeServer"
+        ),
         start_ts,
     )
     # Fetch all results as a list of dictionaries
@@ -516,72 +515,169 @@ def prospect_get_key(func, local, start_ts=None):
     columns = res.keys()  # Get column names
     df = pd.DataFrame(rows, columns=columns)
 
-    df['external_id'] = df['external_id'].astype(str).apply(lambda x: 'py_' + x)
-
+    df["external_id"] = df["external_id"].astype(str).apply(lambda x: "py_" + x)
 
     res = api_prospect.api_in_prospect(df, local)
     if res is None:
-        logging.error('Prospect API failed, exiting')
+        logging.error("Prospect API failed, exiting")
         exit()
-    logging.info(f'{res.status_code}:  {res.text}')
+    logging.info(f"{res.status_code}:  {res.text}")
 
     # Save the DataFrame to a CSV file
     logger = logging.getLogger()
     if logger.getEffectiveLevel() < logging.INFO:
-        sts = start_ts.replace(' ','_').replace(':', 'HM')
+        sts = start_ts.replace(" ", "_").replace(":", "HM")
         sts += str(local)
-        df.to_csv(f'py_pros_{sts}.csv', index=False)
-        #df.to_json(f'py_pros_{sts}.json', index=False)
+        df.to_csv(f"py_pros_{sts}.csv", index=False)
+        # df.to_json(f'py_pros_{sts}.json', index=False)
 
     logging.info("Data has been saved to 'py_pros'")
+
 
 ###################################################
 # Hey there - I've reviewed your changes and found some issues that need to be addressed.
 
 # Blocking issues:
 
-# Direct string replacement for NULL values is error-prone (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:166)
+# The SQL generation method is vulnerable to SQL injection (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:128)
 # Overall Comments:
 
-# The update_rows() function is vulnerable to SQL injection attacks. Use parameterized queries instead of string concatenation when building the SQL statement.
-# Add proper connection error handling in mysql_execute() to gracefully handle database connectivity issues.
+# The update_rows function uses string interpolation for SQL queries which creates a SQL injection vulnerability. Use parameterized queries instead of direct string interpolation.
+# The ON DUPLICATE KEY UPDATE clause contains a hardcoded list of all columns which is brittle and hard to maintain. Consider generating this dynamically from the table schema.
 # Here's what I looked at during the review
 # 🟡 General issues: 2 issues found
 # 🔴 Security: 1 blocking issue
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:164
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:61
 
-# suggestion(performance): Excessive debug logging might impact performance
+# suggestion(performance): Consider adding connection pool management for database connections
 #     )
-#     logging.debug('66666666')
 
-#     logging.debug(f'222222  {df_filtered['DateTimeServer'].dtype}')
 
-#     values = values.replace("err", 'NULL')
-# Remove or conditionally include debug logging statements in production code to minimize overhead.
+# def mysql_execute(sql, data=None):
+#     """Execute a SQL query against the Aiven MySQL database.
+
+# Using SQLAlchemy's connection pooling could improve database connection efficiency and reduce overhead of creating new sessions for each query.
+
+# Suggested implementation:
+
+# import mysql.connector
+# from sqlalchemy import create_engine
+# from sqlalchemy.orm import sessionmaker
+# from sqlalchemy.exc import SQLAlchemyError
+# from contextlib import contextmanager
+
+# # Create a connection pool
+# def get_mysql_engine(connection_string):
+#     """Create a SQLAlchemy engine with connection pooling."""
+#     return create_engine(
+#         connection_string, 
+#         pool_size=10,  # Adjust based on your needs
+#         max_overflow=20,
+#         pool_timeout=30,
+#         pool_recycle=1800  # Recycle connections after 30 minutes
+#     )
+
+# @contextmanager
+# def get_db_session(engine):
+#     """Provide a transactional scope around a series of operations."""
+#     Session = sessionmaker(bind=engine)
+#     session = Session()
+#     try:
+#         yield session
+#         session.commit()
+#     except SQLAlchemyError:
+#         session.rollback()
+#         raise
+#     finally:
+#         session.close()
+
+# def mysql_execute(sql, data=None, engine=None):
+#     """Execute a SQL query against the Aiven MySQL database with connection pooling.
+
+#     :param sql: SQL query to execute
+#     :param data: Optional data for parameterized queries
+#     :param engine: SQLAlchemy engine (optional, will use default if not provided)
+#     :return: Query results
+
+#     # If no engine is provided, raise an error or use a default
+#     if engine is None:
+#         raise ValueError("Database engine must be provided")
+
+#     try:
+#         with get_db_session(engine) as session:
+#             # Use SQLAlchemy's execute method
+#             result = session.execute(sql, params=data)
+
+#             # If it's a SELECT query, fetch results
+#             if sql.strip().upper().startswith('SELECT'):
+#                 return result.fetchall()
+
+#             # For INSERT, UPDATE, DELETE return the result
+#             return result
+
+# You'll need to modify how the database connection is configured. Instead of using mysql.connector.connect(), you should create a SQLAlchemy engine using a connection string.
+
+# Update any code that calls mysql_execute() to pass the SQLAlchemy engine.
+
+# Example of creating the engine:
+
+# # In your configuration or initialization
+# mysql_engine = get_mysql_engine('mysql+mysqlconnector://username:password@host:port/database')
+# Example of calling the updated function:
+# results = mysql_execute("SELECT * FROM users", engine=mysql_engine)
+# Key improvements:
+
+# Connection pooling reduces connection overhead
+# Proper session management with commit/rollback
+# Flexible error handling
+# Support for parameterized queries
+# Ability to handle different query types
+# Resolve
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:128
+
+# issue(security): The SQL generation method is vulnerable to SQL injection
+#         return None, e
+
+
+# def update_rows(max_dt, df, table_name):
+#     """
+#     Updates the specified MySQL table with new data from a DataFrame.
+# The current string concatenation method for SQL queries is risky. Use parameterized queries consistently instead of direct string interpolation.
 
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:166
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:464
 
-# issue(security): Direct string replacement for NULL values is error-prone
-
-#     logging.debug(f'222222  {df_filtered['DateTimeServer'].dtype}')
-
-#     values = values.replace("err", 'NULL')
-#     # Full MySQL INSERT statement
-#     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values};"
-# Use proper SQL parameter binding or database-specific NULL handling to prevent potential SQL injection or data corruption.
-
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:277
-
-# suggestion(performance): Inefficient external_id transformation
-#     columns = res.keys()  # Get column names
-#     df = pd.DataFrame(rows, columns=columns)
-
-#     df['external_id'] = df['external_id'].astype(str).apply(lambda x: 'py_' + x)
+# suggestion(code_refinement): Hardcoded source ID could be a configuration issue
+#     return res
 
 
-# Consider using vectorized operations like df['external_id'] = 'py_' + df['external_id'].astype(str) for better performance.
+# def prospect_get_key(func, local, start_ts=None):
+#     """
+#     Retrieves data from the Prospect API and updates the MySQL database.
+# Consider moving hardcoded source IDs (1 and 421) to a configuration file or constants to improve maintainability.
+
+# Suggested implementation:
+
+# from decouple import config  # Assuming python-decouple for configuration
+
+# # Define source IDs in a centralized location
+# SOURCE_IDS = {
+#     'default': config('PROSPECT_DEFAULT_SOURCE_ID', default=1, cast=int),
+#     'specific': config('PROSPECT_SPECIFIC_SOURCE_ID', default=421, cast=int)
+# }
+
+# def prospect_get_key(func, local, start_ts=None):
+#     """
+#     Retrieves data from the Prospect API and updates the MySQL database.
+
+#     Uses configurable source IDs to improve maintainability.
+
+# Install python-decouple package (pip install python-decouple)
+# Create a .env file in the project root with:
+# PROSPECT_DEFAULT_SOURCE_ID=1
+# PROSPECT_SPECIFIC_SOURCE_ID=421
+# Update any code that previously used hardcoded source IDs to use SOURCE_IDS['default'] or SOURCE_IDS['specific']
+# Add .env to .gitignore to prevent committing sensitive configuration
