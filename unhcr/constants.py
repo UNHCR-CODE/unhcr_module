@@ -34,6 +34,7 @@ Initialization:
     The file concludes by calling load_env() and set_environ() to load the environment variables and initialize the constants, 
     respectively. This ensures that the necessary environment variables are available in other parts of the module.
 """
+import optparse
 import os
 import sys
 import importlib
@@ -41,11 +42,11 @@ import logging
 
 from dotenv import find_dotenv, load_dotenv
 
+from unhcr import utils
+
 PROD=None
 DEBUG=None
 LOCAL=None
-
-logging.debug(f"PROD: {PROD}, DEBUG: {DEBUG}, LOCAL: {LOCAL} ")
 
 # Leonics API
 LEONICS_BASE_URL = None
@@ -187,7 +188,7 @@ def set_environ():
     MOD_PATH = r'E:\_UNHCR\CODE\unhcr_module\unhcr'
     MODULES = [["utils", "utils"], ["constants", "const"], ['s3','s3'], ["db", "db"], ["api_leonics", "api_leonics"], ["api_prospect", "api_prospect"]]
 
-def load_env(path = '.env'):
+def load_env(path='.env'):
     """
     Load environment variables from a .env file.
 
@@ -211,20 +212,62 @@ def load_env(path = '.env'):
     The function uses the find_dotenv and load_dotenv functions from the dotenv library.
     It exits with a message if the .env file is not found or cannot be loaded.
     """
-        
     global environ_path
 
-    if env_file := find_dotenv(path):
-        if load_dotenv(env_file, override=True):
-            set_environ()
-            environ_path = env_file[:-4]
-            return env_file
+    environ_path = find_dotenv(path)
+    if environ_path == '' or path not in ['.env', environ_path]:
+        return None
 
-    print(f"CONFIG file not found OR LOADED: {env_file}")
+    if found := load_dotenv(environ_path, override=True):
+        set_environ()
+        return environ_path[:-4]
     return None
 
-# if you want to load environment variables call these two function with the path to the env file.
-load_env()
+def env_cmdline_parser():
+    """
+    Parse the command-line arguments and return the environment path as a string.
+    If no arguments are provided, it defaults to '.env'.
+    """
+    parser = optparse.OptionParser()
+    #parser = argparse.ArgumentParser(description="Process some environment and log options.")
+    # Add command-line arguments
+    parser.add_option(
+        '--env',
+        dest='env',
+        default='.env',
+        type='string',
+        help='Path to environment directory'
+    )
+    parser.add_option(
+        '--log',
+        dest='log',
+        default='INFO',
+        type='string',
+        help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    )
+    try:
+        (options, args) = parser.parse_args()
+        # List of valid choices
+        valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+
+        # Validate the log level
+        if options.log not in valid_log_levels:
+            parser.error(f"Invalid log level: {options.log}. Valid options are: {', '.join(valid_log_levels)}")
+
+        return options
+    except Exception as e:
+        print(f"ERROR: {e}")
+        return None
+
+# loads environment variables and sets constants
+#######args = env_cmdline_parser()
+args = utils.create_cmdline_parser()
+if args is None:
+    exit(999)
+res = load_env(args.env)
+if res is None:
+    print('No .env file found or could not be loaded')
+    exit(999)
 
 MOD_PATH = r'E:\_UNHCR\CODE\unhcr_module\unhcr'
 MODULES = [["utils", "utils"], ["constants", "const"], ['s3','s3'], ["db", "db"], ["api_leonics", "api_leonics"], ["api_prospect", "api_prospect"]]
