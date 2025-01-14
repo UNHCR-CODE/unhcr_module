@@ -1,21 +1,24 @@
 """
 Overview
-    This file (utils.py) within the unhcr module provides a set of utility functions for data processing, logging setup, module version retrieval, 
-    and dynamic module importing. It focuses on cleaning JSON-like data, configuring logging, and managing module functionalities.
+    This file (utils.py) within the unhcr module provides a set of utility functions for data processing, 
+    logging setup, module version retrieval, and dynamic module importing. It focuses on cleaning JSON-like data, 
+    configuring logging, and managing module functionalities.
 
 Key Components
     filter_nested_dict(obj, val=-0.999): 
         Recursively removes a specified value (val, defaulting to -0.999) from nested dictionaries and lists. 
-        This function is crucial for cleaning JSON-like data by removing placeholder values representing missing or invalid data.
+        This function is crucial for cleaning JSON-like data by removing placeholder values representing missing 
+        or invalid data.
 
     log_setup(level=None): 
-        This function configures the logging for the module. It allows setting the logging level via command-line arguments 
-        (using --log followed by the desired level, e.g., INFO, DEBUG, etc.). If no level is provided, it defaults to INFO. 
-        The logs are outputted to both the console and a file named 'unhcr.module.log'.
+        This function configures the logging for the module. It allows setting the logging level via command-line 
+        arguments (using --log followed by the desired level, e.g., INFO, DEBUG, etc.). If no level is provided, 
+        it defaults to INFO. The logs are outputted to both the console and a file named 'unhcr.module.log'.
 
     str_to_float_or_zero(value): 
-        This function attempts to convert a given value to a float. If the conversion fails due to a ValueError or TypeError, 
-        it logs the error and returns 0.0. This provides a safe way to handle potential data type issues during processing.
+        This function attempts to convert a given value to a float. If the conversion fails due to a ValueError 
+        or TypeError, it logs the error and returns 0.0. This provides a safe way to handle potential 
+        data type issues during processing.
         
     get_module_version(name='unhcr_module'): 
         Retrieves the version number of the specified module (defaulting to 'unhcr_module'). 
@@ -26,16 +29,16 @@ Key Components
 import argparse
 from importlib.metadata import version
 import logging
+import optparse
 import os
-import sys
+
 
 def filter_nested_dict(obj, val=-0.999):
- 
     """
-    Recursively remove all entries of a nested dict that have a value equal to val. If the object is a dictionary, 
-    it creates a new dictionary containing only key-value pairs where the value is not equal to val. If the object is a list, 
-    it creates a new list containing only items that are not equal to val. Otherwise, it returns the object unchanged. 
-    The default value for val is -0.999. This function is crucial for cleaning JSON-like data by removing a specific placeholder value 
+    Recursively remove all entries of a nested dict that have a value equal to val. If the object is a dictionary,
+    it creates a new dictionary containing only key-value pairs where the value is not equal to val. If the object is a list,
+    it creates a new list containing only items that are not equal to val. Otherwise, it returns the object unchanged.
+    The default value for val is -0.999. This function is crucial for cleaning JSON-like data by removing a specific placeholder value
     representing missing or unwanted data.
 
     Parameters
@@ -57,44 +60,47 @@ def filter_nested_dict(obj, val=-0.999):
     else:
         return obj
 
-def log_setup(level='INFO', log_file="unhcr.module.log", override=False):
-    """
-    Example usage:
-        logger = log_setup()
-        logger.info("Logger is successfully set up!")
-        logging.critical(f"CRITICAL:  Logging level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
 
-    Set up logging for the module. If level is None, it parses command-line arguments to determine the logging level.
-    If no arguments are provided, it defaults to INFO level.
-    
-    Usage:
-        script.py --log INFO
-    
-    Args:
-        level (str, optional): The logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Defaults to None.
-        log_file (str): The name of the log file. Defaults to 'unhcr.module.log'.
-
-    Returns:
-        logging.Logger: Configured logger instance.
-    """
+def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
     # Check if the logger already has handlers to prevent adding duplicates
+    """
+    Configure the logging for the module. If level is None, it will look for a command-line argument --log followed by the desired level, e.g., INFO, DEBUG, etc.
+    If no level is provided, it defaults to INFO. The logs are outputted to both the console and a file named 'unhcr.module.log'.
+
+    Parameters
+    ----------
+    level : str, optional
+        The desired logging level, by default 'INFO'
+    log_file : str, optional
+        The name of the log file, by default 'unhcr.module.log'
+    override : bool, optional
+        If True, it will clear the existing handlers and set up new ones, by default False
+
+    Returns
+    -------
+    logging.Logger
+        The configured logger
+    """
     logger = logging.getLogger()
     if override:
         logger.handlers.clear()
-    
+
     if logger.hasHandlers():
         return logger  # Return the logger if it already has handlers
 
-    level = create_cmdline_parser(level) if level is None else level.upper()
-    if os.getenv('DEBUG') == '1':
-        level = 'DEBUG'
+    args = create_cmdline_parser(level) if level is None else level.upper()
+    level = args
+    if os.getenv("DEBUG") == "1":
+        level = "DEBUG"
     # Validate logging level
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if level not in valid_levels:
-        raise ValueError(f"Invalid logging level: {level}. Must be one of {valid_levels}.")
+        raise ValueError(
+            f"Invalid logging level: {level}. Must be one of {valid_levels}."
+        )
 
     # Create a formatter that outputs the log format
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
     # Console handler
     console_handler = logging.StreamHandler()
@@ -107,59 +113,79 @@ def log_setup(level='INFO', log_file="unhcr.module.log", override=False):
 
     return logger
 
-def create_cmdline_parser(level):
+
+def create_cmdline_parser(level="INFO"):
     """
-    Parse the command-line arguments and return the logging level as a string.
-    If no arguments are provided, it defaults to INFO level.
+    Creates a command-line parser to read environment and logging options from the command line.
+
+    Parameters
+    ----------
+    level : str, optional
+        The default logging level, by default 'INFO'
 
     Returns
     -------
-    str
-        The logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    optparse.Values or None
+        An object containing the parsed command-line options if successful,
+        or None if an error occurs during parsing.
+
+    Raises
+    ------
+    None
     """
-
-    default_level = level
-    parser = argparse.ArgumentParser(description="Set logging level")
-    parser.add_argument(
-        "--log", 
-        default=default_level, 
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    parser = optparse.OptionParser()
+    # parser = argparse.ArgumentParser(description="Process some environment and log options.")
+    # Add command-line arguments
+    parser.add_option(
+        "--env",
+        dest="env",
+        default=".env",
+        type="string",
+        help="Path to environment directory",
     )
+    parser.add_option(
+        "--log",
+        dest="log",
+        default=level,
+        type="string",
+        help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+    try:
+        (options, args) = parser.parse_args()
+        # List of valid choices
+        valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
-    # Add default logging arguments if none provided
-    l = len(sys.argv)
-    if l == 1:  # handle vscode debugging
-        sys.argv.extend(["--log", default_level])
-    elif l == 2:
-        sys.argv[1] = '--log'
-        sys.argv.append(default_level)
+        # Validate the log level
+        if options.log not in valid_log_levels:
+            parser.error(
+                f"Invalid log level: {options.log}. Valid options are: {', '.join(valid_log_levels)}"
+            )
 
-    args = parser.parse_args()
-    return args.log
+        return options
+    except Exception as e:
+        print(f"ERROR: {e}")
+        return None
+
 
 def config_log_handler(handler, level, formatter, logger):
     """
-    Configure a log handler with the specified level and formatter.
+    Configure a log handler with the given level, formatter, and add it to the given logger.
 
     Parameters
     ----------
     handler : logging.Handler
-        The log handler to configure.
+        The log handler to be configured
     level : str
-        The logging level to set on the handler (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL).
+        The logging level to set for the handler
     formatter : logging.Formatter
-        The log formatter to use on the handler.
+        The formatter to set for the handler
     logger : logging.Logger
-        The logger that the handler will be added to.
-
-    Returns
-    -------
-    None
+        The logger to add the handler to
     """
     handler.setLevel(getattr(logging, level))
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
 
 def str_to_float_or_zero(value):
     """
@@ -174,10 +200,11 @@ def str_to_float_or_zero(value):
     try:
         return float(value)
     except (ValueError, TypeError):
-        logging.error(f'str_to_float_or_zero !!!!!!  {ValueError}, {TypeError}')
+        logging.error(f"str_to_float_or_zero !!!!!!  {ValueError}, {TypeError}")
         return 0.0
 
-def get_module_version(name='unhcr_module'):
+
+def get_module_version(name="unhcr_module"):
     """
     Retrieve the version number of the specified module (default: 'unhcr_module').
 
@@ -199,14 +226,27 @@ def get_module_version(name='unhcr_module'):
         err = str(e)
     return v_number, err
 
+
 ##################
 # Hey there - I've reviewed your changes - here's some feedback:
 
 # Overall Comments:
 
+# Consider replacing the deprecated optparse with argparse throughout the codebase for better maintainability and consistency with modern Python practices.
 # Here's what I looked at during the review
-# 🟢 General issues: all looks good
+# 🟡 General issues: 1 issue found
 # 🟢 Security: all looks good
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
+# outdated
+# e:_UNHCR\CODE\unhcr_module\unhcr\utils.py:198
+
+# suggestion(code_refinement): Hardcoded module name in version retrieval
+#         logging.error(f'str_to_float_or_zero !!!!!!  {ValueError}, {TypeError}')
+#         return 0.0
+
+# def get_module_version(name='unhcr_module'):
+#     """
+#     Retrieve the version number of the specified module (default: 'unhcr_module').
+# The function accepts a 'name' parameter, but internally always uses 'unhcr_module'. Consider using the passed name parameter for more flexibility.
