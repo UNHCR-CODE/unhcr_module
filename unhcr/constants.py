@@ -52,6 +52,12 @@ VERIFY = None
 AIVEN_TAKUM_CONN_STR = None
 LEONICS_RAW_TABLE = None
 
+# DB connection pool
+SQLALCHEMY_POOL_SIZE = None
+SQLALCHEMY_POOL_TIMEOUT = None
+SQLALCHEMY_POOL_RECYCLE = None
+SQLALCHEMY_MAX_OVERFLOW = None
+
 # Eyedro S3
 ACCESS_KEY = None
 SECRET_KEY = None
@@ -156,6 +162,10 @@ def set_environ():  # sourcery skip: extract-duplicate-method
 
     global AIVEN_TAKUM_CONN_STR
     global LEONICS_RAW_TABLE
+    global SQLALCHEMY_POOL_SIZE
+    global SQLALCHEMY_POOL_TIMEOUT
+    global SQLALCHEMY_POOL_RECYCLE
+    global SQLALCHEMY_MAX_OVERFLOW
 
     global ACCESS_KEY
     global SECRET_KEY
@@ -196,6 +206,11 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     # Aiven Mysql DB
     AIVEN_TAKUM_CONN_STR = os.getenv("AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR")
     LEONICS_RAW_TABLE = os.getenv("LEONICS_RAW_TABLE")
+
+    SQLALCHEMY_POOL_SIZE = int(os.getenv('SQLALCHEMY_POOL_SIZE', 5))
+    SQLALCHEMY_POOL_TIMEOUT = int(os.getenv('SQLALCHEMY_POOL_TIMEOUT', 30))
+    SQLALCHEMY_POOL_RECYCLE = int(os.getenv('SQLALCHEMY_POOL_RECYCLE', 3600))
+    SQLALCHEMY_MAX_OVERFLOW = int(os.getenv('SQLALCHEMY_MAX_OVERFLOW', 10))
 
     # Eyedro S3
     ACCESS_KEY = os.getenv("GB_AWS_ACCESS_KEY")

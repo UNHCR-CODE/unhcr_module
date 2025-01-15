@@ -43,6 +43,7 @@ import logging
 import traceback
 import pandas as pd
 import requests
+import sqlalchemy
 from urllib3.exceptions import InsecureRequestWarning
 import urllib3
 
@@ -69,15 +70,26 @@ from contextlib import contextmanager
 
 # Create a connection pool
 def get_mysql_engine(connection_string):
-    """Create a SQLAlchemy engine with connection pooling."""
+    """
+    Create a SQLAlchemy engine with configurable connection pooling.
+
+    Pool parameters can be configured via environment variables:
+
+    - SQLALCHEMY_POOL_SIZE: Maximum number of connections in the pool (default: 5)
+    - SQLALCHEMY_POOL_TIMEOUT: Seconds to wait before giving up on getting a connection (default: 30)
+    - SQLALCHEMY_POOL_RECYCLE: Connection recycle time in seconds (default: 3600)
+    - SQLALCHEMY_MAX_OVERFLOW: Number of connections that can be created beyond pool_size (default: 10)
+
+    :param connection_string: A MySQL connection string, e.g. mysql://user:pass@host/db
+    :return: A SQLAlchemy engine
+    """
     return create_engine(
         connection_string,
-        pool_size=10,  # Adjust based on your needs
-        max_overflow=20,
-        pool_timeout=30,
-        pool_recycle=1800,  # Recycle connections after 30 minutes
+        pool_size=const.SQLALCHEMY_POOL_SIZE,
+        pool_timeout=const.SQLALCHEMY_POOL_TIMEOUT,
+        pool_recycle=const.SQLALCHEMY_POOL_RECYCLE,
+        max_overflow=const.SQLALCHEMY_MAX_OVERFLOW
     )
-
 
 @contextmanager
 def get_db_session(engine):
@@ -154,23 +166,43 @@ def get_mysql_max_date(engine=mysql_engine):
 def update_mysql(max_dt, df, table_name):
     """
     Orchestrates the database update process. It retrieves the latest timestamp from the database,
-    fetches new data from the Leonics API since the last update, and inserts it into the database.
 
     Args:
-        max_dt (datetime): The maximum datetime to be used as a threshold for filtering new data.
-        df (pandas.DataFrame): The DataFrame containing new data to be inserted into the database.
-        table_name (str): The name of the database table to update.
+        max_dt (datetime): Maximum datetime for filtering records
+        df (pandas.DataFrame): DataFrame to be updated in the database
+        table_name (str): Name of the database table to update
 
     Returns:
-        tuple: A tuple containing the result of the update operation and an error message, if any.
+        tuple: (success_flag, error_message_or_None)
     """
-
     try:
+        # Existing update logic would go here
+        # If no specific exception is raised, return success
         return update_rows(max_dt, df, table_name)
+    except sqlalchemy.exc.SQLAlchemyError as db_error:
+        error_msg = f"Database update failed for table {table_name}: {str(db_error)}"
+        logging.error(error_msg)
+        return False, {
+            "error_type": type(db_error).__name__,
+            "error_message": str(db_error),
+            "table": table_name
+        }
+    except ValueError as val_error:
+        error_msg = f"Data validation error for table {table_name}: {str(val_error)}"
+        logging.error(error_msg)
+        return False, {
+            "error_type": "ValidationError",
+            "error_message": str(val_error),
+            "table": table_name
+        }
     except Exception as e:
-        traceback.print_exc()
-        logging.error(f"update_mysql Error occurred: {e}")
-        return None, e
+        error_msg = f"Unexpected error updating table {table_name}: {str(e)}"
+        logging.error(error_msg)
+        return False, {
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "table": table_name
+        }
 
 
 def update_rows(max_dt, df, table_name):
@@ -580,87 +612,34 @@ def prospect_get_key(func, local, start_ts=None):
 
 
 ###################################################
-# Hey there - I've reviewed your changes and found some issues that need to be addressed.
+# Hey there - I've reviewed your changes - here's some feedback:
 
-# Blocking issues:
-
-# Potential SQL injection risk in query construction (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:92)
 # Overall Comments:
 
-# Disabling SSL certificate verification (urllib3.disable_warnings(InsecureRequestWarning)) is a security risk. Consider properly configuring certificates instead of disabling verification.
-# The ON DUPLICATE KEY UPDATE clause with hardcoded column names is difficult to maintain. Consider generating this dynamically from the table schema to prevent issues when columns change.
+# The update_rows() function is vulnerable to SQL injection by directly interpolating values into the query string. Use parameterized queries consistently throughout the codebase for security.
 # Here's what I looked at during the review
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:67
+# 🟡 General issues: 2 issues found
+# 🟢 Security: all looks good
+# 🟢 Testing: all looks good
+# 🟢 Complexity: all looks good
+# 🟢 Documentation: all looks good
+# e:_UNHCR\CODE\unhcr_module\unhcr\db.py:230
 
-# suggestion(code_refinement): Connection pool configuration could be more configurable
-# from contextlib import contextmanager
-
-# # Create a connection pool
-# def get_mysql_engine(connection_string):
-#     """Create a SQLAlchemy engine with connection pooling."""
-#     return create_engine(
-# Consider making pool parameters configurable via environment variables or a config file, allowing easier tuning without code changes.
-
-# Suggested implementation:
-
-# import os
-# from contextlib import contextmanager
-
-# # Create a connection pool
-# def get_mysql_engine(connection_string):
-#     """
-#     Create a SQLAlchemy engine with configurable connection pooling.
-
-#     Pool parameters can be configured via environment variables:
-#     - SQLALCHEMY_POOL_SIZE: Maximum number of connections in the pool (default: 5)
-#     - SQLALCHEMY_POOL_TIMEOUT: Seconds to wait before giving up on getting a connection (default: 30)
-#     - SQLALCHEMY_POOL_RECYCLE: Connection recycle time in seconds (default: 3600)
-#     - SQLALCHEMY_MAX_OVERFLOW: Number of connections that can be created beyond pool_size (default: 10)
-#     """
-#     return create_engine(
-#         connection_string,
-#         pool_size=int(os.getenv('SQLALCHEMY_POOL_SIZE', 5)),
-#         pool_timeout=int(os.getenv('SQLALCHEMY_POOL_TIMEOUT', 30)),
-#         pool_recycle=int(os.getenv('SQLALCHEMY_POOL_RECYCLE', 3600)),
-#         max_overflow=int(os.getenv('SQLALCHEMY_MAX_OVERFLOW', 10))
-
-# Developers should be advised to:
-
-# Set environment variables as needed in their deployment configuration
-# Update documentation to explain the new configuration options
-# Consider adding logging to track pool-related events if needed
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:92
-
-# issue(security): Potential SQL injection risk in query construction
-#         session.close()
-
-
-# def mysql_execute(sql, engine=None, data=None):
-#     """Execute a SQL query against the Aiven MySQL database with connection pooling.
-
-# The current implementation of constructing SQL queries by string concatenation in update_rows() is vulnerable to SQL injection. Use parameterized queries consistently.
-
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:167
-
-# suggestion(code_refinement): Overly complex data insertion logic
-#         return None, e
+# suggestion(code_refinement): The ON DUPLICATE KEY UPDATE clause is quite extensive. Consider extracting this to a configuration or making it more dynamic
+#         }
 
 
 # def update_rows(max_dt, df, table_name):
 #     """
 #     Updates the specified MySQL table with new data from a DataFrame.
-# The ON DUPLICATE KEY UPDATE clause is very long and repetitive. Consider generating this dynamically or using an ORM's bulk upsert method.
-
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:502
+# e:_UNHCR\CODE\unhcr_module\unhcr\db.py:565
 
-# issue(bug_risk): Lack of robust error handling in API interactions
+# suggestion(code_refinement): The function mixes API interaction, database querying, and data transformation. Consider breaking it into smaller, more focused functions
 #     return res
 
 
 # def prospect_get_key(func, local, start_ts=None):
 #     """
 #     Retrieves data from the Prospect API and updates the MySQL database.
-# The function exits the entire program if the Prospect API call fails. Consider implementing more graceful error handling and potentially retrying the API call.
+    
