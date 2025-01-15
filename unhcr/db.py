@@ -6,32 +6,35 @@ Overview
     and Prospect to avoid redundant data transfer.
 
 Key Components
-    mysql_execute(sql, data=None): 
-        Executes SQL queries against the MySQL database. It handles session creation, execution, commit/rollback, 
-        and closure.
+mysql_execute(sql, engine=None, data=None): 
+    Executes SQL queries against the MySQL database. It handles session creation, execution, commit/rollback, 
+    and closure using SQLAlchemy. Utilizes connection pooling for efficiency.
 update_mysql(max_dt, df, table_name): 
-    Orchestrates the database update process. It retrieves the latest timestamp from the database, 
-    fetches new data from the Leonics API since the last update, and inserts it into the database.
+    Orchestrates the database update process. It retrieves the latest timestamp from the database using 
+    get_mysql_max_date(), filters new data from the input DataFrame based on this timestamp, and inserts the 
+    new data into the specified table using update_rows().
 update_rows(max_dt, df, table_name): 
-    Handles fetching data from the Leonics API via api_leonics.getData(), filters for new records based on the 
-    max_dt timestamp, formats the data, and performs a bulk INSERT into the MySQL database.
+    Handles the actual insertion of data into the MySQL database. It filters the DataFrame df for records newer 
+    than max_dt, formats the data appropriately, and performs a bulk INSERT using a parameterized query. 
+    Includes an ON DUPLICATE KEY UPDATE clause to handle potential key conflicts.
 update_prospect(start_ts=None, local=True): 
-    Manages the Prospect update process. It retrieves the latest timestamp from Prospect, queries the database 
-    for newer records, formats them, and sends them to the Prospect API using api_prospect.api_in_prospect().
+    Manages the Prospect update process. It retrieves the latest timestamp from Prospect using prospect_get_key() 
+    and get_prospect_last_data(), queries the database for newer records, and sends them to the Prospect API 
+    via api_prospect.api_in_prospect().
 prospect_get_key(func, local, start_ts=None): 
-    Retrieves the Prospect API URL and key based on the local flag. It also gets the latest timestamp from 
-    Prospect to avoid duplicates.
+    Retrieves the Prospect API URL and key, and fetches the latest timestamp from Prospect to avoid sending duplicate entries. Uses a helper function func (presumably defined elsewhere and passed in) to determine the correct URL and key based on the local flag.
 get_prospect_last_data(response): 
     Parses the Prospect API response to extract the latest timestamp and external_id.
 backfill_prospect(start_ts=None, local=True): 
-    Similar to update_prospect, but designed for backfilling data into Prospect, using prospect_backfill_key.
+    Similar to update_prospect, but designed for backfilling larger amounts of data into Prospect. 
+    It uses prospect_backfill_key() to manage the process.
 prospect_backfill_key(func, local, start_ts): 
-    Retrieves a larger batch of data from the database (limited to 1450 rows) and sends it to Prospect, 
-    primarily for backfilling purposes.
-    
-The script relies on constants.py for configuration, api_leonics.py for Leonics API interaction 
-(not shown in the provided code), and api_prospect.py for Prospect API interaction. 
-It includes error handling and logging.
+    Retrieves a larger batch of data from the database (limited to 1450 rows) for backfilling Prospect. 
+    Similar in structure to prospect_get_key().
+
+The script relies on constants.py for configuration, api_leonics.py for Leonics API interaction, and api_prospect.py 
+for Prospect API interaction. It includes error handling and logging. Uses SQLAlchemy's connection pooling for 
+efficient database interactions.
 """
 
 from datetime import datetime, timedelta
@@ -57,46 +60,91 @@ if const.LOCAL:  # testing with local python files
         mods=[["constants", "const"], ["api_prospect", "api_prospect"]]
     )
 
+# import mysql.connector
+# from sqlalchemy import create_engine
+# from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
+from contextlib import contextmanager
 
-def mysql_execute(sql, data=None):
-    """Execute a SQL query against the Aiven MySQL database.
 
-    Args:
-        sql (str): The SQL query to execute. May contain placeholders for data.
-        data (dict, optional): A dictionary containing values to substitute into the SQL query.
+# Create a connection pool
+def get_mysql_engine(connection_string):
+    """Create a SQLAlchemy engine with connection pooling."""
+    return create_engine(
+        connection_string,
+        pool_size=10,  # Adjust based on your needs
+        max_overflow=20,
+        pool_timeout=30,
+        pool_recycle=1800,  # Recycle connections after 30 minutes
+    )
 
-    Returns:
-        sqlalchemy.engine.result.ResultProxy: The result of the query execution.
 
-    Raises:
-        Exception: If any error occurs while executing the query.
-    """
-
-    engine = create_engine(const.AIVEN_TAKUM_CONN_STR)
+@contextmanager
+def get_db_session(engine):
+    """Provide a transactional scope around a series of operations."""
     Session = sessionmaker(bind=engine)
     session = Session()
     try:
-        result = session.execute(sql, {"data": data})
+        yield session
         session.commit()
-        return result
-    except Exception as e:
+    except SQLAlchemyError:
         session.rollback()
-        raise e
+        raise
     finally:
         session.close()
 
 
-def get_mysql_max_date():
-    """Retrieves the most recent timestamp from the MySQL database.
+def mysql_execute(sql, engine=None, data=None):
+    """Execute a SQL query against the Aiven MySQL database with connection pooling.
+
+    :param sql: SQL query to execute
+    :param data: Optional data for parameterized queries
+    :param engine: SQLAlchemy engine (optional, will use default if not provided)
+    :return: Query results
+    """
+    # If no engine is provided, raise an error or use a default
+    if engine is None:
+        raise ValueError("Database engine must be provided")
+
+    with get_db_session(engine) as session:
+        try:
+            # Use SQLAlchemy's execute method
+            result = session.execute(text(sql), params=data)
+
+            # If it's a SELECT query, fetch results
+            if sql.strip().upper().startswith("SELECT"):
+                return result
+
+            # For INSERT, UPDATE, DELETE return the result
+            session.commit()
+            return result
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+
+
+mysql_engine = get_mysql_engine(
+    const.AIVEN_TAKUM_CONN_STR
+)  #####'mysql+mysqlconnector://username:password@host:port/database')
+
+
+def get_mysql_max_date(engine=mysql_engine):
+    """
+    Retrieves the most recent timestamp from the MySQL database.
+
+    Args:
+        engine (sqlalchemy.engine.Engine): SQLAlchemy engine (optional, will use default if not provided)
 
     Returns:
         tuple: A tuple containing the most recent timestamp in the database and an error message if any.
     """
     try:
         dt = mysql_execute(
-            text("select max(DatetimeServer) FROM defaultdb.TAKUM_LEONICS_API_RAW")
-        )
-        val = dt.scalar()
+            "select max(DatetimeServer) FROM defaultdb.TAKUM_LEONICS_API_RAW", engine
+        ).fetchall()
+        val = dt[0][0]
         return datetime.strptime(val, "%Y-%m-%d %H:%M"), None
     except Exception as e:
         logging.error(f"Can not get DB max timsestanp   {e}")
@@ -304,10 +352,10 @@ def update_rows(max_dt, df, table_name):
     In7 = VALUES(In7),
     In8 = VALUES(In8);"""
 
-    res = mysql_execute(text(sql_query))
-    if isinstance(res, str):
+    res = mysql_execute(sql_query, mysql_engine)
+    if not hasattr(res, "rowcount"):
         logging.error(f"ERROR update_mysql: {res}")
-        return None, "Error: query result is not a string"
+        return None, "Error: query result is not a cursor"
     logging.debug(f"ROWS UPDATED: {table_name}  {res.rowcount}")
     return res, None
 
@@ -398,10 +446,9 @@ def prospect_backfill_key(func, local, start_ts):
     logging.info(f"\n\n{key}\n{url}\n{start_ts}")
 
     res = mysql_execute(
-        text(
-            "select * FROM defaultdb.TAKUM_LEONICS_API_RAW where DatetimeServer > :data order by DatetimeServer limit 1450"
-        ),
-        start_ts,
+        f"select * FROM defaultdb.TAKUM_LEONICS_API_RAW where DatetimeServer > '{start_ts}' order by DatetimeServer limit 1450",
+        mysql_engine,
+        # {'ts':start_ts}
     )
     # Fetch all results as a list of dictionaries
     rows = res.fetchall()
@@ -500,13 +547,11 @@ def prospect_get_key(func, local, start_ts=None):
     j = json.loads(response.text)
     # json.dumps(j, indent=2)
     logging.info(f"\n\n{key}\n{url}\n{start_ts}")
-    start_ts
 
     res = mysql_execute(
-        text(
-            "select * FROM defaultdb.TAKUM_LEONICS_API_RAW where DatetimeServer > :data order by DatetimeServer"
-        ),
-        start_ts,
+        f"select * FROM defaultdb.TAKUM_LEONICS_API_RAW where DatetimeServer > '{start_ts}' order by DatetimeServer",
+        mysql_engine,
+        # {'ts':start_ts}
     )
     # Fetch all results as a list of dictionaries
     rows = res.fetchall()
@@ -539,145 +584,83 @@ def prospect_get_key(func, local, start_ts=None):
 
 # Blocking issues:
 
-# The SQL generation method is vulnerable to SQL injection (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:128)
+# Potential SQL injection risk in query construction (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:92)
 # Overall Comments:
 
-# The update_rows function uses string interpolation for SQL queries which creates a SQL injection vulnerability. Use parameterized queries instead of direct string interpolation.
-# The ON DUPLICATE KEY UPDATE clause contains a hardcoded list of all columns which is brittle and hard to maintain. Consider generating this dynamically from the table schema.
+# Disabling SSL certificate verification (urllib3.disable_warnings(InsecureRequestWarning)) is a security risk. Consider properly configuring certificates instead of disabling verification.
+# The ON DUPLICATE KEY UPDATE clause with hardcoded column names is difficult to maintain. Consider generating this dynamically from the table schema to prevent issues when columns change.
 # Here's what I looked at during the review
-# 🟡 General issues: 2 issues found
-# 🔴 Security: 1 blocking issue
-# 🟢 Testing: all looks good
-# 🟢 Complexity: all looks good
-# 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:61
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:67
 
-# suggestion(performance): Consider adding connection pool management for database connections
-#     )
-
-
-# def mysql_execute(sql, data=None):
-#     """Execute a SQL query against the Aiven MySQL database.
-
-# Using SQLAlchemy's connection pooling could improve database connection efficiency and reduce overhead of creating new sessions for each query.
-
-# Suggested implementation:
-
-# import mysql.connector
-# from sqlalchemy import create_engine
-# from sqlalchemy.orm import sessionmaker
-# from sqlalchemy.exc import SQLAlchemyError
+# suggestion(code_refinement): Connection pool configuration could be more configurable
 # from contextlib import contextmanager
 
 # # Create a connection pool
 # def get_mysql_engine(connection_string):
 #     """Create a SQLAlchemy engine with connection pooling."""
 #     return create_engine(
-#         connection_string, 
-#         pool_size=10,  # Adjust based on your needs
-#         max_overflow=20,
-#         pool_timeout=30,
-#         pool_recycle=1800  # Recycle connections after 30 minutes
-#     )
+# Consider making pool parameters configurable via environment variables or a config file, allowing easier tuning without code changes.
 
-# @contextmanager
-# def get_db_session(engine):
-#     """Provide a transactional scope around a series of operations."""
-#     Session = sessionmaker(bind=engine)
-#     session = Session()
-#     try:
-#         yield session
-#         session.commit()
-#     except SQLAlchemyError:
-#         session.rollback()
-#         raise
-#     finally:
+# Suggested implementation:
+
+# import os
+# from contextlib import contextmanager
+
+# # Create a connection pool
+# def get_mysql_engine(connection_string):
+#     """
+#     Create a SQLAlchemy engine with configurable connection pooling.
+
+#     Pool parameters can be configured via environment variables:
+#     - SQLALCHEMY_POOL_SIZE: Maximum number of connections in the pool (default: 5)
+#     - SQLALCHEMY_POOL_TIMEOUT: Seconds to wait before giving up on getting a connection (default: 30)
+#     - SQLALCHEMY_POOL_RECYCLE: Connection recycle time in seconds (default: 3600)
+#     - SQLALCHEMY_MAX_OVERFLOW: Number of connections that can be created beyond pool_size (default: 10)
+#     """
+#     return create_engine(
+#         connection_string,
+#         pool_size=int(os.getenv('SQLALCHEMY_POOL_SIZE', 5)),
+#         pool_timeout=int(os.getenv('SQLALCHEMY_POOL_TIMEOUT', 30)),
+#         pool_recycle=int(os.getenv('SQLALCHEMY_POOL_RECYCLE', 3600)),
+#         max_overflow=int(os.getenv('SQLALCHEMY_MAX_OVERFLOW', 10))
+
+# Developers should be advised to:
+
+# Set environment variables as needed in their deployment configuration
+# Update documentation to explain the new configuration options
+# Consider adding logging to track pool-related events if needed
+# Resolve
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:92
+
+# issue(security): Potential SQL injection risk in query construction
 #         session.close()
 
-# def mysql_execute(sql, data=None, engine=None):
+
+# def mysql_execute(sql, engine=None, data=None):
 #     """Execute a SQL query against the Aiven MySQL database with connection pooling.
 
-#     :param sql: SQL query to execute
-#     :param data: Optional data for parameterized queries
-#     :param engine: SQLAlchemy engine (optional, will use default if not provided)
-#     :return: Query results
+# The current implementation of constructing SQL queries by string concatenation in update_rows() is vulnerable to SQL injection. Use parameterized queries consistently.
 
-#     # If no engine is provided, raise an error or use a default
-#     if engine is None:
-#         raise ValueError("Database engine must be provided")
-
-#     try:
-#         with get_db_session(engine) as session:
-#             # Use SQLAlchemy's execute method
-#             result = session.execute(sql, params=data)
-
-#             # If it's a SELECT query, fetch results
-#             if sql.strip().upper().startswith('SELECT'):
-#                 return result.fetchall()
-
-#             # For INSERT, UPDATE, DELETE return the result
-#             return result
-
-# You'll need to modify how the database connection is configured. Instead of using mysql.connector.connect(), you should create a SQLAlchemy engine using a connection string.
-
-# Update any code that calls mysql_execute() to pass the SQLAlchemy engine.
-
-# Example of creating the engine:
-
-# # In your configuration or initialization
-# mysql_engine = get_mysql_engine('mysql+mysqlconnector://username:password@host:port/database')
-# Example of calling the updated function:
-# results = mysql_execute("SELECT * FROM users", engine=mysql_engine)
-# Key improvements:
-
-# Connection pooling reduces connection overhead
-# Proper session management with commit/rollback
-# Flexible error handling
-# Support for parameterized queries
-# Ability to handle different query types
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:128
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:167
 
-# issue(security): The SQL generation method is vulnerable to SQL injection
+# suggestion(code_refinement): Overly complex data insertion logic
 #         return None, e
 
 
 # def update_rows(max_dt, df, table_name):
 #     """
 #     Updates the specified MySQL table with new data from a DataFrame.
-# The current string concatenation method for SQL queries is risky. Use parameterized queries consistently instead of direct string interpolation.
+# The ON DUPLICATE KEY UPDATE clause is very long and repetitive. Consider generating this dynamically or using an ORM's bulk upsert method.
 
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:464
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:502
 
-# suggestion(code_refinement): Hardcoded source ID could be a configuration issue
+# issue(bug_risk): Lack of robust error handling in API interactions
 #     return res
 
 
 # def prospect_get_key(func, local, start_ts=None):
 #     """
 #     Retrieves data from the Prospect API and updates the MySQL database.
-# Consider moving hardcoded source IDs (1 and 421) to a configuration file or constants to improve maintainability.
-
-# Suggested implementation:
-
-# from decouple import config  # Assuming python-decouple for configuration
-
-# # Define source IDs in a centralized location
-# SOURCE_IDS = {
-#     'default': config('PROSPECT_DEFAULT_SOURCE_ID', default=1, cast=int),
-#     'specific': config('PROSPECT_SPECIFIC_SOURCE_ID', default=421, cast=int)
-# }
-
-# def prospect_get_key(func, local, start_ts=None):
-#     """
-#     Retrieves data from the Prospect API and updates the MySQL database.
-
-#     Uses configurable source IDs to improve maintainability.
-
-# Install python-decouple package (pip install python-decouple)
-# Create a .env file in the project root with:
-# PROSPECT_DEFAULT_SOURCE_ID=1
-# PROSPECT_SPECIFIC_SOURCE_ID=421
-# Update any code that previously used hardcoded source IDs to use SOURCE_IDS['default'] or SOURCE_IDS['specific']
-# Add .env to .gitignore to prevent committing sensitive configuration
+# The function exits the entire program if the Prospect API call fails. Consider implementing more graceful error handling and potentially retrying the API call.
