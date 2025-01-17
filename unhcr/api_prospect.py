@@ -13,6 +13,7 @@ Key Components
         Sends data to the prospect API's inbound endpoint. It takes a Pandas DataFrame (df), converts it to JSON, and sends a POST request to the 
         appropriate URL with the necessary headers, including the API key. It includes basic error handling.
 """
+import json
 import logging
 import requests
 
@@ -90,6 +91,76 @@ def api_in_prospect(df, local=True, ):  # sourcery skip: extract-method
     except Exception as e:
         logging.error('api_in_prospect ERROR', e)
         return None
+
+
+def get_prospect_last_data(response):
+    """
+    Retrieves the latest timestamp from the Prospect API response.
+
+    This function takes a Prospect API response, parses it, and returns the latest timestamp
+    as a string in the format 'YYYY-MM-DD HH:MM:SS'.
+
+    Args:
+        response (requests.Response): The Prospect API response.
+
+    Returns:
+        str: The latest timestamp.
+
+    """
+
+    j = json.loads(response.text)
+    # json.dumps(j, indent=2)
+    # logging.info(f'\n\n{j['data'][0]}')
+    res = ""
+    idd = ""
+    for d in j["data"]:
+        if d["custom"]["DatetimeServer"] > res:
+            res = d["custom"]["DatetimeServer"]
+        if d["external_id"] > idd:
+            idd = d["external_id"]
+    return res
+
+
+def prospect_get_start_ts(local, start_ts=None):
+    """
+    Retrieves data from the Prospect API and updates the MySQL database.
+
+    This function constructs a URL and fetches data from the Prospect API using the provided
+    function to get the necessary URL and API key. It then retrieves the latest timestamp
+    from the API response, queries the MySQL database for newer records, and sends this data
+    back to the Prospect API. If the API call fails, it logs an error and exits the program.
+
+    Args:
+        func (callable): A function that returns the API URL and key based on the 'local' flag.
+        local (bool): A flag indicating whether to retrieve data from the local or external
+                      Prospect API. When True, retrieves from the local API.
+        start_ts (str, optional): The timestamp to start retrieval from. If not provided (default),
+                                  retrieves the latest timestamp from the Prospect API.
+
+    Raises:
+        SystemExit: Exits the program if the Prospect API call fails.
+
+    Logs:
+        Various debug and informational logs, including headers, keys, URLs, and response
+        statuses. Also logs errors if API calls or database operations fail.
+    """
+    url, key = get_prospect_url_key(local, out=True)
+    sid = 1 if local else 421
+    url += f"/v1/out/custom/?size=50&page=1&q[source_id_eq]={sid}&q[s]=created_at+desc"
+    payload = {}
+    headers = {
+        "Authorization": f"Bearer {key}",
+    }
+
+    response = requests.request(
+        "GET", url, headers=headers, data=payload, verify=const.VERIFY
+    )
+    if start_ts is None:
+        start_ts = get_prospect_last_data(response)
+    j = json.loads(response.text)
+    # json.dumps(j, indent=2)
+    logging.info(f"\n\n{key}\n{url}\n{start_ts}")
+    return start_ts
 
 ########################################
 # Hey there - I've reviewed your changes - here's some feedback:

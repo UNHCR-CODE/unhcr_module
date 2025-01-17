@@ -65,11 +65,11 @@ logging.info(f"Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logg
 ver, err = utils.get_module_version()
 logging.info(f"Version: {ver}   Error: {err}")
 
-mysql = True
-pros = True
-orc = False
+UPDATE_DB = True
+PROSPECT = True
+ORACLE = False
 
-if orc:
+if ORACLE:
     try:
         orc_table = 'ORC_TAKUM_LEONICS_API_RAW'
 
@@ -95,14 +95,14 @@ if orc:
 
 logging.debug('1111111111111111111111111')
 token = None
-if mysql or pros:
+if UPDATE_DB or PROSPECT:
     logging.debug('222222222222222222222')
     token = api_leonics.checkAuth()
     logging.debug('999999999999999999999999')
 
 logging.debug(f'!!!!!!!!!!! {token}')
 if token:
-    if mysql:
+    if UPDATE_DB:
         max_dt, err = db.get_mysql_max_date()
         if err:
             logging.error(f"get_mysql_max_date Error occurred: {err}")
@@ -127,7 +127,7 @@ else:
     logging.info('Failed to get Leonics token, exiting')
     exit()
 
-if pros:
+if PROSPECT:
     # set start_time to highest DateTimeServer in Prospect
     # does AZURE
     ######db.update_prospect()
