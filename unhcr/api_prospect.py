@@ -1,17 +1,28 @@
 """
 Overview
     This file (api_prospect.py) provides a Python API client for interacting with the Prospect system. 
-    It handles authentication and facilitates data retrieval within a specified timeframe, as well as data submission to the Prospect API. 
-    It supports interacting with both local and external Prospect instances.
+    It handles authentication and facilitates data retrieval within a specified timeframe, as well as data submission 
+    to the Prospect API. It supports interacting with both local and external Prospect instances.
 
 Key Components
     get_prospect_url_key(local, out=False): 
-        Determines the correct URL and API key for interacting with the prospect API based on whether the request is for a local or external 
-        service and whether it's an inbound or outbound operation.
+        Determines the correct URL and API key for interacting with the Prospect API based on whether the request is 
+        for a local or external service and whether it's an inbound or outbound operation. The local flag indicates 
+        whether to use local settings, and the out flag specifies whether to retrieve the outgoing API key.
 
     api_in_prospect(df, local=True): 
-        Sends data to the prospect API's inbound endpoint. It takes a Pandas DataFrame (df), converts it to JSON, and sends a POST request to the 
-        appropriate URL with the necessary headers, including the API key. It includes basic error handling.
+        Sends data to the prospect API's inbound endpoint. It takes a Pandas DataFrame (df), converts it to JSON, 
+        and sends a POST request to the appropriate URL with the necessary headers, including the API key. 
+        It includes basic error handling. The local flag determines whether to send data to the local or external API.
+
+    get_prospect_last_data(response): 
+        Parses the Prospect API response and extracts the latest timestamp from the returned data. This timestamp is
+        used to retrieve newer records in subsequent calls.
+
+    prospect_get_start_ts(local, start_ts=None): 
+        Retrieves data from the Prospect API and determines the starting timestamp for data synchronization. 
+        If start_ts is not provided, it fetches the latest timestamp from the API. The local flag indicates whether to 
+        interact with the local or external Prospect instance.
 """
 import json
 import logging
@@ -167,15 +178,15 @@ def prospect_get_start_ts(local, start_ts=None):
 
 # Overall Comments:
 
-# Consider moving API keys to environment variables or a secrets management service rather than storing them in constants to improve security
-# Replace generic Exception handling with specific exception types (e.g., requests.exceptions.RequestException) to better handle different failure modes
+# Consider moving API keys to environment variables or a secure secrets management service rather than storing them in constants.py
+# Replace generic Exception handling with specific exceptions (e.g., requests.exceptions.RequestException) to properly handle different failure modes
 # Here's what I looked at during the review
 # 🟢 General issues: all looks good
-# 🟡 Security: 3 issues found
+# 🟡 Security: 2 issues found
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:89
+# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:91
 
 # suggestion(security): Use specific exception handling instead of generic Exception
 
@@ -185,7 +196,7 @@ def prospect_get_start_ts(local, start_ts=None):
 #         logging.error('api_in_prospect ERROR', e)
 #         return None
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:87
+# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:89
 
 # suggestion(security): Add response validation and error checking
 #         'Content-Type': 'application/json'
@@ -194,13 +205,3 @@ def prospect_get_start_ts(local, start_ts=None):
 #         return requests.request("POST", url, headers=headers, data=data, verify=const.VERIFY)
 #     #TODO more specific error trapping
 #     except Exception as e:
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:41
-
-# issue(security): Avoid hardcoding API keys, use secure storage
-#     str, str
-#         A tuple containing the URL and key for the Prospect API.
-#     """
-#     url = const.LOCAL_BASE_URL
-#     key = const.LOCAL_API_IN_KEY
-#     if local == False:

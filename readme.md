@@ -1,6 +1,6 @@
 # UNHCR Data Integration Module
 
-2024-01-06  v_0.4.2
+2024-01-17  v_0.4.3
 
 This module facilitates the integration of data from the Leonics API into UNHCR's systems, specifically a MySQL database, and the Prospect system.  It handles authentication with the Leonics API, data retrieval, filtering, and updates to both target systems.
 
@@ -125,40 +125,29 @@ For demonstration purposes I am using Windows and installing under: **_UNHCR\COD
     ```cmd
     _UNHCR\CODE\unhcr_module>run
 
-    E:\_UNHCR\CODE\unhcr_module>REM change to your venv path
+    2025-01-17 10:28:03,249 - INFO - PROD: False, DEBUG: False, LOCAL: True 1 .env file @: e:/_UNHCR/.env
+    2025-01-17 10:28:03,251 - INFO - Process ID: 924   Log Level: INFO
+    2025-01-17 10:28:03,253 - INFO - Version: 0.4.3   Error: None
+    2025-01-17 10:28:03,253 - INFO - Getting auth token for date: 2025-01-17
+    2025-01-17 10:28:20,323 - INFO - ROWS UPDATED: TAKUM_LEONICS_API_RAW  2
+    2025-01-17 10:28:20,323 - INFO - Starting update_prospect ts: None  local = True
+    2025-01-17 10:28:21,817 - INFO - 
 
-    E:\_UNHCR\CODE\unhcr_module>call E:\_UNHCR\CODE\unhcr_module\.venv\Scripts\activate.bat
-    ['__builtins__', '__cached__', '__doc__', '__file__', '__loader__', '__name__', '__package__', '__spec__', 'argparse', 'filter_nested_dict', 'get_module_version', 'log_setup', 'logging', 'str_to_float_or_zero', 'sys']
-2025-01-08 14:29:54,429 - INFO - INFO:  Logging level: INFO
-2025-01-08 14:29:54,429 - WARNING - WARNING:  Logging level: INFO
-2025-01-08 14:29:54,429 - ERROR - ERROR:  Logging level: INFO
-2025-01-08 14:29:54,430 - CRITICAL - CRITICAL:  Logging level: INFO
-2025-01-08 14:29:54,430 - INFO - Process ID: 66728   Log Level: INFO
-2025-01-08 14:29:54,432 - INFO - Version: 0.3   Error: None
-2025-01-08 14:29:54,432 - INFO - Getting auth token for date: 2025-01-08
-2025-01-08 14:29:56,502 - INFO - Getting auth token for date: 2025-01-09
-2025-01-08 14:29:58,476 - INFO - {
-  "API ver.": "v1.25",
-  "Pass": "Authentication successful"
-}
+    74a1680a57a88fbd56e4af59576d7d3e
+    http://localhost:3000/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=1&q[s]=created_at+desc
+    2025-01-17 17:24
+    2025-01-17 10:28:23,999 - INFO - 201:  {"id":637,"created_at":"2025-01-17T16:28:23.891Z","status":"Import started"}
+    2025-01-17 10:28:24,000 - INFO - Data has been saved to 'py_pros'
+    2025-01-17 10:28:24,000 - INFO - LOCAL: TRUE 201:  {"id":637,"created_at":"2025-01-17T16:28:23.891Z","status":"Import started"}
+    2025-01-17 10:28:24,000 - INFO - Starting update_prospect ts: None  local = False
+    2025-01-17 10:28:24,782 - INFO - 
 
-2025-01-08 14:30:11,271 - INFO - ROWS UPDATED: TAKUM_LEONICS_API_RAW  3
-2025-01-08 14:30:11,273 - INFO - Starting update_prospect ts: 2090-11-14 01:52  local = True
-2025-01-08 14:30:12,419 - INFO - 
-
-74a1680a57a88fbd56e4af59576d7d3e
-http://localhost:3000/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=1&q[s]=created_at+desc
-2025-01-08 21:22
-2025-01-08 14:30:18,651 - INFO - 201:  {"id":518,"created_at":"2025-01-08T20:30:18.469Z","status":"Import started"}
-2025-01-08 14:30:18,651 - INFO - Data has been saved to 'py_pros'
-2025-01-08 14:30:18,652 - INFO - Starting update_prospect ts: 2090-11-14 01:48  local = False
-2025-01-08 14:30:19,472 - INFO - 
-
-c91c1da9b43658800b079d52953d83f7
-https://app.prospect.energy/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=421&q[s]=created_at+desc
-2025-01-08 21:22
-2025-01-08 14:30:25,765 - INFO - 201:  {"id":4941976,"created_at":"2025-01-08T20:30:25.909Z","status":"Import started"}
-2025-01-08 14:30:25,765 - INFO - Data has been saved to 'py_pros'
+    c91c1da9b43658800b079d52953d83f7
+    https://app.prospect.energy/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=421&q[s]=created_at+desc
+    2025-01-17 16:53
+    2025-01-17 10:28:27,043 - INFO - 201:  {"id":4974395,"created_at":"2025-01-17T16:28:27.175Z","status":"Import started"}
+    2025-01-17 10:28:27,044 - INFO - Data has been saved to 'py_pros'
+    2025-01-17 10:28:27,044 - INFO - LOCAL: FALSE 201:  {"id":4974395,"created_at":"2025-01-17T16:28:27.175Z","status":"Import started"}
 
 ## Notes
 

@@ -1,52 +1,43 @@
 """
 Overview
-    This script db.py extracts data from a Leonics API, stores it in a MySQL database (Aiven), and updates 
-    a Prospect system with new entries. It uses requests for API interaction, pandas for data manipulation, 
-    and sqlalchemy for database operations. The script is designed for incremental updates to both the database 
-    and Prospect to avoid redundant data transfer.
+    This script db.py manages database interactions for energy monitoring data. It connects to a MySQL database using 
+    SQLAlchemy and interacts with a Prospect API. The primary functions handle updating both the database and the API 
+    with new data, managing duplicates, and logging errors. Connection pooling is used for database efficiency. 
+    A critical vulnerability exists: the update_rows function is susceptible to SQL injection.
 
 Key Components
 mysql_execute(sql, engine=None, data=None): 
-    Executes SQL queries against the MySQL database. It handles session creation, execution, commit/rollback, 
-    and closure using SQLAlchemy. Utilizes connection pooling for efficiency.
-update_mysql(max_dt, df, table_name): 
-    Orchestrates the database update process. It retrieves the latest timestamp from the database using 
-    get_mysql_max_date(), filters new data from the input DataFrame based on this timestamp, and inserts the 
-    new data into the specified table using update_rows().
-update_rows(max_dt, df, table_name): 
-    Handles the actual insertion of data into the MySQL database. It filters the DataFrame df for records newer 
-    than max_dt, formats the data appropriately, and performs a bulk INSERT using a parameterized query. 
-    Includes an ON DUPLICATE KEY UPDATE clause to handle potential key conflicts.
-update_prospect(start_ts=None, local=True): 
-    Manages the Prospect update process. It retrieves the latest timestamp from Prospect using prospect_get_key() 
-    and get_prospect_last_data(), queries the database for newer records, and sends them to the Prospect API 
-    via api_prospect.api_in_prospect().
-prospect_get_key(func, local, start_ts=None): 
-    Retrieves the Prospect API URL and key, and fetches the latest timestamp from Prospect to avoid sending duplicate entries. Uses a helper function func (presumably defined elsewhere and passed in) to determine the correct URL and key based on the local flag.
-get_prospect_last_data(response): 
-    Parses the Prospect API response to extract the latest timestamp and external_id.
-backfill_prospect(start_ts=None, local=True): 
-    Similar to update_prospect, but designed for backfilling larger amounts of data into Prospect. 
-    It uses prospect_backfill_key() to manage the process.
-prospect_backfill_key(func, local, start_ts): 
-    Retrieves a larger batch of data from the database (limited to 1450 rows) for backfilling Prospect. 
-    Similar in structure to prospect_get_key().
+    Executes SQL queries against the MySQL database. Handles session management and utilizes connection pooling. 
+    Important: Vulnerable to SQL injection in update_rows due to string formatting.
 
-The script relies on constants.py for configuration, api_leonics.py for Leonics API interaction, and api_prospect.py 
-for Prospect API interaction. It includes error handling and logging. Uses SQLAlchemy's connection pooling for 
-efficient database interactions.
+update_mysql(max_dt, df, table_name): 
+    Orchestrates the database update process. Retrieves the latest timestamp from the database, filters new data from the 
+    input DataFrame, and inserts the new data into the specified table. Includes error handling.
+
+update_rows(max_dt, df, table_name): 
+    Inserts new data into the MySQL database. Filters the DataFrame, formats data, and performs a bulk INSERT with an 
+    ON DUPLICATE KEY UPDATE clause. The ON DUPLICATE KEY UPDATE clause is excessively long and should be refactored.
+
+update_prospect(start_ts=None, local=True): 
+    Manages updates to the Prospect API. Retrieves the latest timestamp from Prospect, queries the database for newer records,
+    and sends them to the API. This function could benefit from being broken down into smaller, more manageable functions.
+
+get_mysql_engine(connection_string): 
+    Creates and returns a SQLAlchemy engine with connection pooling for efficient database access. Pool parameters are 
+    configurable via environment variables.
+
+get_mysql_max_date(engine=mysql_engine): 
+    Queries the database for the latest timestamp to avoid inserting duplicate data.
+
+backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, local, start_ts): 
+    These functions appear to be related to backfilling data into the Prospect API but are marked as "WIP" 
+    (work in progress) and are not fully functional.
 """
 from contextlib import contextmanager
 from datetime import datetime
-import json
 import logging
 import pandas as pd
-import requests
 from sqlalchemy import create_engine, exc,orm, text
-import urllib3
-
-# Suppress InsecureRequestWarning
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from unhcr import constants as const
 from unhcr import api_prospect
@@ -375,7 +366,7 @@ def update_rows(max_dt, df, table_name):
 
     res = mysql_execute(sql_query, mysql_engine)
     if not hasattr(res, "rowcount"):
-        logging.error(f"ERROR update_mysql: {res}")
+        logging.warning(f"ERROR update_mysql: {res}")
         return None, "Error: query result is not a cursor"
     logging.debug(f"ROWS UPDATED: {table_name}  {res.rowcount}")
     return res, None
@@ -416,8 +407,8 @@ def update_prospect(start_ts=None, local=True):
 
         res = api_prospect.api_in_prospect(df, local)
         if res is None:
-            logging.error("Prospect API failed, exiting")
-            exit()
+            logging.error("Prospect API failed")
+            return None, '"Prospect API failed"'
         logging.info(f"{res.status_code}:  {res.text}")
 
         # Save the DataFrame to a CSV file
@@ -429,9 +420,11 @@ def update_prospect(start_ts=None, local=True):
             # df.to_json(f'py_pros_{sts}.json', index=False)
 
         logging.info("Data has been saved to 'py_pros'")
+        return res, None
 
     except Exception as e:
         logging.error(f"PROSPECT Error occurred: {e}")
+        return None, e
 
 
 # WIP
@@ -489,11 +482,7 @@ def prospect_backfill_key(func, local, start_ts):
         "Authorization": f"Bearer {key}",
     }
 
-    # response = requests.request("GET", url, headers=headers, data=payload, verify=const.VERIFY)
-    # if start_ts is None:
-    #     start_ts = get_prospect_last_data(response)
-    # j = json.loads(response.text)
-    # # json.dumps(j, indent=2)
+    
     logging.info(f"\n\n{key}\n{url}\n{start_ts}")
 
     res = mysql_execute(
@@ -532,34 +521,52 @@ def prospect_backfill_key(func, local, start_ts):
 
 
 ###################################################
-# Hey there - I've reviewed your changes - here's some feedback:
+# Hey there - I've reviewed your changes and found some issues that need to be addressed.
 
+# Blocking issues:
+
+# Potential SQL injection vulnerability in query construction (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:259)
 # Overall Comments:
 
-# The update_rows() function is vulnerable to SQL injection by directly interpolating values into the query string. Use parameterized queries consistently throughout the codebase for security.
+# Critical security vulnerability: The update_rows function uses string formatting for SQL queries which enables SQL injection attacks. Switch to using parameterized queries with SQLAlchemy's text() function and parameter binding.
+# The ON DUPLICATE KEY UPDATE clause is hardcoded with a long list of columns. Consider generating this dynamically from the column list to improve maintainability and reduce potential errors.
 # Here's what I looked at during the review
 # 🟡 General issues: 2 issues found
-# 🟢 Security: all looks good
+# 🔴 Security: 1 blocking issue
 # 🟢 Testing: all looks good
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:_UNHCR\CODE\unhcr_module\unhcr\db.py:230
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:202
 
-# suggestion(code_refinement): The ON DUPLICATE KEY UPDATE clause is quite extensive. Consider extracting this to a configuration or making it more dynamic
+# issue(security): Potential SQL injection vulnerability in query construction
 #         }
 
 
 # def update_rows(max_dt, df, table_name):
 #     """
 #     Updates the specified MySQL table with new data from a DataFrame.
+# The current method of constructing SQL queries by directly formatting values is extremely risky. Replace with SQLAlchemy's parameterized query methods or prepared statements to prevent potential SQL injection attacks. The commented-out code shows a better approach with parameterized queries.
+
 # Resolve
-# e:_UNHCR\CODE\unhcr_module\unhcr\db.py:565
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:259
 
-# suggestion(code_refinement): The function mixes API interaction, database querying, and data transformation. Consider breaking it into smaller, more focused functions
-#     return res
+# issue(security): Potential SQL injection vulnerability in query construction
+#     )
+#     values = values.replace("err", "NULL")
+#     # Full MySQL INSERT statement
+#     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values}"
+#     sql_query += """ ON DUPLICATE KEY UPDATE
+#     BDI1_Power_P1_kW = VALUES(BDI1_Power_P1_kW),
+# Replace manual string concatenation with SQLAlchemy's parameterized query methods. The commented-out approach using text() and params was closer to a secure implementation.
+
+# Resolve
+# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:185
+
+# suggestion(code_refinement): Function has multiple responsibilities and complex logic
+#         }
 
 
-# def prospect_get_key(func, local, start_ts=None):
+# def update_rows(max_dt, df, table_name):
 #     """
-#     Retrieves data from the Prospect API and updates the MySQL database.
-    
+#     Updates the specified MySQL table with new data from a DataFrame.
+# Break down the function into smaller, more focused methods. Separate concerns like data filtering, SQL query generation, and execution.
