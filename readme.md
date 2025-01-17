@@ -149,6 +149,10 @@ For demonstration purposes I am using Windows and installing under: **_UNHCR\COD
     2025-01-17 10:28:27,044 - INFO - Data has been saved to 'py_pros'
     2025-01-17 10:28:27,044 - INFO - LOCAL: FALSE 201:  {"id":4974395,"created_at":"2025-01-17T16:28:27.175Z","status":"Import started"}
 
+## full_test.py Flow Chart
+![alt text](image-3.png)
+
+
 ## Notes
 
     Update to v_0.4
