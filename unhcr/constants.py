@@ -71,6 +71,7 @@ API_OUT_KEY = None
 
 # if your running a local instance of Prospect
 LOCAL_BASE_URL = None
+AZURE_BASE_URL = None
 LOCAL_API_IN_KEY = None
 LOCAL_API_OUT_KEY = None
 
@@ -133,6 +134,8 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         API key for outgoing requests from Prospect.
     LOCAL_BASE_URL : str
         Base URL for local instance of Prospect.
+    AZURE_BASE_URL : str
+        Base URL for Azure instance of Prospect.
     LOCAL_API_IN_KEY : str
         API key for incoming requests to local Prospect instance.
     LOCAL_API_OUT_KEY : str
@@ -177,6 +180,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     global API_OUT_KEY
 
     global LOCAL_BASE_URL
+    global AZURE_BASE_URL
     global LOCAL_API_IN_KEY
     global LOCAL_API_OUT_KEY
 
@@ -225,6 +229,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
 
     # if your running a local instance of Prospect
     LOCAL_BASE_URL = os.getenv("PROS_LOCAL_BASE_URL")
+    AZURE_BASE_URL = os.getenv("PROS_AZURE_BASE_URL")
     LOCAL_API_IN_KEY = os.getenv("PROS_IN_LOCAL_API_KEY")
     LOCAL_API_OUT_KEY = os.getenv("PROS_OUT_LOCAL_API_KEY")
 

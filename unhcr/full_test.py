@@ -129,9 +129,12 @@ else:
 
 if pros:
     # set start_time to highest DateTimeServer in Prospect
+    # does AZURE
+    ######db.update_prospect()
     # TODO get from out API
     db.update_prospect(local=True)
     db.update_prospect(local=False)
+
 
 ################################################################
 # Hey there - I've reviewed your changes - here's some feedback:
