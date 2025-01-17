@@ -36,22 +36,17 @@ The script relies on constants.py for configuration, api_leonics.py for Leonics 
 for Prospect API interaction. It includes error handling and logging. Uses SQLAlchemy's connection pooling for 
 efficient database interactions.
 """
-
-from datetime import datetime, timedelta
+from contextlib import contextmanager
+from datetime import datetime
 import json
 import logging
-import traceback
 import pandas as pd
 import requests
-import sqlalchemy
-from urllib3.exceptions import InsecureRequestWarning
+from sqlalchemy import create_engine, exc,orm, text
 import urllib3
 
 # Suppress InsecureRequestWarning
-urllib3.disable_warnings(InsecureRequestWarning)
-
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from unhcr import constants as const
 from unhcr import api_prospect
@@ -60,12 +55,6 @@ if const.LOCAL:  # testing with local python files
     const, api_prospect, *rest = const.import_local_libs(
         mods=[["constants", "const"], ["api_prospect", "api_prospect"]]
     )
-
-# import mysql.connector
-# from sqlalchemy import create_engine
-# from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import SQLAlchemyError
-from contextlib import contextmanager
 
 
 # Create a connection pool
@@ -94,12 +83,12 @@ def get_mysql_engine(connection_string):
 @contextmanager
 def get_db_session(engine):
     """Provide a transactional scope around a series of operations."""
-    Session = sessionmaker(bind=engine)
+    Session = orm.sessionmaker(bind=engine)
     session = Session()
     try:
         yield session
         session.commit()
-    except SQLAlchemyError:
+    except exc.SQLAlchemyError:
         session.rollback()
         raise
     finally:
@@ -179,7 +168,7 @@ def update_mysql(max_dt, df, table_name):
         # Existing update logic would go here
         # If no specific exception is raised, return success
         return update_rows(max_dt, df, table_name)
-    except sqlalchemy.exc.SQLAlchemyError as db_error:
+    except exc.SQLAlchemyError as db_error:
         error_msg = f"Database update failed for table {table_name}: {str(db_error)}"
         logging.error(error_msg)
         return False, {
