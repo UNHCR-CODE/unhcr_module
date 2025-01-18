@@ -15,5 +15,6 @@ if not exist "%VENV_DIR%" (
 call .venv\Scripts\activate.bat
 pip install -r requirements.txt
 pip install .
-REM changed python path to make it work in Windows scheduler -- was running a different python
-.venv\Scripts\python.exe unhcr\full_test.py --log INFO
+cd tests
+pytest -v --cov=.. --cov-report=html
+

@@ -26,12 +26,11 @@ Key Components
         This is useful for tracking and managing module versions.
 """
 
-import argparse
 from importlib.metadata import version
 import logging
 import optparse
 import os
-
+import sys
 
 def filter_nested_dict(obj, val=-0.999):
     """
@@ -117,6 +116,7 @@ def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
 def create_cmdline_parser(level="INFO"):
     """
     Creates a command-line parser to read environment and logging options from the command line.
+    This version is designed to work alongside pytest's command-line arguments.
 
     Parameters
     ----------
@@ -133,9 +133,10 @@ def create_cmdline_parser(level="INFO"):
     ------
     None
     """
+    # Create the option parser for custom arguments
     parser = optparse.OptionParser()
-    # parser = argparse.ArgumentParser(description="Process some environment and log options.")
-    # Add command-line arguments
+
+    # Add your custom arguments
     parser.add_option(
         "--env",
         dest="env",
@@ -150,12 +151,20 @@ def create_cmdline_parser(level="INFO"):
         type="string",
         help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
-    try:
-        (options, args) = parser.parse_args()
-        # List of valid choices
-        valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
-        # Validate the log level
+    # Parse pytest arguments first by letting pytest handle them -- these are the ones we use
+    original_args = list(sys.argv)
+
+    # Remove pytest's own options from the argument list
+    sys.argv = [arg for arg in sys.argv if arg not in ['-v', '--cov=..', '--cov-report=html']]
+    logging.info(f'LLLLLLLLLUUUUUU: {sys.argv}        {original_args}')
+    try:
+        # Now, parse custom arguments
+        (options, args) = parser.parse_args()
+        sys.argv = original_args
+        logging.info(f'LLLLLLLLLUUUUUU: {sys.argv}        {original_args}')
+        # Validate the logging level
+        valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if options.log not in valid_log_levels:
             parser.error(
                 f"Invalid log level: {options.log}. Valid options are: {', '.join(valid_log_levels)}"
@@ -226,6 +235,7 @@ def get_module_version(name="unhcr_module"):
         err = str(e)
     return v_number, err
 
+log_setup(override=True)
 
 ##################
 # Hey there - I've reviewed your changes - here's some feedback:

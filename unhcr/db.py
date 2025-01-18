@@ -6,11 +6,11 @@ Overview
     A critical vulnerability exists: the update_rows function is susceptible to SQL injection.
 
 Key Components
-mysql_execute(sql, engine=None, data=None): 
+sql_execute(sql, engine=default_engine, data=None): 
     Executes SQL queries against the MySQL database. Handles session management and utilizes connection pooling. 
     Important: Vulnerable to SQL injection in update_rows due to string formatting.
 
-update_mysql(max_dt, df, table_name): 
+update_leonics_db(max_dt, df, table_name, key='DateTimeServer'): 
     Orchestrates the database update process. Retrieves the latest timestamp from the database, filters new data from the 
     input DataFrame, and inserts the new data into the specified table. Includes error handling.
 
@@ -22,12 +22,9 @@ update_prospect(start_ts=None, local=True):
     Manages updates to the Prospect API. Retrieves the latest timestamp from Prospect, queries the database for newer records,
     and sends them to the API. This function could benefit from being broken down into smaller, more manageable functions.
 
-get_mysql_engine(connection_string): 
+set_db_engine(connection_string): 
     Creates and returns a SQLAlchemy engine with connection pooling for efficient database access. Pool parameters are 
     configurable via environment variables.
-
-get_mysql_max_date(engine=mysql_engine): 
-    Queries the database for the latest timestamp to avoid inserting duplicate data.
 
 backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, local, start_ts): 
     These functions appear to be related to backfilling data into the Prospect API but are marked as "WIP" 
@@ -47,9 +44,11 @@ if const.LOCAL:  # testing with local python files
         mods=[["constants", "const"], ["api_prospect", "api_prospect"]]
     )
 
+default_engine = None
 
 # Create a connection pool
-def get_mysql_engine(connection_string):
+def set_db_engine(connection_string):
+    global default_engine
     """
     Create a SQLAlchemy engine with configurable connection pooling.
 
@@ -60,16 +59,18 @@ def get_mysql_engine(connection_string):
     - SQLALCHEMY_POOL_RECYCLE: Connection recycle time in seconds (default: 3600)
     - SQLALCHEMY_MAX_OVERFLOW: Number of connections that can be created beyond pool_size (default: 10)
 
-    :param connection_string: A MySQL connection string, e.g. mysql://user:pass@host/db
+    :param connection_string: A DB connection string, e.g. mysql://user:pass@host/db
     :return: A SQLAlchemy engine
     """
-    return create_engine(
+    default_engine = create_engine(
         connection_string,
         pool_size=const.SQLALCHEMY_POOL_SIZE,
         pool_timeout=const.SQLALCHEMY_POOL_TIMEOUT,
         pool_recycle=const.SQLALCHEMY_POOL_RECYCLE,
         max_overflow=const.SQLALCHEMY_MAX_OVERFLOW
     )
+
+    return default_engine
 
 @contextmanager
 def get_db_session(engine):
@@ -86,15 +87,16 @@ def get_db_session(engine):
         session.close()
 
 
-def mysql_execute(sql, engine=None, data=None):
-    """Execute a SQL query against the Aiven MySQL database with connection pooling.
-
-    :param sql: SQL query to execute
-    :param data: Optional data for parameterized queries
-    :param engine: SQLAlchemy engine (optional, will use default if not provided)
-    :return: Query results
-    """
+def sql_execute(sql, engine=default_engine, data=None):
     # If no engine is provided, raise an error or use a default
+    """
+    Execute a SQL query against the MySQL database using a provided engine.
+
+    :param str sql: A SQL query string
+    :param engine: A SQLAlchemy engine
+    :param data: Optional data to be passed as parameters to the query
+    :return: A tuple containing the result of the query and None on success, otherwise a tuple containing False and an error dictionary
+    """
     if engine is None:
         raise ValueError("Database engine must be provided")
 
@@ -105,24 +107,52 @@ def mysql_execute(sql, engine=None, data=None):
 
             # If it's a SELECT query, fetch results
             if sql.strip().upper().startswith("SELECT"):
-                return result
+                return result, None
 
             # For INSERT, UPDATE, DELETE return the result
             session.commit()
-            return result
+            return result, None
+        
+        except exc.SQLAlchemyError as db_error:
+            session.rollback()
+            error_msg = f"Database update failed: {str(db_error)}"
+            logging.error(error_msg)
+            return False, {
+                "error_type": type(db_error).__name__,
+                "error_message": str(db_error),
+                "sql": sql
+        }
+        except ValueError as val_error:
+            session.rollback()
+            error_msg = f"Data validation error: {str(val_error)}"
+            logging.error(error_msg)
+            return False, {
+                "error_type": "ValidationError",
+                "error_message": str(val_error),
+                "sql": sql
+            }
         except Exception as e:
             session.rollback()
-            raise e
+            error_msg = f"Unexpected error: {str(e)}"
+            logging.error(error_msg)
+            return False, {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "sql": sql
+            }
+        except Exception as e:
+            session.rollback()
+            return False, {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "sql": sql
+            }
         finally:
             session.close()
 
+set_db_engine(const.TAKUM_RAW_CONN_STR)
 
-mysql_engine = get_mysql_engine(
-    const.AIVEN_TAKUM_CONN_STR
-)  #####'mysql+mysqlconnector://username:password@host:port/database')
-
-
-def get_mysql_max_date(engine=mysql_engine):
+def get_db_max_date(engine=default_engine, table_name='TAKUM_LEONICS_API_RAW'):
     """
     Retrieves the most recent timestamp from the MySQL database.
 
@@ -133,9 +163,11 @@ def get_mysql_max_date(engine=mysql_engine):
         tuple: A tuple containing the most recent timestamp in the database and an error message if any.
     """
     try:
-        dt = mysql_execute(
-            "select max(DatetimeServer) FROM defaultdb.TAKUM_LEONICS_API_RAW", engine
-        ).fetchall()
+        dt, err = sql_execute(
+            f"select max(DatetimeServer) FROM {table_name}", engine
+        )
+        assert err is None
+        dt = dt.fetchall()
         val = dt[0][0]
         return datetime.strptime(val, "%Y-%m-%d %H:%M"), None
     except Exception as e:
@@ -143,7 +175,7 @@ def get_mysql_max_date(engine=mysql_engine):
         return None, e
 
 
-def update_mysql(max_dt, df, table_name):
+def update_leonics_db(max_dt, df, table_name, key='DateTimeServer'):
     """
     Orchestrates the database update process. It retrieves the latest timestamp from the database,
 
@@ -155,37 +187,13 @@ def update_mysql(max_dt, df, table_name):
     Returns:
         tuple: (success_flag, error_message_or_None)
     """
-    try:
-        # Existing update logic would go here
-        # If no specific exception is raised, return success
-        return update_rows(max_dt, df, table_name)
-    except exc.SQLAlchemyError as db_error:
-        error_msg = f"Database update failed for table {table_name}: {str(db_error)}"
-        logging.error(error_msg)
-        return False, {
-            "error_type": type(db_error).__name__,
-            "error_message": str(db_error),
-            "table": table_name
-        }
-    except ValueError as val_error:
-        error_msg = f"Data validation error for table {table_name}: {str(val_error)}"
-        logging.error(error_msg)
-        return False, {
-            "error_type": "ValidationError",
-            "error_message": str(val_error),
-            "table": table_name
-        }
-    except Exception as e:
-        error_msg = f"Unexpected error updating table {table_name}: {str(e)}"
-        logging.error(error_msg)
-        return False, {
-            "error_type": type(e).__name__,
-            "error_message": str(e),
-            "table": table_name
-        }
+
+    # Existing update logic would go here
+    # If no specific exception is raised, return success
+    return update_rows(max_dt, df, table_name, key)
 
 
-def update_rows(max_dt, df, table_name):
+def update_rows(max_dt, df, table_name, key='DateTimeServer'):
     """
     Updates the specified MySQL table with new data from a DataFrame.
 
@@ -203,15 +211,10 @@ def update_rows(max_dt, df, table_name):
         tuple: A tuple containing the result of the SQL execution and an error message if any.
     """
 
-    df["DateTimeServer"] = pd.to_datetime(df["DateTimeServer"])
     # Define the threshold datetime
     threshold = pd.to_datetime(max_dt.isoformat())
     # Filter rows where datetime_column is greater than or equal to the threshold
-    df_filtered = df[df["DateTimeServer"] > threshold]
-
-    df_filtered.loc[:, "DateTimeServer"] = df_filtered["DateTimeServer"].dt.strftime(
-        "%Y-%m-%d %H:%M"
-    )
+    df_filtered = df[df[key] > threshold]
 
     # TODO not substituting params correctly
     # # Prepare columns and placeholders for a single insert statement
@@ -237,9 +240,9 @@ def update_rows(max_dt, df, table_name):
     # if param_list:
     #     try:
     #         # Execute the query with multiple bind parameters
-    #         res = mysql_execute(text(sql_query), param_list)
+    #         res = sql_execute(text(sql_query), param_list)
     #         if isinstance(res, str):
-    #             logging.error(f'ERROR update_mysql: {res}')
+    #             logging.error(f'ERROR update_leonics_db: {res}')
     #             return None, 'Error: query result is not a string'
     #         logging.debug(f'ROWS UPDATED: {table_name}  {res.rowcount}')
     #         return res, None
@@ -258,9 +261,10 @@ def update_rows(max_dt, df, table_name):
         for idx in df_filtered.index
     )
     values = values.replace("err", "NULL")
+    values.replace("'err'", "NULL")
     # Full MySQL INSERT statement
     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values}"
-    sql_query += """ ON DUPLICATE KEY UPDATE
+    sql_pred = """ ON DUPLICATE KEY UPDATE
     BDI1_Power_P1_kW = VALUES(BDI1_Power_P1_kW),
     BDI1_Power_P2_kW = VALUES(BDI1_Power_P2_kW),
     BDI1_Power_P3_kW = VALUES(BDI1_Power_P3_kW),
@@ -363,16 +367,23 @@ def update_rows(max_dt, df, table_name):
     In6 = VALUES(In6),
     In7 = VALUES(In7),
     In8 = VALUES(In8);"""
-
-    res = mysql_execute(sql_query, mysql_engine)
+    if default_engine.engine.name == 'postgresql':
+        sql_pred = " ON CONFLICT (datetimeserver) DO UPDATE SET "
+        for col in df_filtered.columns:
+            sql_pred += f"{col} = EXCLUDED.{col}, "
+        sql_pred = sql_pred[:-2] + ";"
+    
+    sql_query += sql_pred
+    res, err = sql_execute(sql_query, default_engine)
+    assert err is None
     if not hasattr(res, "rowcount"):
-        logging.warning(f"ERROR update_mysql: {res}")
+        logging.warning(f"ERROR update_leonics_db: {res}")
         return None, "Error: query result is not a cursor"
     logging.debug(f"ROWS UPDATED: {table_name}  {res.rowcount}")
     return res, None
 
 
-def update_prospect(start_ts=None, local=True):
+def update_prospect(start_ts=None, local=True, table_name = 'defaultdb.TAKUM_LEONICS_API_RAW'):
     """
     Updates the Prospect API with new data entries.
 
@@ -391,11 +402,12 @@ def update_prospect(start_ts=None, local=True):
     logging.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
     try:
         start_ts = api_prospect.prospect_get_start_ts(local, start_ts)
-        res = mysql_execute(
-            f"select * FROM defaultdb.TAKUM_LEONICS_API_RAW where DatetimeServer > '{start_ts}' order by DatetimeServer",
-            mysql_engine,
+        res, err = sql_execute(
+            f"select * FROM {table_name} where DatetimeServer > '{start_ts}' order by DatetimeServer",
+            default_engine,
             # {'ts':start_ts}
         )
+        assert err is None
         # Fetch all results as a list of dictionaries
         rows = res.fetchall()
 
@@ -452,7 +464,7 @@ def backfill_prospect(start_ts=None, local=True):
 
 
 # WIP
-def prospect_backfill_key(func, local, start_ts):
+def prospect_backfill_key(func, local, start_ts, table_name = 'defaultdb.TAKUM_LEONICS_API_RAW'):
     """
     Retrieves data from the Prospect API and updates the MySQL database.
 
@@ -485,11 +497,12 @@ def prospect_backfill_key(func, local, start_ts):
     
     logging.info(f"\n\n{key}\n{url}\n{start_ts}")
 
-    res = mysql_execute(
-        f"select * FROM defaultdb.TAKUM_LEONICS_API_RAW where DatetimeServer > '{start_ts}' order by DatetimeServer limit 1450",
-        mysql_engine,
+    res, err = sql_execute(
+        f"select * FROM {table_name} where DatetimeServer > '{start_ts}' order by DatetimeServer limit 1450",
+        default_engine,
         # {'ts':start_ts}
     )
+    assert err is None
     # Fetch all results as a list of dictionaries
     rows = res.fetchall()
 

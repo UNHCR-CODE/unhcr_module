@@ -24,6 +24,7 @@ Key Components
 """
 
 from datetime import datetime, timedelta
+import json
 import logging
 import pandas as pd
 import requests
@@ -104,7 +105,10 @@ def checkAuth(dt=None, x=0):
 
     # TODO if format changes this will break
     # sorcery: skip
-    token = res.json()[9:]
+    #Leonics does not send valid json -- res.json() is a string
+    #print(type(res.json())
+    j = json.loads('{'+res.text.replace('KEY: ','KEY": "') +'}')
+    token = j.get("API-KEY") 
     url = url = f"{const.LEONICS_BASE_URL}/check_auth?API-KEY={token}"
     payload = {}
     headers = {}
@@ -125,6 +129,7 @@ def getData(start, end, token=None):
     Retrieves data from the Leonics system within a specified time range. It requires a valid authentication token.
     It constructs the data request URL with the start and end times and sends a GET request to the /data endpoint.
     The retrieved data is parsed into a Pandas DataFrame and preprocessed to combine date and time columns.
+    Note that the Leonics API allows getting data up to 11 days old.
 
     Parameters
     ----------

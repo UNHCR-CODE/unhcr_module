@@ -124,11 +124,14 @@ def get_prospect_last_data(response):
     # logging.info(f'\n\n{j['data'][0]}')
     res = ""
     idd = ""
-    for d in j["data"]:
-        if d["custom"]["DatetimeServer"] > res:
-            res = d["custom"]["DatetimeServer"]
-        if d["external_id"] > idd:
-            idd = d["external_id"]
+    try:
+        for d in j["data"]:
+            if d["custom"]["DatetimeServer"] > res:
+                res = d["custom"]["DatetimeServer"]
+            if d["external_id"] > idd:
+                idd = d["external_id"]
+    except Exception as e:
+        logging.error(f'ERROR: get_prospect_last_data {e}')
     return res
 
 

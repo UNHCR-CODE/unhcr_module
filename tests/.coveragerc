@@ -1,0 +1,23 @@
+[coverage:run]
+branch = True
+source =
+    ../unhcr/*
+
+# Exclude specific files or directories unhcr_module/some_file_to_exclude.py
+omit =
+    ../tests/*
+    ../unhcr/__init__.py
+    ../unhcr/__main__.py
+    ../unhcr/*_test.py
+    ../unhcr/s3.py
+    ../unhcr/utils.py
+    ../unhcr/leonics_backfill.py
+    ../setup.py
+
+
+[coverage:report]
+show_missing = True
+skip_covered = True
+
+[coverage:html]
+directory = htmlcov

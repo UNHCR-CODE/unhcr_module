@@ -10,8 +10,8 @@ Key Components
         Retrieves a token from the Leonics API, essential for subsequent database interactions. 
         The script exits if authentication fails.
 
-    MySQL Update (db.update_mysql(...)): 
-        Updates the MySQL database with data fetched from the Leonics API. 
+    DB Update (db.update_leonics_db(...)): 
+        Updates the Leonics Raw database with data fetched from the Leonics API. 
         Uses a timestamp to determine the range of data to fetch.
 
     Prospect Update (db.update_prospect(...)): 
@@ -36,11 +36,14 @@ Key Components
         Includes a function (utils.get_module_version) to retrieve the module's version, useful for tracking 
         changes and deployments.
 """
+
 from datetime import datetime, timedelta
 import logging
-import re
 import os
 import pandas as pd
+import re
+import requests
+
 
 from unhcr import constants as const
 # OPTIONAL: set your own environment
@@ -52,9 +55,9 @@ from unhcr import db
 from unhcr import api_leonics
 
 
-if const.LOCAL: # testing with local python files
-    mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
-    utils, const, db, api_leonics, *rest = mods
+#if const.LOCAL: # testing with local python files
+mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
+utils, const, db, api_leonics, *rest = mods
 
 utils.log_setup(override=True)
 logging.info(f"PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
@@ -71,7 +74,7 @@ ver, err = utils.get_module_version()
 logging.info(f"Version: {ver}   Error: {err}")
 
 UPDATE_DB = True
-PROSPECT = True
+PROSPECT = False
 ORACLE = False
 
 if ORACLE:
@@ -99,32 +102,49 @@ if ORACLE:
         logging.error(f"ORACLE Error occurred: {e}")
 
 if UPDATE_DB or PROSPECT:
+    print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
+    ### set to AZURE
+    const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
+    const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','qqqqq')
+    print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
+    db.set_db_engine(const.TAKUM_RAW_CONN_STR)
+
+
     token = api_leonics.checkAuth()
     assert(token is not None)
 
 if token:
-    logging.debug(f'Retrieved Leonics token')
+    logging.debug('Retrieved Leonics token')
     if UPDATE_DB:
-        max_dt, err = db.get_mysql_max_date()
+        max_dt, err = db.get_db_max_date(db.default_engine, const.LEONICS_RAW_TABLE)
         if err:
-            logging.error(f"get_mysql_max_date Error occurred: {err}")
+            logging.error(f"get_db_max_date Error occurred: {err}")
             exit(1)
         assert(max_dt is not None)
         st = (max_dt + timedelta(minutes=1)).date().isoformat()
         st = st.replace('-', '')
-        ed = (datetime.now() + timedelta(days=1)).date().isoformat()
+        ed = datetime.now() + timedelta(days=1)
+        # Leonics API has a limit of 10 days
+        if ed - max_dt > timedelta(days=10):
+            ed = max_dt + timedelta(days=10)
+        ed = ed.date().isoformat()
         ed = ed.replace('-', '')
-        df, err = api_leonics.getData(start=st,end=ed,token=token)
+        df_leonics, err = api_leonics.getData(start=st,end=ed,token=token)
         if err:
             logging.error(f"api_leonics.getData Error occurred: {err}")
             exit(2)
         # Convert the 'datetime_column' to pandas datetime
-        df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
-        res, err = db.update_mysql(max_dt,df, const.LEONICS_RAW_TABLE)
+        df_leonics['DateTimeServer'] = pd.to_datetime(df_leonics['DateTimeServer'])
+        df_azure = df_leonics.copy()
+        df_azure['datetimeserver'] = pd.to_datetime(df_leonics['DateTimeServer'])
+        df_azure = df_azure.drop(columns=['DateTimeServer'])
+        df_azure.columns = df_azure.columns.str.lower()
+        res, err = db.update_leonics_db(max_dt,df_azure, const.LEONICS_RAW_TABLE, 'datetimeserver')
+        ##########res, err = db.update_leonics_db(max_dt,df_leonics, const.LEONICS_RAW_TABLE)
         assert(res is not None)
         assert(err is None)
         if err:
-            logging.error(f"update_mysql Error occurred: {err}")
+            logging.error(f"update_leonics_db Error occurred: {err}")
             exit(3)
         else:
             logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
@@ -133,14 +153,25 @@ else:
     exit()
 
 if PROSPECT:
-    # set start_time to highest DateTimeServer in Prospect
-    # does AZURE
-    ######db.update_prospect()
-    # TODO get from out API
-    res, err = db.update_prospect(local=True)
-    assert(res is not None)
-    assert(err is None)
-    logging.info(f"LOCAL: TRUE {res.status_code}:  {res.text}")
+    ######TODO db.update_prospect() AZURE
+ 
+    import requests
+
+    url = "http://localhost:3000"
+
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            logging.info(f"Server at {url} is responding. Status code: {response.status_code}")
+            res, err = db.update_prospect(local=True)
+            assert(res is not None)
+            assert(err is None)
+            logging.info(f"LOCAL: TRUE {res.status_code}:  {res.text}")
+        else:
+            logging.info(f"Server at {url} responded with status code: {response.status_code}")
+    except requests.ConnectionError:
+        logging.error(f"Server at {url} is not responding.")
+
     res, err = db.update_prospect(local=False)
     assert(res is not None)
     assert(err is None)
@@ -163,7 +194,7 @@ if PROSPECT:
 # e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:113
 
 # issue(testing): Missing edge case tests for `api_leonics.getData()`.
-#             logging.error(f"get_mysql_max_date Error occurred: {err}")
+#             logging.error(f"get_db_max_date Error occurred: {err}")
 #             exit(1)
 #         assert(max_dt is not None)
 #         st = (max_dt + timedelta(minutes=1)).date().isoformat()
@@ -177,16 +208,16 @@ if PROSPECT:
 # Resolve
 # e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:123
 
-# issue(testing): Test `db.update_mysql` failure scenarios.
+# issue(testing): Test `db.update_leonics_db` failure scenarios.
 #             exit(2)
 #         # Convert the 'datetime_column' to pandas datetime
 #         df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
-#         res, err = db.update_mysql(max_dt,df, const.LEONICS_RAW_TABLE)
+#         res, err = db.update_leonics_db(max_dt,df, const.LEONICS_RAW_TABLE)
 #         assert(res is not None)
 #         assert(err is None)
 #         if err:
-#             logging.error(f"update_mysql Error occurred: {err}")
-# Include tests where db.update_mysql encounters errors, such as database connection issues or data integrity violations. Verify that errors are properly logged and handled.
+#             logging.error(f"update_leonics_db Error occurred: {err}")
+# Include tests where db.update_leonics_db encounters errors, such as database connection issues or data integrity violations. Verify that errors are properly logged and handled.
 
 # Resolve
 # e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:122
@@ -196,7 +227,7 @@ if PROSPECT:
 #             exit(2)
 #         # Convert the 'datetime_column' to pandas datetime
 #         df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
-#         res, err = db.update_mysql(max_dt,df, const.LEONICS_RAW_TABLE)
+#         res, err = db.update_leonics_db(max_dt,df, const.LEONICS_RAW_TABLE)
 #         assert(res is not None)
 # Include a test case where the 'DateTimeServer' column in the dataframe has a different format or contains invalid date/time values. This ensures the script handles potential data inconsistencies gracefully.
 
