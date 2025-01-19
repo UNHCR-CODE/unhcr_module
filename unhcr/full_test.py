@@ -74,7 +74,7 @@ ver, err = utils.get_module_version()
 logging.info(f"Version: {ver}   Error: {err}")
 
 UPDATE_DB = True
-PROSPECT = False
+PROSPECT = True
 ORACLE = False
 
 if ORACLE:
@@ -102,13 +102,13 @@ if ORACLE:
         logging.error(f"ORACLE Error occurred: {e}")
 
 if UPDATE_DB or PROSPECT:
+
     print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
     ### set to AZURE
     const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
     const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','qqqqq')
     print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
     db.set_db_engine(const.TAKUM_RAW_CONN_STR)
-
 
     token = api_leonics.checkAuth()
     assert(token is not None)
@@ -153,9 +153,8 @@ else:
     exit()
 
 if PROSPECT:
-    ######TODO db.update_prospect() AZURE
- 
-    import requests
+    db.update_prospect() #AZURE
+
 
     url = "http://localhost:3000"
 

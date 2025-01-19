@@ -169,26 +169,6 @@ def getData(start, end, token=None):
         logging.error("Leonics getData ERROR:", e)
         return None, e
 
-    if df is None:
-        return df
-    try:
-        url, key = get_prospect_url_key(local)
-        url += "/v1/in/custom"
-
-        json_str = df.to_json(orient="records")
-        data = '{"data": ' + json_str + "}"
-
-        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-
-        return requests.request(
-            "POST", url, headers=headers, data=data, verify=const.VERIFY
-        )
-    # TODO more specific error trapping
-    except Exception as e:
-        logging.error("api_in_prospect ERROR", e)
-        return None
-
-
 ########################################
 # Hey there - I've reviewed your changes - here's some feedback:
 

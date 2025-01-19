@@ -26,7 +26,7 @@ set_db_engine(connection_string):
     Creates and returns a SQLAlchemy engine with connection pooling for efficient database access. Pool parameters are 
     configurable via environment variables.
 
-backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, local, start_ts): 
+backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, start_ts, local, table_name): 
     These functions appear to be related to backfilling data into the Prospect API but are marked as "WIP" 
     (work in progress) and are not fully functional.
 """
@@ -112,7 +112,7 @@ def sql_execute(sql, engine=default_engine, data=None):
             # For INSERT, UPDATE, DELETE return the result
             session.commit()
             return result, None
-        
+
         except exc.SQLAlchemyError as db_error:
             session.rollback()
             error_msg = f"Database update failed: {str(db_error)}"
@@ -383,7 +383,7 @@ def update_rows(max_dt, df, table_name, key='DateTimeServer'):
     return res, None
 
 
-def update_prospect(start_ts=None, local=True, table_name = 'defaultdb.TAKUM_LEONICS_API_RAW'):
+def update_prospect(start_ts=None, local=None, table_name = const.LEONICS_RAW_TABLE):
     """
     Updates the Prospect API with new data entries.
 
@@ -458,13 +458,13 @@ def backfill_prospect(start_ts=None, local=True):
 
     logging.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
     try:
-        prospect_backfill_key(api_prospect.get_prospect_url_key, local, start_ts)
+        prospect_backfill_key(api_prospect.get_prospect_url_key, start_ts, local)
     except Exception as e:
         logging.error(f"PROSPECT Error occurred: {e}")
 
 
 # WIP
-def prospect_backfill_key(func, local, start_ts, table_name = 'defaultdb.TAKUM_LEONICS_API_RAW'):
+def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TAKUM_LEONICS_API_RAW'):
     """
     Retrieves data from the Prospect API and updates the MySQL database.
 
