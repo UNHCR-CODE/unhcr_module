@@ -104,10 +104,9 @@ def api_in_prospect(df, local=None, ):  # sourcery skip: extract-method
 
     if df is None:
         return df
-    
+
     try:
-        if local is None:
-            df = map_columns(df)
+        df = map_columns(df)
         url, key = get_prospect_url_key(local)
         url += '/v1/in/custom'
 
@@ -126,7 +125,7 @@ def api_in_prospect(df, local=None, ):  # sourcery skip: extract-method
         return None
 
 
-def get_prospect_last_data(response):
+def get_prospect_last_data(response, key='datetimeserver'):
     """
     Retrieves the latest timestamp from the Prospect API response.
 
@@ -142,16 +141,17 @@ def get_prospect_last_data(response):
     """
 
     j = json.loads(response.text)
-    # json.dumps(j, indent=2)
+    #print(json.dumps(j, indent=2))
     # logging.info(f'\n\n{j['data'][0]}')
     res = ""
     idd = ""
     try:
+        if "custom" in j["data"][0] and "DatetimeServer" in j["data"][0]["custom"]:
+            key = "DatetimeServer"
         for d in j["data"]:
-            if d["custom"]["DatetimeServer"] > res:
-                res = d["custom"]["DatetimeServer"]
             if d["external_id"] > idd:
                 idd = d["external_id"]
+                res = d["custom"][key]
     except Exception as e:
         logging.error(f'ERROR: get_prospect_last_data {e}')
     return res
@@ -182,7 +182,7 @@ def prospect_get_start_ts(local=None, start_ts=None):
     """
     url, key = get_prospect_url_key(local, out=True)
     sid = 1 if local or local is None else 421
-    url += f"/v1/out/custom/?size=50&page=1&q[source_id_eq]={sid}&q[s]=created_at+desc"
+    url += f"/v1/out/custom/?size=10&page=1&q[source_id_eq]={sid}&q[external_id_start]=sys_&q[s]=external_id+desc"
     payload = {}
     headers = {
         "Authorization": f"Bearer {key}",
@@ -195,7 +195,7 @@ def prospect_get_start_ts(local=None, start_ts=None):
         start_ts = get_prospect_last_data(response)
     j = json.loads(response.text)
     # json.dumps(j, indent=2)
-    logging.info(f"\n\n{key}\n{url}\n{start_ts}")
+    logging.info(f"\n\n{url}\n{start_ts}")
     return start_ts
 
 ########################################

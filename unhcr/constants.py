@@ -332,7 +332,7 @@ def env_cmdline_parser():
     original_args = list(sys.argv)
 
     # Remove pytest's own options from the argument list
-    sys.argv = [arg for arg in sys.argv if arg not in ['-v', '--cov=..', '--cov-report=html']]
+    sys.argv = [arg for arg in sys.argv if arg not in ['-v', '--cov=..', '--cov-report=html', '--cache-clear']]
 
     logging.info(f'LLLLLLLLL: {sys.argv}        {original_args}')
     try:

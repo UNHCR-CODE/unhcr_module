@@ -1,13 +1,13 @@
 """
 Overview
-    This script db.py manages database interactions for energy monitoring data. It connects to a MySQL database using 
+    This script db.py manages database interactions for energy monitoring data. It connects to a DB database using 
     SQLAlchemy and interacts with a Prospect API. The primary functions handle updating both the database and the API 
     with new data, managing duplicates, and logging errors. Connection pooling is used for database efficiency. 
     A critical vulnerability exists: the update_rows function is susceptible to SQL injection.
 
 Key Components
 sql_execute(sql, engine=default_engine, data=None): 
-    Executes SQL queries against the MySQL database. Handles session management and utilizes connection pooling. 
+    Executes SQL queries against the DB database. Handles session management and utilizes connection pooling. 
     Important: Vulnerable to SQL injection in update_rows due to string formatting.
 
 update_leonics_db(max_dt, df, table_name, key='DateTimeServer'): 
@@ -15,7 +15,7 @@ update_leonics_db(max_dt, df, table_name, key='DateTimeServer'):
     input DataFrame, and inserts the new data into the specified table. Includes error handling.
 
 update_rows(max_dt, df, table_name): 
-    Inserts new data into the MySQL database. Filters the DataFrame, formats data, and performs a bulk INSERT with an 
+    Inserts new data into the DB database. Filters the DataFrame, formats data, and performs a bulk INSERT with an 
     ON DUPLICATE KEY UPDATE clause. The ON DUPLICATE KEY UPDATE clause is excessively long and should be refactored.
 
 update_prospect(start_ts=None, local=True): 
@@ -59,7 +59,7 @@ def set_db_engine(connection_string):
     - SQLALCHEMY_POOL_RECYCLE: Connection recycle time in seconds (default: 3600)
     - SQLALCHEMY_MAX_OVERFLOW: Number of connections that can be created beyond pool_size (default: 10)
 
-    :param connection_string: A DB connection string, e.g. mysql://user:pass@host/db
+    :param connection_string: A DB connection string, e.g. DB://user:pass@host/db
     :return: A SQLAlchemy engine
     """
     default_engine = create_engine(
@@ -90,7 +90,7 @@ def get_db_session(engine):
 def sql_execute(sql, engine=default_engine, data=None):
     # If no engine is provided, raise an error or use a default
     """
-    Execute a SQL query against the MySQL database using a provided engine.
+    Execute a SQL query against the DB database using a provided engine.
 
     :param str sql: A SQL query string
     :param engine: A SQLAlchemy engine
@@ -154,7 +154,7 @@ set_db_engine(const.TAKUM_RAW_CONN_STR)
 
 def get_db_max_date(engine=default_engine, table_name='TAKUM_LEONICS_API_RAW'):
     """
-    Retrieves the most recent timestamp from the MySQL database.
+    Retrieves the most recent timestamp from the DB database.
 
     Args:
         engine (sqlalchemy.engine.Engine): SQLAlchemy engine (optional, will use default if not provided)
@@ -195,9 +195,9 @@ def update_leonics_db(max_dt, df, table_name, key='DateTimeServer'):
 
 def update_rows(max_dt, df, table_name, key='DateTimeServer'):
     """
-    Updates the specified MySQL table with new data from a DataFrame.
+    Updates the specified DB table with new data from a DataFrame.
 
-    This function processes and inserts new data into a MySQL table by filtering
+    This function processes and inserts new data into a DB table by filtering
     the input DataFrame for records with 'DateTimeServer' greater than the specified
     max_dt. The filtered data is formatted and used to generate a SQL bulk INSERT
     statement with an ON DUPLICATE KEY UPDATE clause to handle existing records.
@@ -205,7 +205,7 @@ def update_rows(max_dt, df, table_name, key='DateTimeServer'):
     Args:
         max_dt (datetime): The maximum datetime to be used as a threshold for filtering new data.
         df (pandas.DataFrame): The DataFrame containing new data to be inserted into the database.
-        table_name (str): The name of the MySQL table to update.
+        table_name (str): The name of the DB table to update.
 
     Returns:
         tuple: A tuple containing the result of the SQL execution and an error message if any.
@@ -262,7 +262,7 @@ def update_rows(max_dt, df, table_name, key='DateTimeServer'):
     )
     values = values.replace("err", "NULL")
     values.replace("'err'", "NULL")
-    # Full MySQL INSERT statement
+    # Full DB INSERT statement
     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values}"
     sql_pred = """ ON DUPLICATE KEY UPDATE
     BDI1_Power_P1_kW = VALUES(BDI1_Power_P1_kW),
@@ -404,8 +404,7 @@ def update_prospect(start_ts=None, local=None, table_name = const.LEONICS_RAW_TA
         start_ts = api_prospect.prospect_get_start_ts(local, start_ts)
         res, err = sql_execute(
             f"select * FROM {table_name} where DatetimeServer > '{start_ts}' order by DatetimeServer",
-            default_engine,
-            # {'ts':start_ts}
+            default_engine
         )
         assert err is None
         # Fetch all results as a list of dictionaries
@@ -415,7 +414,7 @@ def update_prospect(start_ts=None, local=None, table_name = const.LEONICS_RAW_TA
         columns = res.keys()  # Get column names
         df = pd.DataFrame(rows, columns=columns)
 
-        df["external_id"] = df["external_id"].astype(str).apply(lambda x: "py_" + x)
+        df["external_id"] = df["external_id"].astype(str).apply(lambda x: "sys_" + x)
 
         res = api_prospect.api_in_prospect(df, local)
         if res is None:
@@ -428,10 +427,10 @@ def update_prospect(start_ts=None, local=None, table_name = const.LEONICS_RAW_TA
         if logger.getEffectiveLevel() < logging.INFO:
             sts = start_ts.replace(" ", "_").replace(":", "HM")
             sts += str(local)
-            df.to_csv(f"py_pros_{sts}.csv", index=False)
-            # df.to_json(f'py_pros_{sts}.json', index=False)
+            df.to_csv(f"sys_pros_{sts}.csv", index=False)
+            # df.to_json(f'sys_pros_{sts}.json', index=False)
 
-        logging.info("Data has been saved to 'py_pros'")
+        logging.info("Data has been saved to 'sys_pros'")
         return res, None
 
     except Exception as e:
@@ -466,11 +465,11 @@ def backfill_prospect(start_ts=None, local=True):
 # WIP
 def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TAKUM_LEONICS_API_RAW'):
     """
-    Retrieves data from the Prospect API and updates the MySQL database.
+    Retrieves data from the Prospect API and updates the DB database.
 
     This function constructs a URL and fetches data from the Prospect API using the provided
     function to get the necessary URL and API key. It then retrieves the latest timestamp
-    from the API response, queries the MySQL database for newer records, and sends this data
+    from the API response, queries the DB database for newer records, and sends this data
     back to the Prospect API. If the API call fails, it logs an error and exits the program.
 
     Args:
@@ -510,7 +509,7 @@ def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TA
     columns = res.keys()  # Get column names
     df = pd.DataFrame(rows, columns=columns)
 
-    df["external_id"] = df["external_id"].astype(str).apply(lambda x: "py_" + x)
+    df["external_id"] = df["external_id"].astype(str).apply(lambda x: "sys_" + x)
 
     res = api_prospect.api_in_prospect(df, local)
     if res is None:
@@ -520,17 +519,17 @@ def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TA
 
     sts = start_ts.replace(" ", "_").replace(":", "HM")
     sts += str(local)
-    df.to_csv(f"py_pros_{sts}.csv", index=False)
+    df.to_csv(f"sys_pros_{sts}.csv", index=False)
 
     # Save the DataFrame to a CSV file
     logger = logging.getLogger()
     if logger.getEffectiveLevel() < logging.INFO:
         sts = start_ts.replace(" ", "_").replace(":", "HM")
         sts += str(local)
-        df.to_csv(f"py_pros_{sts}.csv", index=False)
-        # df.to_json(f'py_pros_{sts}.json', index=False)
+        df.to_csv(f"sys_pros_{sts}.csv", index=False)
+        # df.to_json(f'sys_pros_{sts}.json', index=False)
 
-    logging.info(f"Data has been saved to 'py_pros'   LOCAL: {local}")
+    logging.info(f"Data has been saved to 'sys_pros'   LOCAL: {local}")
 
 
 ###################################################
@@ -557,7 +556,7 @@ def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TA
 
 # def update_rows(max_dt, df, table_name):
 #     """
-#     Updates the specified MySQL table with new data from a DataFrame.
+#     Updates the specified DB table with new data from a DataFrame.
 # The current method of constructing SQL queries by directly formatting values is extremely risky. Replace with SQLAlchemy's parameterized query methods or prepared statements to prevent potential SQL injection attacks. The commented-out code shows a better approach with parameterized queries.
 
 # Resolve
@@ -566,7 +565,7 @@ def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TA
 # issue(security): Potential SQL injection vulnerability in query construction
 #     )
 #     values = values.replace("err", "NULL")
-#     # Full MySQL INSERT statement
+#     # Full DB INSERT statement
 #     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values}"
 #     sql_query += """ ON DUPLICATE KEY UPDATE
 #     BDI1_Power_P1_kW = VALUES(BDI1_Power_P1_kW),
@@ -581,5 +580,5 @@ def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TA
 
 # def update_rows(max_dt, df, table_name):
 #     """
-#     Updates the specified MySQL table with new data from a DataFrame.
+#     Updates the specified DB table with new data from a DataFrame.
 # Break down the function into smaller, more focused methods. Separate concerns like data filtering, SQL query generation, and execution.

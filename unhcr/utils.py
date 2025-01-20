@@ -156,13 +156,13 @@ def create_cmdline_parser(level="INFO"):
     original_args = list(sys.argv)
 
     # Remove pytest's own options from the argument list
-    sys.argv = [arg for arg in sys.argv if arg not in ['-v', '--cov=..', '--cov-report=html']]
-    logging.info(f'LLLLLLLLLUUUUUU: {sys.argv}        {original_args}')
+    sys.argv = [arg for arg in sys.argv if arg not in ['-v', '--cov=..', '--cov-report=html', '--cache-clear']]
+    logging.debug(f'{sys.argv}        {original_args}')
     try:
         # Now, parse custom arguments
         (options, args) = parser.parse_args()
         sys.argv = original_args
-        logging.info(f'LLLLLLLLLUUUUUU: {sys.argv}        {original_args}')
+        logging.debug(f'{sys.argv}        {original_args}')
         # Validate the logging level
         valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if options.log not in valid_log_levels:

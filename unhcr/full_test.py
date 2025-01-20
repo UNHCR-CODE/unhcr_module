@@ -77,6 +77,20 @@ UPDATE_DB = True
 PROSPECT = True
 ORACLE = False
 
+def set_db_engine(ename):
+    #print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
+    ### set to AZURE
+    if db.default_engine.engine.name != ename:
+        if ename == 'postgresql':
+            const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
+            const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','qqqqq')
+            #print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
+        else:
+            const.TAKUM_RAW_CONN_STR =  os.getenv('TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
+            const.LEONICS_RAW_TABLE = os.getenv('LEONICS_RAW_TABLE','qqqqq')
+            #print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
+    return db.set_db_engine(const.TAKUM_RAW_CONN_STR)
+
 if ORACLE:
     try:
         orc_table = 'ORC_TAKUM_LEONICS_API_RAW'
@@ -103,13 +117,6 @@ if ORACLE:
 
 if UPDATE_DB or PROSPECT:
 
-    print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
-    ### set to AZURE
-    const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
-    const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','qqqqq')
-    print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
-    db.set_db_engine(const.TAKUM_RAW_CONN_STR)
-
     token = api_leonics.checkAuth()
     assert(token is not None)
 
@@ -135,12 +142,20 @@ if token:
             exit(2)
         # Convert the 'datetime_column' to pandas datetime
         df_leonics['DateTimeServer'] = pd.to_datetime(df_leonics['DateTimeServer'])
+        res, err = db.update_leonics_db(max_dt,df_leonics, const.LEONICS_RAW_TABLE)
+        if err:
+            logging.error(f"update_leonics_db Error occurred: {err}")
+            exit(3)
+        else:
+            logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
+
+        set_db_engine('postgresql')
+
         df_azure = df_leonics.copy()
         df_azure['datetimeserver'] = pd.to_datetime(df_leonics['DateTimeServer'])
         df_azure = df_azure.drop(columns=['DateTimeServer'])
         df_azure.columns = df_azure.columns.str.lower()
         res, err = db.update_leonics_db(max_dt,df_azure, const.LEONICS_RAW_TABLE, 'datetimeserver')
-        ##########res, err = db.update_leonics_db(max_dt,df_leonics, const.LEONICS_RAW_TABLE)
         assert(res is not None)
         assert(err is None)
         if err:
@@ -153,6 +168,7 @@ else:
     exit()
 
 if PROSPECT:
+    set_db_engine('postgresql')
     db.update_prospect() #AZURE
 
 
