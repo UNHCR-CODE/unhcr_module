@@ -13,7 +13,7 @@ API Configuration:
     Stores API keys and base URLs for Leonics and Prospect APIs. Separate constants are defined for local and production environments 
     for the Prospect API.
 Database Connection String: 
-    AIVEN_TAKUM_CONN_STR holds the connection string for the Aiven MySQL database.
+    TAKUM_RAW_CONN_STR holds the connection string for the Aiven MySQL database.
 S3 Storage Credentials: 
     Constants store credentials for accessing Eyedro S3 storage, including access key, secret key, bucket name, and folder name.
 SSL Verification: 
@@ -49,8 +49,14 @@ LEONICS_KEY = None
 VERIFY = None
 
 # Aiven Mysql DB
-AIVEN_TAKUM_CONN_STR = None
+TAKUM_RAW_CONN_STR = None
 LEONICS_RAW_TABLE = None
+
+# DB connection pool
+SQLALCHEMY_POOL_SIZE = None
+SQLALCHEMY_POOL_TIMEOUT = None
+SQLALCHEMY_POOL_RECYCLE = None
+SQLALCHEMY_MAX_OVERFLOW = None
 
 # Eyedro S3
 ACCESS_KEY = None
@@ -65,6 +71,7 @@ API_OUT_KEY = None
 
 # if your running a local instance of Prospect
 LOCAL_BASE_URL = None
+AZURE_BASE_URL = None
 LOCAL_API_IN_KEY = None
 LOCAL_API_OUT_KEY = None
 
@@ -107,7 +114,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         Key for Leonics API.
     VERIFY : bool
         SSL verification flag for Leonics API, set to False due to unverified certificate.
-    AIVEN_TAKUM_CONN_STR : str
+    TAKUM_RAW_CONN_STR : str
         Connection string for Aiven MySQL database.
     LEONICS_RAW_TABLE : str
         Table name for Leonics raw data.
@@ -127,6 +134,8 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         API key for outgoing requests from Prospect.
     LOCAL_BASE_URL : str
         Base URL for local instance of Prospect.
+    AZURE_BASE_URL : str
+        Base URL for Azure instance of Prospect.
     LOCAL_API_IN_KEY : str
         API key for incoming requests to local Prospect instance.
     LOCAL_API_OUT_KEY : str
@@ -154,8 +163,12 @@ def set_environ():  # sourcery skip: extract-duplicate-method
 
     global VERIFY
 
-    global AIVEN_TAKUM_CONN_STR
+    global TAKUM_RAW_CONN_STR
     global LEONICS_RAW_TABLE
+    global SQLALCHEMY_POOL_SIZE
+    global SQLALCHEMY_POOL_TIMEOUT
+    global SQLALCHEMY_POOL_RECYCLE
+    global SQLALCHEMY_MAX_OVERFLOW
 
     global ACCESS_KEY
     global SECRET_KEY
@@ -167,6 +180,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     global API_OUT_KEY
 
     global LOCAL_BASE_URL
+    global AZURE_BASE_URL
     global LOCAL_API_IN_KEY
     global LOCAL_API_OUT_KEY
 
@@ -194,8 +208,13 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     VERIFY = False
 
     # Aiven Mysql DB
-    AIVEN_TAKUM_CONN_STR = os.getenv("AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR")
+    TAKUM_RAW_CONN_STR = os.getenv("AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR")
     LEONICS_RAW_TABLE = os.getenv("LEONICS_RAW_TABLE")
+
+    SQLALCHEMY_POOL_SIZE = int(os.getenv('SQLALCHEMY_POOL_SIZE', 5))
+    SQLALCHEMY_POOL_TIMEOUT = int(os.getenv('SQLALCHEMY_POOL_TIMEOUT', 30))
+    SQLALCHEMY_POOL_RECYCLE = int(os.getenv('SQLALCHEMY_POOL_RECYCLE', 3600))
+    SQLALCHEMY_MAX_OVERFLOW = int(os.getenv('SQLALCHEMY_MAX_OVERFLOW', 10))
 
     # Eyedro S3
     ACCESS_KEY = os.getenv("GB_AWS_ACCESS_KEY")
@@ -210,6 +229,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
 
     # if your running a local instance of Prospect
     LOCAL_BASE_URL = os.getenv("PROS_LOCAL_BASE_URL")
+    AZURE_BASE_URL = os.getenv("PROS_AZURE_BASE_URL")
     LOCAL_API_IN_KEY = os.getenv("PROS_IN_LOCAL_API_KEY")
     LOCAL_API_OUT_KEY = os.getenv("PROS_OUT_LOCAL_API_KEY")
 
@@ -308,8 +328,18 @@ def env_cmdline_parser():
         type="string",
         help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
+      # Parse pytest arguments first by letting pytest handle them -- these are the ones we use
+    original_args = list(sys.argv)
+
+    # Remove pytest's own options from the argument list
+    sys.argv = [arg for arg in sys.argv if arg not in ['-v', '--cov=..', '--cov-report=html', '--cache-clear']]
+
+    logging.info(f'LLLLLLLLL: {sys.argv}        {original_args}')
     try:
+        # Now, parse custom arguments
         (options, args) = parser.parse_args()
+        sys.argv = original_args
+        logging.info(f'LLLLLLLLL: {sys.argv}        {original_args}')
         # List of valid choices
         valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -324,7 +354,7 @@ def env_cmdline_parser():
         print(f"ERROR: {e}")
         return None
 
-
+utils.log_setup(override=True)
 # loads environment variables and sets constants
 args = utils.create_cmdline_parser()
 if args is None:

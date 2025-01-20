@@ -10,7 +10,7 @@ if not exist "%VENV_DIR%" (
     python -m venv %VENV_DIR%
     echo Virtual environment created successfully.
     call .venv\Scripts\activate.bat
-    REM .venv\Scripts\pip install -r requirements.txt
+    .venv\Scripts\pip install -r requirements.txt
 ) else (
     echo Virtual environment "%VENV_DIR%" already exists.
     call .venv\Scripts\activate.bat
@@ -24,6 +24,8 @@ if %errorlevel% equ 0 (
     .venv\Scripts\pip install .
 )
 
-REM changed python path to make it work in Windows scheduler -- was running a different python
-.venv\Scripts\python.exe unhcr\full_test.py --log INFO
+cd tests
+pytest -v --cache-clear --cov=.. --cov-report=html
+cd ..
 deactivate
+

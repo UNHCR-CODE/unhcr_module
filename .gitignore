@@ -3,3 +3,4 @@ unhcr/__pycache__/
 unhcr_module.egg-info/
 .env
 .venv/
+tests/__pycache__/

@@ -1,6 +1,6 @@
 # UNHCR Data Integration Module
 
-2024-01-06  v_0.4.2
+2024-01-17  v_0.4.3
 
 This module facilitates the integration of data from the Leonics API into UNHCR's systems, specifically a MySQL database, and the Prospect system.  It handles authentication with the Leonics API, data retrieval, filtering, and updates to both target systems.
 
@@ -52,7 +52,7 @@ For demonstration purposes I am using Windows and installing under: **_UNHCR\COD
     call E:\_UNHCR\CODE\unhcr_module\.venv\Scripts\activate.bat
     python E:\_UNHCR\CODE\unhcr_module\unhcr\full_test.py --log INFO
 
-6. Create a **.env** file in the project root directory. You need to get the secrets and API keys from Steve Hermes.
+5. Create a **.env** file in the project root directory. You need to get the secrets and API keys from Steve Hermes.
    Here is the **.env** without values:
 
     ```plaintext
@@ -120,45 +120,69 @@ For demonstration purposes I am using Windows and installing under: **_UNHCR\COD
     SM_BIZ_ACCESS_TOKEN=
     SM_URL=
 
-7. Execute **run.bat** The output should be similar:
+6. Run the main integeration test code, Execute **run.bat**. Note thsi will actually update the Prospect and Aiven DBs. The output should be similar: (truncating the venv setup)
+   
+### Output from run.bat:
 
     ```cmd
-    _UNHCR\CODE\unhcr_module>run
+    2025-01-17 17:32:04,665 - INFO - PROD: True, DEBUG: False, LOCAL: False 1 .env file @: E:\_UNHCR\CODE\unhcr_module\.env
+    2025-01-17 17:32:04,665 - INFO - Process ID: 22500   Log Level: INFO
+    2025-01-17 17:32:04,668 - INFO - Version: 0.4.3   Error: None
+    2025-01-17 17:32:04,668 - INFO - Getting auth token for date: 2025-01-17
+    2025-01-17 17:32:06,700 - INFO - Getting auth token for date: 2025-01-18
+    2025-01-17 17:32:15,388 - INFO - ROWS UPDATED: TAKUM_LEONICS_API_RAW  3
+    2025-01-17 17:32:16,638 - INFO - Server at http://localhost:3000 is responding. Status code: 200
+    2025-01-17 17:32:16,638 - INFO - Starting update_prospect ts: None  local = True
+    2025-01-17 17:32:18,025 - INFO - 
 
-    E:\_UNHCR\CODE\unhcr_module>REM change to your venv path
+    74a1680a57a88fbd56e4af59576d7d3e
+    http://localhost:3000/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=1&q[s]=created_at+desc
+    2025-01-18 00:27
+    2025-01-17 17:32:19,814 - INFO - 201:  {"id":647,"created_at":"2025-01-17T23:32:19.734Z","status":"Import started"}
+    2025-01-17 17:32:19,814 - INFO - Data has been saved to 'py_pros'
+    2025-01-17 17:32:19,814 - INFO - LOCAL: TRUE 201:  {"id":647,"created_at":"2025-01-17T23:32:19.734Z","status":"Import started"} 
+    2025-01-17 17:32:19,815 - INFO - Starting update_prospect ts: None  local = False
+    2025-01-17 17:32:20,571 - INFO - 
 
-    E:\_UNHCR\CODE\unhcr_module>call E:\_UNHCR\CODE\unhcr_module\.venv\Scripts\activate.bat
-    ['__builtins__', '__cached__', '__doc__', '__file__', '__loader__', '__name__', '__package__', '__spec__', 'argparse', 'filter_nested_dict', 'get_module_version', 'log_setup', 'logging', 'str_to_float_or_zero', 'sys']
-2025-01-08 14:29:54,429 - INFO - INFO:  Logging level: INFO
-2025-01-08 14:29:54,429 - WARNING - WARNING:  Logging level: INFO
-2025-01-08 14:29:54,429 - ERROR - ERROR:  Logging level: INFO
-2025-01-08 14:29:54,430 - CRITICAL - CRITICAL:  Logging level: INFO
-2025-01-08 14:29:54,430 - INFO - Process ID: 66728   Log Level: INFO
-2025-01-08 14:29:54,432 - INFO - Version: 0.3   Error: None
-2025-01-08 14:29:54,432 - INFO - Getting auth token for date: 2025-01-08
-2025-01-08 14:29:56,502 - INFO - Getting auth token for date: 2025-01-09
-2025-01-08 14:29:58,476 - INFO - {
-  "API ver.": "v1.25",
-  "Pass": "Authentication successful"
-}
+    c91c1da9b43658800b079d52953d83f7
+    https://app.prospect.energy/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=421&q[s]=created_at+desc
+    2025-01-18 00:27
+    2025-01-17 17:32:22,161 - INFO - 201:  {"id":4974688,"created_at":"2025-01-17T23:32:22.114Z","status":"Import started"}
+    2025-01-17 17:32:22,162 - INFO - Data has been saved to 'py_pros'
+    2025-01-17 17:32:22,162 - INFO - LOCAL: FALSE 201:  {"id":4974688,"created_at":"2025-01-17T23:32:22.114Z","status":"Import started"}
 
-2025-01-08 14:30:11,271 - INFO - ROWS UPDATED: TAKUM_LEONICS_API_RAW  3
-2025-01-08 14:30:11,273 - INFO - Starting update_prospect ts: 2090-11-14 01:52  local = True
-2025-01-08 14:30:12,419 - INFO - 
+    (.venv) E:\_UNHCR\CODE\unhcr_module>.venv\Scripts\python.exe unhcr\full_test.py --log INFO
+    2025-01-17 17:33:15,404 - INFO - PROD: True, DEBUG: False, LOCAL: False 1 .env file @: E:\_UNHCR\CODE\unhcr_module\.env
+    2025-01-17 17:33:15,404 - INFO - Process ID: 45588   Log Level: INFO
+    2025-01-17 17:33:15,407 - INFO - Version: 0.4.3   Error: None
+    2025-01-17 17:33:15,407 - INFO - Getting auth token for date: 2025-01-17
+    2025-01-17 17:33:17,736 - INFO - Getting auth token for date: 2025-01-18
+    2025-01-17 17:33:26,538 - INFO - ROWS UPDATED: TAKUM_LEONICS_API_RAW  1
+    2025-01-17 17:33:30,629 - ERROR - Server at http://localhost:3000 is not responding.
+    2025-01-17 17:33:30,630 - INFO - Starting update_prospect ts: None  local = False
+    2025-01-17 17:33:31,431 - INFO - 
 
-74a1680a57a88fbd56e4af59576d7d3e
-http://localhost:3000/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=1&q[s]=created_at+desc
-2025-01-08 21:22
-2025-01-08 14:30:18,651 - INFO - 201:  {"id":518,"created_at":"2025-01-08T20:30:18.469Z","status":"Import started"}
-2025-01-08 14:30:18,651 - INFO - Data has been saved to 'py_pros'
-2025-01-08 14:30:18,652 - INFO - Starting update_prospect ts: 2090-11-14 01:48  local = False
-2025-01-08 14:30:19,472 - INFO - 
+    c91c1da9b43658800b079d52953d83f7
+    https://app.prospect.energy/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=421&q[s]=created_at+desc
+    2025-01-18 00:30
+    2025-01-17 17:33:33,049 - INFO - 201:  {"id":4974689,"created_at":"2025-01-17T23:33:33.005Z","status":"Import started"}
+    2025-01-17 17:33:33,050 - INFO - Data has been saved to 'py_pros'
+    2025-01-17 17:33:33,050 - INFO - LOCAL: FALSE 201:  {"id":4974689,"created_at":"2025-01-17T23:33:33.005Z","status":"Import started"}
 
-c91c1da9b43658800b079d52953d83f7
-https://app.prospect.energy/api/v1/out/custom/?size=50&page=1&q[source_id_eq]=421&q[s]=created_at+desc
-2025-01-08 21:22
-2025-01-08 14:30:25,765 - INFO - 201:  {"id":4941976,"created_at":"2025-01-08T20:30:25.909Z","status":"Import started"}
-2025-01-08 14:30:25,765 - INFO - Data has been saved to 'py_pros'
+7. Run tests. From the project root directory, execute **tests.bat**. Output: (truncating the venv setup)
+
+```plaintext
+===================================== test session starts =====================================
+platform win32 -- Python 3.12.8, pytest-8.3.4, pluggy-1.5.0
+rootdir: E:\_UNHCR\CODE\unhcr_module
+collected 32 items
+
+test_api_leonics.py ......                                                               [ 18%] 
+test_api_prospect.py .................                                                   [ 71%]
+test_db.py .........                                                                     [100%]
+
+===================================== 32 passed in 42.12s ===================================== 
+```
 
 ## Notes
 

@@ -1,41 +1,49 @@
 """
 Overview
-    This Python script full_test.py orchestrates the process of fetching data from an API and updating two databases: 
-    MySQL and Prospect. 
-    It appears to be a test script for integrating data from the Leonics API into UNHCR's systems. 
-    The script first authenticates with the Leonics API, then uses the retrieved token to update the databases. 
-    It includes conditional logic to control which databases are updated based on boolean flags. 
-    The script also contains commented-out code suggesting prior or planned integration with an Oracle database and AWS S3.
+    This script full_test.py integrates data from the Leonics API into UNHCR's MySQL and Prospect databases. 
+    It authenticates with the Leonics API, retrieves data, and updates the databases based on conditional flags. 
+    The script includes some commented-out code suggesting past or future integration with an Oracle database and AWS S3. 
+    It appears designed for testing the integration process.
 
 Key Components
     Authentication (api_leonics.checkAuth()): 
-        This function is crucial as it retrieves a token from the Leonics API, which is required for subsequent database updates.
+        Retrieves a token from the Leonics API, essential for subsequent database interactions. 
         The script exits if authentication fails.
-    MySQL Update (db.update_mysql(token)): 
-        This function updates a MySQL database using the token obtained from the Leonics API. 
-        The specifics of the update process are not shown in this file.
-    Prospect Update (db.update_prospect(start_ts, local)): 
-        This function updates the Prospect database. It takes a start_ts parameter (likely a timestamp) and a local boolean flag, 
-        suggesting different update paths depending on the context. 
-        The hardcoded timestamp '2090-11-14' likely serves as a placeholder for testing purposes.
-    Conditional Logic: 
-        The script uses boolean variables (mysql, pros, orc) to control which parts of the update process are executed. 
-        This allows for flexible testing of individual components.
-    Error Handling: 
-        Basic error handling is implemented for the Oracle integration (although currently inactive), demonstrating an awareness of potential issues.
-        However, more robust error handling might be beneficial for the active MySQL and Prospect update processes.
-    Circular Import Prevention: 
-        The commented-out lines related to sys.path manipulation indicate an attempt to address potential circular import issues, 
-        a common challenge in larger Python projects.
-    Local vs. Production Imports: 
-        The commented-out import statements suggest the script can be run with either local or production versions of the db and api modules. 
-        This is a common pattern for facilitating development and testing.
+
+    DB Update (db.update_leonics_db(...)): 
+        Updates the Leonics Raw database with data fetched from the Leonics API. 
+        Uses a timestamp to determine the range of data to fetch.
+
+    Prospect Update (db.update_prospect(...)): 
+        Updates the Prospect database. A local flag suggests different update paths for testing and production environments.
+        Hardcoded timestamps are likely placeholders for testing.
+
+    Conditional Logic: Boolean flags (UPDATE_DB, PROSPECT, ORACLE) 
+        control which databases are updated, enabling targeted testing.
+
+    Logging: 
+        Uses the logging module to record key events and errors, aiding in debugging and monitoring.
+
+    Configuration: 
+        Uses a constants module (const) to manage environment-specific settings, such as database credentials 
+        and API endpoints. Supports both local and production environments.
+
+    Inactive Code: 
+        Contains commented-out code related to Oracle and S3 integration, indicating potential future development or 
+        removed features. This code should be removed for clarity.
+
+    Versioning: 
+        Includes a function (utils.get_module_version) to retrieve the module's version, useful for tracking 
+        changes and deployments.
 """
+
 from datetime import datetime, timedelta
 import logging
-import re
 import os
 import pandas as pd
+import re
+import requests
+
 
 from unhcr import constants as const
 # OPTIONAL: set your own environment
@@ -47,9 +55,9 @@ from unhcr import db
 from unhcr import api_leonics
 
 
-if const.LOCAL: # testing with local python files
-    mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
-    utils, const, db, api_leonics, *rest = mods
+#if const.LOCAL: # testing with local python files
+mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
+utils, const, db, api_leonics, *rest = mods
 
 utils.log_setup(override=True)
 logging.info(f"PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
@@ -65,11 +73,25 @@ logging.info(f"Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logg
 ver, err = utils.get_module_version()
 logging.info(f"Version: {ver}   Error: {err}")
 
-mysql = True
-pros = True
-orc = False
+UPDATE_DB = True
+PROSPECT = True
+ORACLE = False
 
-if orc:
+def set_db_engine(ename):
+    #print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
+    ### set to AZURE
+    if db.default_engine.engine.name != ename:
+        if ename == 'postgresql':
+            const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
+            const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','qqqqq')
+            #print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
+        else:
+            const.TAKUM_RAW_CONN_STR =  os.getenv('TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
+            const.LEONICS_RAW_TABLE = os.getenv('LEONICS_RAW_TABLE','qqqqq')
+            #print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
+    return db.set_db_engine(const.TAKUM_RAW_CONN_STR)
+
+if ORACLE:
     try:
         orc_table = 'ORC_TAKUM_LEONICS_API_RAW'
 
@@ -93,33 +115,51 @@ if orc:
     except Exception as e:
         logging.error(f"ORACLE Error occurred: {e}")
 
-logging.debug('1111111111111111111111111')
-token = None
-if mysql or pros:
-    logging.debug('222222222222222222222')
-    token = api_leonics.checkAuth()
-    logging.debug('999999999999999999999999')
+if UPDATE_DB or PROSPECT:
 
-logging.debug(f'!!!!!!!!!!! {token}')
+    token = api_leonics.checkAuth()
+    assert(token is not None)
+
 if token:
-    if mysql:
-        max_dt, err = db.get_mysql_max_date()
+    logging.debug('Retrieved Leonics token')
+    if UPDATE_DB:
+        max_dt, err = db.get_db_max_date(db.default_engine, const.LEONICS_RAW_TABLE)
         if err:
-            logging.error(f"get_mysql_max_date Error occurred: {err}")
+            logging.error(f"get_db_max_date Error occurred: {err}")
             exit(1)
+        assert(max_dt is not None)
         st = (max_dt + timedelta(minutes=1)).date().isoformat()
         st = st.replace('-', '')
-        ed = (datetime.now() + timedelta(days=1)).date().isoformat()
+        ed = datetime.now() + timedelta(days=1)
+        # Leonics API has a limit of 10 days
+        if ed - max_dt > timedelta(days=10):
+            ed = max_dt + timedelta(days=10)
+        ed = ed.date().isoformat()
         ed = ed.replace('-', '')
-        df, err = api_leonics.getData(start=st,end=ed,token=token)
+        df_leonics, err = api_leonics.getData(start=st,end=ed,token=token)
         if err:
             logging.error(f"api_leonics.getData Error occurred: {err}")
             exit(2)
         # Convert the 'datetime_column' to pandas datetime
-        df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
-        res, err = db.update_mysql(max_dt,df, const.LEONICS_RAW_TABLE)
+        df_leonics['DateTimeServer'] = pd.to_datetime(df_leonics['DateTimeServer'])
+        res, err = db.update_leonics_db(max_dt,df_leonics, const.LEONICS_RAW_TABLE)
         if err:
-            logging.error(f"update_mysql Error occurred: {err}")
+            logging.error(f"update_leonics_db Error occurred: {err}")
+            exit(3)
+        else:
+            logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
+
+        set_db_engine('postgresql')
+
+        df_azure = df_leonics.copy()
+        df_azure['datetimeserver'] = pd.to_datetime(df_leonics['DateTimeServer'])
+        df_azure = df_azure.drop(columns=['DateTimeServer'])
+        df_azure.columns = df_azure.columns.str.lower()
+        res, err = db.update_leonics_db(max_dt,df_azure, const.LEONICS_RAW_TABLE, 'datetimeserver')
+        assert(res is not None)
+        assert(err is None)
+        if err:
+            logging.error(f"update_leonics_db Error occurred: {err}")
             exit(3)
         else:
             logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
@@ -127,104 +167,82 @@ else:
     logging.info('Failed to get Leonics token, exiting')
     exit()
 
-if pros:
-    # set start_time to highest DateTimeServer in Prospect
-    # TODO get from out API
-    db.update_prospect(local=True)
-    db.update_prospect(local=False)
+if PROSPECT:
+    set_db_engine('postgresql')
+    db.update_prospect() #AZURE
+
+
+    url = "http://localhost:3000"
+
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            logging.info(f"Server at {url} is responding. Status code: {response.status_code}")
+            res, err = db.update_prospect(local=True)
+            assert(res is not None)
+            assert(err is None)
+            logging.info(f"LOCAL: TRUE {res.status_code}:  {res.text}")
+        else:
+            logging.info(f"Server at {url} responded with status code: {response.status_code}")
+    except requests.ConnectionError:
+        logging.error(f"Server at {url} is not responding.")
+
+    res, err = db.update_prospect(local=False)
+    assert(res is not None)
+    assert(err is None)
+    logging.info(f"LOCAL: FALSE {res.status_code}:  {res.text}")
 
 ################################################################
 # Hey there - I've reviewed your changes - here's some feedback:
 
 # Overall Comments:
 
-# Replace numbered debug logging statements (111111, 222222, etc.) with meaningful log messages that describe what's happening at each step. This will make troubleshooting much easier.
-# Consider adding proper error handling around the database update operations. Currently only the authentication failure is handled, but other operations could also fail.
+# Consider moving the boolean flags (UPDATE_DB, PROSPECT, ORACLE) into a configuration file or environment variables for better maintainability and flexibility.
+# Remove commented-out code related to S3 and Oracle to improve code clarity. If these features are planned for future implementation, track them in issues/tickets instead.
+# Replace assertions with proper error handling that includes descriptive error messages, and consider defining exit codes as named constants.
 # Here's what I looked at during the review
 # 🟢 General issues: all looks good
 # 🟢 Security: all looks good
-# 🟡 Testing: 5 issues found
+# 🟡 Testing: 3 issues found
 # 🟢 Complexity: all looks good
 # 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:69
+# e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:113
 
-# suggestion(testing): Hardcoded test parameters
-# logging.info(f"Version: {ver}   Error: {err}")
-
-
-# mysql = True
-# pros = True
-# orc = False
-
-# The boolean flags mysql, pros, and orc are hardcoded. This limits the test coverage. Consider using test parameters or environment variables to control these flags, allowing for testing different combinations.
-
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:106
-
-# issue(testing): Missing assertions for `db.update_mysql()`
-
-# logging.debug(f'!!!!!!!!!!! {token}')
-# if token:
-#     if mysql:
-#         db.update_mysql(token)
-# else:
-#     logging.info('Failed to get Leonics token, exiting')
-# The test calls db.update_mysql(token) but doesn't assert anything about the result. Add assertions to verify that the MySQL database is updated correctly. For example, check if specific rows are added or modified.
+# issue(testing): Missing edge case tests for `api_leonics.getData()`.
+#             logging.error(f"get_db_max_date Error occurred: {err}")
+#             exit(1)
+#         assert(max_dt is not None)
+#         st = (max_dt + timedelta(minutes=1)).date().isoformat()
+#         st = st.replace('-', '')
+#         ed = (datetime.now() + timedelta(days=1)).date().isoformat()
+#         ed = ed.replace('-', '')
+#         df, err = api_leonics.getData(start=st,end=ed,token=token)
+#         if err:
+# Consider adding tests for api_leonics.getData() with invalid or empty start/end dates, or cases where the date range results in no data. This ensures the function handles various scenarios gracefully.
 
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:115
+# e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:123
 
-# issue(testing): Missing assertions and unclear purpose of hardcoded timestamps
-# if pros:
-#     # set start_time to highest DateTimeServer in Prospect
-#     # TODO get from out API
-#     db.update_prospect(local=True)
-#     db.update_prospect(local=False)
-
-# ################################################################
-# Similar to the MySQL update, this test lacks assertions. It's unclear why specific timestamps are hardcoded, especially so far in the future. Clarify the purpose of these timestamps and add assertions to verify the correct behavior of db.update_prospect() for both local=True and local=False scenarios.
-
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:101
-
-# issue(testing): Missing test for authentication failure
-# token = None
-# if mysql or pros:
-#     logging.debug('222222222222222222222')
-#     token = api_leonics.checkAuth()
-#     logging.debug('999999999999999999999999')
-
-# The test assumes api_leonics.checkAuth() will always succeed. Add a test case to simulate an authentication failure and verify that the script handles it gracefully, likely by logging an error and exiting.
+# issue(testing): Test `db.update_leonics_db` failure scenarios.
+#             exit(2)
+#         # Convert the 'datetime_column' to pandas datetime
+#         df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
+#         res, err = db.update_leonics_db(max_dt,df, const.LEONICS_RAW_TABLE)
+#         assert(res is not None)
+#         assert(err is None)
+#         if err:
+#             logging.error(f"update_leonics_db Error occurred: {err}")
+# Include tests where db.update_leonics_db encounters errors, such as database connection issues or data integrity violations. Verify that errors are properly logged and handled.
 
 # Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:74
+# e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:122
 
-# suggestion(testing): Inactive Oracle code should be removed
-# orc = False
+# issue(testing): Add test for DateTimeServer format variations.
+#             logging.error(f"api_leonics.getData Error occurred: {err}")
+#             exit(2)
+#         # Convert the 'datetime_column' to pandas datetime
+#         df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
+#         res, err = db.update_leonics_db(max_dt,df, const.LEONICS_RAW_TABLE)
+#         assert(res is not None)
+# Include a test case where the 'DateTimeServer' column in the dataframe has a different format or contains invalid date/time values. This ensures the script handles potential data inconsistencies gracefully.
 
-# if orc:
-#     try:
-#         orc_table = 'ORC_TAKUM_LEONICS_API_RAW'
-
-#         match = re.search(r'INSERT INTO (\w+) \((.*?)\) VALUES', s)
-#         table_name = match[1]
-#         columns = match[2]
-#         columns = '"' + columns.replace(', ','", "') + '"'
-
-#         # Extract individual rows
-#         rows = re.findall(r'\((.*?)\)', s)
-
-#         # Format for Oracle INSERT ALL
-#         oracle_insert = f"INSERT ALL\n"
-#         for x, row in enumerate(rows):
-#             if x != 0:
-#                 oracle_insert += f"    INTO {table_name} ({columns}) VALUES ({row})\n"
-#         oracle_insert += "SELECT * FROM dual;"
-
-#         with open("orc_sql.txt", "w") as file:
-#             file.write(oracle_insert)
-#     except Exception as e:
-#         logging.error(f"ORACLE Error occurred: {e}")
-
-# logging.debug('1111111111111111111111111')
-# The entire if orc block is inactive and seems related to Oracle integration, which is currently disabled. Remove this dead code to improve readability and maintainability.
