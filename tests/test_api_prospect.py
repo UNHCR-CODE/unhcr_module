@@ -2,7 +2,7 @@ import pytest
 import requests
 import pandas as pd
 from unhcr import constants as const
-from unhcr.api_prospect import get_prospect_url_key, api_in_prospect, get_prospect_last_data, prospect_get_start_ts
+from unhcr.api_prospect import get_prospect_url_key, api_in_prospect, get_prospect_last_data
 
 # Mocking requests.request to avoid actual API calls during testing
 @pytest.fixture
@@ -96,23 +96,3 @@ def test_get_prospect_last_data(response_text, expected_timestamp):
     print('#################', timestamp,expected_timestamp)
     # Assert
     assert timestamp == expected_timestamp
-
-
-@pytest.mark.parametrize(
-    "local, start_ts, expected_timestamp",
-    [
-        (True, None, "2024-08-15T12:00:00Z"),  # local_no_start_ts
-        (False, None, "2024-08-15T12:00:00Z"),  # external_no_start_ts
-        (True, "2024-08-14T12:00:00Z", "2024-08-14T12:00:00Z"),  # local_with_start_ts
-        (False, "2024-08-14T12:00:00Z", "2024-08-14T12:00:00Z"),  # external_with_start_ts
-    ],
-    ids=["local_no_start_ts", "external_no_start_ts", "local_with_start_ts", "external_with_start_ts"]
-)
-def test_prospect_get_start_ts(local, start_ts, expected_timestamp, mock_request):
-
-    # Act
-    timestamp = prospect_get_start_ts(local, start_ts)
-
-    # Assert
-    assert timestamp == expected_timestamp
-

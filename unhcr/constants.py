@@ -48,6 +48,10 @@ LEONICS_KEY = None
 # Verify SSL --- note that leonic's cert does not verify
 VERIFY = None
 
+# Prospect DB
+PROS_CONN_LOCAL_STR = None
+PROS_CONN_AZURE_STR = None
+
 # Aiven Mysql DB
 TAKUM_RAW_CONN_STR = None
 LEONICS_RAW_TABLE = None
@@ -73,6 +77,7 @@ API_OUT_KEY = None
 LOCAL_BASE_URL = None
 AZURE_BASE_URL = None
 LOCAL_API_IN_KEY = None
+AZURE_API_IN_KEY = None
 LOCAL_API_OUT_KEY = None
 
 # SOLARMAN NIGERIA
@@ -138,6 +143,8 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         Base URL for Azure instance of Prospect.
     LOCAL_API_IN_KEY : str
         API key for incoming requests to local Prospect instance.
+    AZURE_API_IN_KEY : str
+        API key for incoming requests to Azure Prospect instance.
     LOCAL_API_OUT_KEY : str
         API key for outgoing requests from local Prospect instance.
     SM_APP_ID : str
@@ -163,6 +170,8 @@ def set_environ():  # sourcery skip: extract-duplicate-method
 
     global VERIFY
 
+    global PROS_CONN_LOCAL_STR
+    global PROS_CONN_AZURE_STR
     global TAKUM_RAW_CONN_STR
     global LEONICS_RAW_TABLE
     global SQLALCHEMY_POOL_SIZE
@@ -182,6 +191,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     global LOCAL_BASE_URL
     global AZURE_BASE_URL
     global LOCAL_API_IN_KEY
+    global AZURE_API_IN_KEY
     global LOCAL_API_OUT_KEY
 
     global SM_APP_ID
@@ -207,6 +217,10 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     # sorcery skip
     VERIFY = False
 
+    # Prospect DB
+    PROS_CONN_LOCAL_STR = os.getenv("PROS_CONN_LOCAL_STR")
+    PROS_CONN_AZURE_STR = os.getenv("PROS_CONN_AZURE_STR")
+
     # Aiven Mysql DB
     TAKUM_RAW_CONN_STR = os.getenv("AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR")
     LEONICS_RAW_TABLE = os.getenv("LEONICS_RAW_TABLE")
@@ -231,6 +245,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     LOCAL_BASE_URL = os.getenv("PROS_LOCAL_BASE_URL")
     AZURE_BASE_URL = os.getenv("PROS_AZURE_BASE_URL")
     LOCAL_API_IN_KEY = os.getenv("PROS_IN_LOCAL_API_KEY")
+    AZURE_API_IN_KEY = os.getenv("PROS_IN_AZURE_API_KEY")
     LOCAL_API_OUT_KEY = os.getenv("PROS_OUT_LOCAL_API_KEY")
 
     # SOLARMAN NIGERIA

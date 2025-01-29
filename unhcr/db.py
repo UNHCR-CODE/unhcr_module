@@ -10,7 +10,7 @@ sql_execute(sql, engine=default_engine, data=None):
     Executes SQL queries against the DB database. Handles session management and utilizes connection pooling. 
     Important: Vulnerable to SQL injection in update_rows due to string formatting.
 
-update_leonics_db(max_dt, df, table_name, key='DateTimeServer'): 
+update_leonics_db(max_dt, df, table_name, key='DatetimeServer'): 
     Orchestrates the database update process. Retrieves the latest timestamp from the database, filters new data from the 
     input DataFrame, and inserts the new data into the specified table. Includes error handling.
 
@@ -33,6 +33,7 @@ backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, start
 from contextlib import contextmanager
 from datetime import datetime
 import logging
+from types import SimpleNamespace
 import pandas as pd
 from sqlalchemy import create_engine, exc,orm, text
 
@@ -45,10 +46,12 @@ if const.LOCAL:  # testing with local python files
     )
 
 default_engine = None
+prospect_engine = None
 
 # Create a connection pool
 def set_db_engine(connection_string):
     global default_engine
+    global prospect_engine
     """
     Create a SQLAlchemy engine with configurable connection pooling.
 
@@ -62,15 +65,13 @@ def set_db_engine(connection_string):
     :param connection_string: A DB connection string, e.g. DB://user:pass@host/db
     :return: A SQLAlchemy engine
     """
-    default_engine = create_engine(
+    return  create_engine(
         connection_string,
         pool_size=const.SQLALCHEMY_POOL_SIZE,
         pool_timeout=const.SQLALCHEMY_POOL_TIMEOUT,
         pool_recycle=const.SQLALCHEMY_POOL_RECYCLE,
         max_overflow=const.SQLALCHEMY_MAX_OVERFLOW
     )
-
-    return default_engine
 
 @contextmanager
 def get_db_session(engine):
@@ -150,7 +151,7 @@ def sql_execute(sql, engine=default_engine, data=None):
         finally:
             session.close()
 
-set_db_engine(const.TAKUM_RAW_CONN_STR)
+default_engine = set_db_engine(const.TAKUM_RAW_CONN_STR)
 
 def get_db_max_date(engine=default_engine, table_name='TAKUM_LEONICS_API_RAW'):
     """
@@ -175,7 +176,7 @@ def get_db_max_date(engine=default_engine, table_name='TAKUM_LEONICS_API_RAW'):
         return None, e
 
 
-def update_leonics_db(max_dt, df, table_name, key='DateTimeServer'):
+def update_leonics_db(max_dt, df, table_name, key='DatetimeServer'):
     """
     Orchestrates the database update process. It retrieves the latest timestamp from the database,
 
@@ -198,7 +199,7 @@ def update_rows(max_dt, df, table_name, key='DateTimeServer'):
     Updates the specified DB table with new data from a DataFrame.
 
     This function processes and inserts new data into a DB table by filtering
-    the input DataFrame for records with 'DateTimeServer' greater than the specified
+    the input DataFrame for records with 'DatetimeServer' greater than the specified
     max_dt. The filtered data is formatted and used to generate a SQL bulk INSERT
     statement with an ON DUPLICATE KEY UPDATE clause to handle existing records.
 
@@ -215,6 +216,12 @@ def update_rows(max_dt, df, table_name, key='DateTimeServer'):
     threshold = pd.to_datetime(max_dt.isoformat())
     # Filter rows where datetime_column is greater than or equal to the threshold
     df_filtered = df[df[key] > threshold]
+    l = len(df_filtered)
+    ##### warning df_filtered.drop_duplicates(subset=key, keep="first", inplace=True)
+    df_filtered = df_filtered.drop_duplicates(subset=key, keep="first")
+    print(l-len(df_filtered))
+    if l == 0:
+        return SimpleNamespace(rowcount=0), None
 
     # TODO not substituting params correctly
     # # Prepare columns and placeholders for a single insert statement
@@ -383,6 +390,69 @@ def update_rows(max_dt, df, table_name, key='DateTimeServer'):
     return res, None
 
 
+def prospect_get_start_ts(local=None, start_ts=None):
+    """
+    Retrieves data from the Prospect API and updates the MySQL database.
+
+    This function constructs a URL and fetches data from the Prospect API using the provided
+    function to get the necessary URL and API key. It then retrieves the latest timestamp
+    from the API response, queries the MySQL database for newer records, and sends this data
+    back to the Prospect API. If the API call fails, it logs an error and exits the program.
+
+    Args:
+        func (callable): A function that returns the API URL and key based on the 'local' flag.
+        local (bool): A flag indicating whether to retrieve data from the local or external
+                      Prospect API. When True, retrieves from the local API.
+        start_ts (str, optional): The timestamp to start retrieval from. If not provided (default),
+                                  retrieves the latest timestamp from the Prospect API.
+
+    Raises:
+        SystemExit: Exits the program if the Prospect API call fails.
+
+    Logs:
+        Various debug and informational logs, including headers, keys, URLs, and response
+        statuses. Also logs errors if API calls or database operations fail.
+    """
+    
+    if start_ts is not None:
+        return start_ts
+    else:
+        server = 'datetimeserver'
+        postfix = 'sys_%'
+        conn_str = const.PROS_CONN_AZURE_STR
+        if local:
+            ########server = 'DatetimeServer'
+            #########postfix = 'raw_%' 
+            conn_str = const.PROS_CONN_LOCAL_STR
+        prospect_engine = set_db_engine(conn_str)
+        sql = f"select custom->>'{server}', external_id from data_custom where external_id like '{postfix}' order by custom->>'{server}' desc limit 1"
+        dt, err = sql_execute(sql, prospect_engine)
+        assert err is None
+        dt = dt.fetchall()
+        val = dt[0][0]
+        return datetime.strptime(val, "%Y-%m-%d %H:%M")
+
+
+    # url, key = get_prospect_url_key(local, out=True)
+    # sid = 3 if local or local is None else 421 #!!!!!!!!!!
+    # url += f"/v1/out/custom/?size=100&page=1&q[source_id_eq]={sid}&q[external_id_start]=sys_&q[custom->>datetimeserver_gte]=2024-10-11     #&q[s]=updated_at+desc"
+    # payload = {}
+    # headers = {
+    #     "Authorization": f"Bearer {key}",
+    # }
+
+    # if start_ts is None:
+    #     response = requests.request(
+    #         "GET", url, headers=headers, data=payload, verify=const.VERIFY
+    #     )
+    #     #j = json.loads(response.text)
+    #     # json.dumps(j, indent=2)
+    #     start_ts = get_prospect_last_data(response)
+    
+    # logging.info(f"\n\n{url}\n{start_ts}")
+    # return start_ts
+
+
 def update_prospect(start_ts=None, local=None, table_name = const.LEONICS_RAW_TABLE):
     """
     Updates the Prospect API with new data entries.
@@ -401,9 +471,9 @@ def update_prospect(start_ts=None, local=None, table_name = const.LEONICS_RAW_TA
 
     logging.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
     try:
-        start_ts = api_prospect.prospect_get_start_ts(local, start_ts)
+        start_ts = prospect_get_start_ts(local, start_ts)
         res, err = sql_execute(
-            f"select * FROM {table_name} where DatetimeServer > '{start_ts}' order by DatetimeServer",
+            f"select * FROM {table_name} where DatetimeServer >= '{start_ts}' order by DatetimeServer  limit 50000;",
             default_engine
         )
         assert err is None
@@ -413,8 +483,10 @@ def update_prospect(start_ts=None, local=None, table_name = const.LEONICS_RAW_TA
         # Convert the result to a Pandas DataFrame
         columns = res.keys()  # Get column names
         df = pd.DataFrame(rows, columns=columns)
-
-        df["external_id"] = df["external_id"].astype(str).apply(lambda x: "sys_" + x)
+        postfix='sys_'
+        # if local:
+        #     postfix='raw_'
+        df["external_id"] = df["external_id"].astype(str).apply(lambda x: postfix + x)
 
         res = api_prospect.api_in_prospect(df, local)
         if res is None:
@@ -486,7 +558,7 @@ def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TA
     """
 
     url, key = func(local, out=True)
-    sid = 1 if local else 421
+    sid = 3 if local else 421
     url += f"/v1/out/custom/?size=50&page=1&q[source_id_eq]={sid}&q[s]=created_at+desc"
     payload = {}
     headers = {
@@ -508,8 +580,10 @@ def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TA
     # Convert the result to a Pandas DataFrame
     columns = res.keys()  # Get column names
     df = pd.DataFrame(rows, columns=columns)
-
-    df["external_id"] = df["external_id"].astype(str).apply(lambda x: "sys_" + x)
+    postfix='sys_'
+    # if local:
+    #     postfix='raw_'
+    df["external_id"] = df["external_id"].astype(str).apply(lambda x: postfix + x)
 
     res = api_prospect.api_in_prospect(df, local)
     if res is None:

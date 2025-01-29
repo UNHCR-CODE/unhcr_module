@@ -122,7 +122,7 @@ def test_checkAuth(
             pd.DataFrame(
                 {
                     "BDI1_Power_P1_kW": [10.5],
-                    "DateTimeServer": ["2024-08-20 00:00"],
+                    "DatetimeServer": ["2024-08-20 00:00"],
                 }
             ),
             None,

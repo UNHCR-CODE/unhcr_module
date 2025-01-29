@@ -18,12 +18,8 @@ Key Components
     get_prospect_last_data(response): 
         Parses the Prospect API response and extracts the latest timestamp from the returned data. This timestamp is
         used to retrieve newer records in subsequent calls.
-
-    prospect_get_start_ts(local=None, start_ts=None): 
-        Retrieves data from the Prospect API and determines the starting timestamp for data synchronization. 
-        If start_ts is not provided, it fetches the latest timestamp from the API. The local flag indicates whether to 
-        interact with the local or external Prospect instance.
 """
+import datetime
 import json
 import logging
 import re
@@ -62,6 +58,7 @@ def get_prospect_url_key(local=None, out=False):
     #AZURE
     if local is None:
         url = const.AZURE_BASE_URL
+        if not out: key = const.AZURE_API_IN_KEY
 
     logging.debug(f'ZZZZZZZZZZZZZZZ\nlocal  {local}\n out {out}\nurl {url}\nZZZZZZZZZZZZZZ')
     return url, key
@@ -106,7 +103,7 @@ def api_in_prospect(df, local=None, ):  # sourcery skip: extract-method
         return df
 
     try:
-        df = map_columns(df)
+        #############df = map_columns(df)
         url, key = get_prospect_url_key(local)
         url += '/v1/in/custom'
 
@@ -155,48 +152,6 @@ def get_prospect_last_data(response, key='datetimeserver'):
     except Exception as e:
         logging.error(f'ERROR: get_prospect_last_data {e}')
     return res
-
-
-def prospect_get_start_ts(local=None, start_ts=None):
-    """
-    Retrieves data from the Prospect API and updates the MySQL database.
-
-    This function constructs a URL and fetches data from the Prospect API using the provided
-    function to get the necessary URL and API key. It then retrieves the latest timestamp
-    from the API response, queries the MySQL database for newer records, and sends this data
-    back to the Prospect API. If the API call fails, it logs an error and exits the program.
-
-    Args:
-        func (callable): A function that returns the API URL and key based on the 'local' flag.
-        local (bool): A flag indicating whether to retrieve data from the local or external
-                      Prospect API. When True, retrieves from the local API.
-        start_ts (str, optional): The timestamp to start retrieval from. If not provided (default),
-                                  retrieves the latest timestamp from the Prospect API.
-
-    Raises:
-        SystemExit: Exits the program if the Prospect API call fails.
-
-    Logs:
-        Various debug and informational logs, including headers, keys, URLs, and response
-        statuses. Also logs errors if API calls or database operations fail.
-    """
-    url, key = get_prospect_url_key(local, out=True)
-    sid = 1 if local or local is None else 421
-    url += f"/v1/out/custom/?size=10&page=1&q[source_id_eq]={sid}&q[external_id_start]=sys_&q[s]=external_id+desc"
-    payload = {}
-    headers = {
-        "Authorization": f"Bearer {key}",
-    }
-
-    response = requests.request(
-        "GET", url, headers=headers, data=payload, verify=const.VERIFY
-    )
-    if start_ts is None:
-        start_ts = get_prospect_last_data(response)
-    j = json.loads(response.text)
-    # json.dumps(j, indent=2)
-    logging.info(f"\n\n{url}\n{start_ts}")
-    return start_ts
 
 ########################################
 # Hey there - I've reviewed your changes - here's some feedback:

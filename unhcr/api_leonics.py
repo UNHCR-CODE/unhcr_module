@@ -159,7 +159,7 @@ def getData(start, end, token=None):
         if res.status_code != 200:
             return None, res.status_code
         df = pd.DataFrame(res.json())
-        df["DateTimeServer"] = df.apply(
+        df["DatetimeServer"] = df.apply(
             lambda row: str(row["A_DateServer"]) + " " + str(row["A_TimeServer"]),
             axis=1,
         )
