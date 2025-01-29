@@ -6,7 +6,7 @@ Overview
     A critical vulnerability exists: the update_rows function is susceptible to SQL injection.
 
 Key Components
-sql_execute(sql, engine=default_engine, data=None): 
+sql_execute(sql, engine=default_engine, data=None):
     Executes SQL queries against the DB database. Handles session management and utilizes connection pooling. 
     Important: Vulnerable to SQL injection in update_rows due to string formatting.
 
@@ -14,11 +14,11 @@ update_leonics_db(max_dt, df, table_name, key='DatetimeServer'):
     Orchestrates the database update process. Retrieves the latest timestamp from the database, filters new data from the 
     input DataFrame, and inserts the new data into the specified table. Includes error handling.
 
-update_rows(max_dt, df, table_name): 
+update_rows(max_dt, df, table_name, key="DateTimeServer"): 
     Inserts new data into the DB database. Filters the DataFrame, formats data, and performs a bulk INSERT with an 
     ON DUPLICATE KEY UPDATE clause. The ON DUPLICATE KEY UPDATE clause is excessively long and should be refactored.
 
-update_prospect(start_ts=None, local=True): 
+update_prospect(start_ts=None, local=True, table_name=const.LEONICS_RAW_TABLE): 
     Manages updates to the Prospect API. Retrieves the latest timestamp from Prospect, queries the database for newer records,
     and sends them to the API. This function could benefit from being broken down into smaller, more manageable functions.
 
@@ -26,16 +26,17 @@ set_db_engine(connection_string):
     Creates and returns a SQLAlchemy engine with connection pooling for efficient database access. Pool parameters are 
     configurable via environment variables.
 
-backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, start_ts, local, table_name): 
+WIP backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, start_ts, local, table_name): 
     These functions appear to be related to backfilling data into the Prospect API but are marked as "WIP" 
     (work in progress) and are not fully functional.
 """
+
 from contextlib import contextmanager
 from datetime import datetime
 import logging
 from types import SimpleNamespace
 import pandas as pd
-from sqlalchemy import create_engine, exc,orm, text
+from sqlalchemy import create_engine, exc, orm, text
 
 from unhcr import constants as const
 from unhcr import api_prospect
@@ -47,6 +48,7 @@ if const.LOCAL:  # testing with local python files
 
 default_engine = None
 prospect_engine = None
+
 
 # Create a connection pool
 def set_db_engine(connection_string):
@@ -65,13 +67,14 @@ def set_db_engine(connection_string):
     :param connection_string: A DB connection string, e.g. DB://user:pass@host/db
     :return: A SQLAlchemy engine
     """
-    return  create_engine(
+    return create_engine(
         connection_string,
         pool_size=const.SQLALCHEMY_POOL_SIZE,
         pool_timeout=const.SQLALCHEMY_POOL_TIMEOUT,
         pool_recycle=const.SQLALCHEMY_POOL_RECYCLE,
-        max_overflow=const.SQLALCHEMY_MAX_OVERFLOW
+        max_overflow=const.SQLALCHEMY_MAX_OVERFLOW,
     )
+
 
 @contextmanager
 def get_db_session(engine):
@@ -121,8 +124,8 @@ def sql_execute(sql, engine=default_engine, data=None):
             return False, {
                 "error_type": type(db_error).__name__,
                 "error_message": str(db_error),
-                "sql": sql
-        }
+                "sql": sql,
+            }
         except ValueError as val_error:
             session.rollback()
             error_msg = f"Data validation error: {str(val_error)}"
@@ -130,7 +133,7 @@ def sql_execute(sql, engine=default_engine, data=None):
             return False, {
                 "error_type": "ValidationError",
                 "error_message": str(val_error),
-                "sql": sql
+                "sql": sql,
             }
         except Exception as e:
             session.rollback()
@@ -139,34 +142,30 @@ def sql_execute(sql, engine=default_engine, data=None):
             return False, {
                 "error_type": type(e).__name__,
                 "error_message": str(e),
-                "sql": sql
+                "sql": sql,
             }
         except Exception as e:
             session.rollback()
             return False, {
                 "error_type": type(e).__name__,
                 "error_message": str(e),
-                "sql": sql
+                "sql": sql,
             }
         finally:
             session.close()
 
+
 default_engine = set_db_engine(const.TAKUM_RAW_CONN_STR)
 
-def get_db_max_date(engine=default_engine, table_name='TAKUM_LEONICS_API_RAW'):
-    """
-    Retrieves the most recent timestamp from the DB database.
 
-    Args:
-        engine (sqlalchemy.engine.Engine): SQLAlchemy engine (optional, will use default if not provided)
-
-    Returns:
-        tuple: A tuple containing the most recent timestamp in the database and an error message if any.
+def get_db_max_date(engine=default_engine, table_name="TAKUM_LEONICS_API_RAW"):
     """
+    Retrieves the latest timestamp from the database. If the database is empty or an error occurs,
+    returns None and the error.
+    """
+
     try:
-        dt, err = sql_execute(
-            f"select max(DatetimeServer) FROM {table_name}", engine
-        )
+        dt, err = sql_execute(f"select max(DatetimeServer) FROM {table_name}", engine)
         assert err is None
         dt = dt.fetchall()
         val = dt[0][0]
@@ -176,40 +175,68 @@ def get_db_max_date(engine=default_engine, table_name='TAKUM_LEONICS_API_RAW'):
         return None, e
 
 
-def update_leonics_db(max_dt, df, table_name, key='DatetimeServer'):
-    """
-    Orchestrates the database update process. It retrieves the latest timestamp from the database,
-
-    Args:
-        max_dt (datetime): Maximum datetime for filtering records
-        df (pandas.DataFrame): DataFrame to be updated in the database
-        table_name (str): Name of the database table to update
-
-    Returns:
-        tuple: (success_flag, error_message_or_None)
-    """
-
-    # Existing update logic would go here
-    # If no specific exception is raised, return success
-    return update_rows(max_dt, df, table_name, key)
-
-
-def update_rows(max_dt, df, table_name, key='DateTimeServer'):
+def update_leonics_db(max_dt, df, table_name, key="DatetimeServer"):
     """
     Updates the specified DB table with new data from a DataFrame.
 
     This function processes and inserts new data into a DB table by filtering
     the input DataFrame for records with 'DatetimeServer' greater than the specified
     max_dt. The filtered data is formatted and used to generate a SQL bulk INSERT
-    statement with an ON DUPLICATE KEY UPDATE clause to handle existing records.
+    statement, which is then executed.
 
-    Args:
-        max_dt (datetime): The maximum datetime to be used as a threshold for filtering new data.
-        df (pandas.DataFrame): The DataFrame containing new data to be inserted into the database.
-        table_name (str): The name of the DB table to update.
+    Parameters
+    ----------
+    max_dt : datetime
+        The maximum timestamp to filter against.
+    df : pandas.DataFrame
+        The DataFrame containing the new data to be inserted.
+    table_name : str
+        The name of the table to be updated.
+    key : str
+        The column name of the timestamp to filter against.
 
-    Returns:
-        tuple: A tuple containing the result of the SQL execution and an error message if any.
+    Returns
+    -------
+    tuple
+        A tuple containing the result of the update attempt (bool) and
+        an error (dict) if the update failed. The error dict contains
+        information about the error: error_type, error_message, and sql.
+    """
+    return update_rows(max_dt, df, table_name, key)
+
+
+def update_rows(max_dt, df, table_name, key="DateTimeServer"):
+    """
+    Inserts new data into the specified DB table by filtering and formatting a DataFrame.
+
+    This function filters the input DataFrame for records with the specified key greater than
+    the given max_dt threshold, removes duplicates, and constructs a SQL INSERT statement.
+    The SQL statement includes an ON DUPLICATE KEY UPDATE clause to handle duplicate entries.
+
+    Parameters
+    ----------
+    max_dt : datetime
+        The maximum timestamp to filter against.
+    df : pandas.DataFrame
+        The DataFrame containing the data to be inserted.
+    table_name : str
+        The name of the table to be updated.
+    key : str, optional
+        The column name of the timestamp to filter against, by default "DateTimeServer".
+
+    Returns
+    -------
+    tuple
+        A tuple containing the result of the update attempt (SimpleNamespace) and
+        an error (None) if the update succeeds. If the update fails, returns None
+        and an error string.
+
+    Notes
+    -----
+    - The DataFrame is filtered to exclude duplicates based on the specified key.
+    - The SQL query is generated with an ON DUPLICATE KEY UPDATE clause to update
+      existing records.
+    - SQL injection vulnerability exists due to direct string formatting in the query.
     """
 
     # Define the threshold datetime
@@ -217,9 +244,8 @@ def update_rows(max_dt, df, table_name, key='DateTimeServer'):
     # Filter rows where datetime_column is greater than or equal to the threshold
     df_filtered = df[df[key] > threshold]
     l = len(df_filtered)
-    ##### warning df_filtered.drop_duplicates(subset=key, keep="first", inplace=True)
     df_filtered = df_filtered.drop_duplicates(subset=key, keep="first")
-    print(l-len(df_filtered))
+    print(l - len(df_filtered))
     if l == 0:
         return SimpleNamespace(rowcount=0), None
 
@@ -271,115 +297,17 @@ def update_rows(max_dt, df, table_name, key='DateTimeServer'):
     values.replace("'err'", "NULL")
     # Full DB INSERT statement
     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values}"
-    sql_pred = """ ON DUPLICATE KEY UPDATE
-    BDI1_Power_P1_kW = VALUES(BDI1_Power_P1_kW),
-    BDI1_Power_P2_kW = VALUES(BDI1_Power_P2_kW),
-    BDI1_Power_P3_kW = VALUES(BDI1_Power_P3_kW),
-    BDI1_Total_Power_kW = VALUES(BDI1_Total_Power_kW),
-    BDI1_Freq = VALUES(BDI1_Freq),
-    BDI1_ACinput_Voltage_L1 = VALUES(BDI1_ACinput_Voltage_L1),
-    BDI1_ACinput_Voltage_L2 = VALUES(BDI1_ACinput_Voltage_L2),
-    BDI1_ACinput_Voltage_L3 = VALUES(BDI1_ACinput_Voltage_L3),
-    BDI1_ACinput_P1_kW = VALUES(BDI1_ACinput_P1_kW),
-    BDI1_ACinput_P2_kW = VALUES(BDI1_ACinput_P2_kW),
-    BDI1_ACinput_P3_kW = VALUES(BDI1_ACinput_P3_kW),
-    BDI1_ACinput_Total_kW = VALUES(BDI1_ACinput_Total_kW),
-    BDI1_Batt_Voltage = VALUES(BDI1_Batt_Voltage),
-    BDI1_Today_Supply_AC_kWh = VALUES(BDI1_Today_Supply_AC_kWh),
-    BDI1_Todate_Supply_AC_kWh = VALUES(BDI1_Todate_Supply_AC_kWh),
-    BDI2_Power_P1_kW = VALUES(BDI2_Power_P1_kW),
-    BDI2_Power_P2_kW = VALUES(BDI2_Power_P2_kW),
-    BDI2_Power_P3_kW = VALUES(BDI2_Power_P3_kW),
-    BDI2_Total_Power_kW = VALUES(BDI2_Total_Power_kW),
-    BDI2_Freq = VALUES(BDI2_Freq),
-    BDI2_ACinput_Voltage_L1 = VALUES(BDI2_ACinput_Voltage_L1),
-    BDI2_ACinput_Voltage_L2 = VALUES(BDI2_ACinput_Voltage_L2),
-    BDI2_ACinput_Voltage_L3 = VALUES(BDI2_ACinput_Voltage_L3),
-    BDI2_ACinput_P1_kW = VALUES(BDI2_ACinput_P1_kW),
-    BDI2_ACinput_P2_kW = VALUES(BDI2_ACinput_P2_kW),
-    BDI2_ACinput_P3_kW = VALUES(BDI2_ACinput_P3_kW),
-    BDI2_ACinput_Total_kW = VALUES(BDI2_ACinput_Total_kW),
-    BDI2_Today_Batt_Chg_kWh = VALUES(BDI2_Today_Batt_Chg_kWh),
-    BDI2_Todate_Batt_Chg_kWh = VALUES(BDI2_Todate_Batt_Chg_kWh),
-    BDI2_Today_Batt_DisChg_kWh = VALUES(BDI2_Today_Batt_DisChg_kWh),
-    BDI2_Todate_Batt_DisChg_kWh = VALUES(BDI2_Todate_Batt_DisChg_kWh),
-    SCC1_PV_Voltage = VALUES(SCC1_PV_Voltage),
-    SCC1_PV_Current = VALUES(SCC1_PV_Current),
-    SCC1_PV_Power_kW = VALUES(SCC1_PV_Power_kW),
-    SCC1_Chg_Voltage = VALUES(SCC1_Chg_Voltage),
-    SCC1_Chg_Current = VALUES(SCC1_Chg_Current),
-    SCC1_Chg_Power_kW = VALUES(SCC1_Chg_Power_kW),
-    SCC1_Today_Chg_kWh = VALUES(SCC1_Today_Chg_kWh),
-    SCC1_Today_PV_kWh = VALUES(SCC1_Today_PV_kWh),
-    SCC1_Todate_Chg_kWh = VALUES(SCC1_Todate_Chg_kWh),
-    SCC1_Todate_PV_kWh = VALUES(SCC1_Todate_PV_kWh),
-    HVB1_Avg_V = VALUES(HVB1_Avg_V),
-    HVB1_Batt_I = VALUES(HVB1_Batt_I),
-    HVB1_SOC = VALUES(HVB1_SOC),
-    LoadPM_Power_P1_kW = VALUES(LoadPM_Power_P1_kW),
-    LoadPM_Power_P2_kW = VALUES(LoadPM_Power_P2_kW),
-    LoadPM_Power_P3_kW = VALUES(LoadPM_Power_P3_kW),
-    LoadPM_Total_P_kW = VALUES(LoadPM_Total_P_kW),
-    LoadPM_Import_kWh = VALUES(LoadPM_Import_kWh),
-    LoadPM_Today_Import_kWh = VALUES(LoadPM_Today_Import_kWh),
-    DCgen_Alternator_Voltage = VALUES(DCgen_Alternator_Voltage),
-    DCgen_Alternator_Current = VALUES(DCgen_Alternator_Current),
-    DCgen_Alternator_Power_kW = VALUES(DCgen_Alternator_Power_kW),
-    DCgen_LoadBattery_Voltage = VALUES(DCgen_LoadBattery_Voltage),
-    DCgen_LoadBattery_Current = VALUES(DCgen_LoadBattery_Current),
-    DCgen_LoadBattery_Power_kW = VALUES(DCgen_LoadBattery_Power_kW),
-    DCgen_Alternator_Temp = VALUES(DCgen_Alternator_Temp),
-    DCgen_Diode_Temp = VALUES(DCgen_Diode_Temp),
-    DCgen_Max_Voltage = VALUES(DCgen_Max_Voltage),
-    DCgen_Max_Current = VALUES(DCgen_Max_Current),
-    DCgen_Low_Voltage_Start = VALUES(DCgen_Low_Voltage_Start),
-    DCgen_High_Voltage_Stop = VALUES(DCgen_High_Voltage_Stop),
-    DCgen_Low_Current_Stop = VALUES(DCgen_Low_Current_Stop),
-    DCgen_Oil_Pressure = VALUES(DCgen_Oil_Pressure),
-    DCgen_Coolant_Temp = VALUES(DCgen_Coolant_Temp),
-    DCgen_StartingBatteryVoltage = VALUES(DCgen_StartingBatteryVoltage),
-    DCgen_RPM = VALUES(DCgen_RPM),
-    DCgen_Min_RPM = VALUES(DCgen_Min_RPM),
-    DCgen_Max_RPM = VALUES(DCgen_Max_RPM),
-    DCgen_Engine_Runtime = VALUES(DCgen_Engine_Runtime),
-    DCgen_Ambient_Temp = VALUES(DCgen_Ambient_Temp),
-    DCgen_RPM_Frequency = VALUES(DCgen_RPM_Frequency),
-    DCgen_Throttle_Stop = VALUES(DCgen_Throttle_Stop),
-    DCgen_Fuel_Level = VALUES(DCgen_Fuel_Level),
-    DCgen_Total_kWh = VALUES(DCgen_Total_kWh),
-    DCgen_Today_kWh = VALUES(DCgen_Today_kWh),
-    FlowMeter_Fuel_Temp = VALUES(FlowMeter_Fuel_Temp),
-    FlowMeter_Total_Fuel_consumption = VALUES(FlowMeter_Total_Fuel_consumption),
-    FlowMeter_Today_Fuel_consumption = VALUES(FlowMeter_Today_Fuel_consumption),
-    FlowMeter_Hourly_Fuel_consumptionRate = VALUES(FlowMeter_Hourly_Fuel_consumptionRate),
-    ana1_Inv_Room_Temp = VALUES(ana1_Inv_Room_Temp),
-    ana2_Inv_room_RH = VALUES(ana2_Inv_room_RH),
-    ana3_Batt_Room_Temp = VALUES(ana3_Batt_Room_Temp),
-    ana4_Batt_room_RH = VALUES(ana4_Batt_room_RH),
-    ana5_Fuel_Level1 = VALUES(ana5_Fuel_Level1),
-    ana6_Fuel_Level2 = VALUES(ana6_Fuel_Level2),
-    Out1_CloseMC1 = VALUES(Out1_CloseMC1),
-    Out2_StartGen = VALUES(Out2_StartGen),
-    Out3_EmergencyStop = VALUES(Out3_EmergencyStop),
-    Out4 = VALUES(Out4),
-    Out5 = VALUES(Out5),
-    Out6 = VALUES(Out6),
-    Out7 = VALUES(Out7),
-    Out8 = VALUES(Out8),
-    In1_BDI_Fail = VALUES(In1_BDI_Fail),
-    In2_ATS_status = VALUES(In2_ATS_status),
-    In3_door_sw = VALUES(In3_door_sw),
-    In4 = VALUES(In4),
-    In5 = VALUES(In5),
-    In6 = VALUES(In6),
-    In7 = VALUES(In7),
-    In8 = VALUES(In8);"""
-    if default_engine.engine.name == 'postgresql':
+    sql_pred = " ON DUPLICATE KEY UPDATE "
+
+    if default_engine.engine.name == "postgresql":
         sql_pred = " ON CONFLICT (datetimeserver) DO UPDATE SET "
         for col in df_filtered.columns:
             sql_pred += f"{col} = EXCLUDED.{col}, "
-        sql_pred = sql_pred[:-2] + ";"
-    
+    else:
+        for col in df_filtered.columns:
+            sql_pred += f"{col} = VALUES({col}), "
+    sql_pred = sql_pred[:-2] + ";"
+
     sql_query += sql_pred
     res, err = sql_execute(sql_query, default_engine)
     assert err is None
@@ -400,7 +328,6 @@ def prospect_get_start_ts(local=None, start_ts=None):
     back to the Prospect API. If the API call fails, it logs an error and exits the program.
 
     Args:
-        func (callable): A function that returns the API URL and key based on the 'local' flag.
         local (bool): A flag indicating whether to retrieve data from the local or external
                       Prospect API. When True, retrieves from the local API.
         start_ts (str, optional): The timestamp to start retrieval from. If not provided (default),
@@ -413,16 +340,14 @@ def prospect_get_start_ts(local=None, start_ts=None):
         Various debug and informational logs, including headers, keys, URLs, and response
         statuses. Also logs errors if API calls or database operations fail.
     """
-    
+
     if start_ts is not None:
         return start_ts
     else:
-        server = 'datetimeserver'
-        postfix = 'sys_%'
+        server = "datetimeserver"
+        postfix = "sys_%"
         conn_str = const.PROS_CONN_AZURE_STR
         if local:
-            ########server = 'DatetimeServer'
-            #########postfix = 'raw_%' 
             conn_str = const.PROS_CONN_LOCAL_STR
         prospect_engine = set_db_engine(conn_str)
         sql = f"select custom->>'{server}', external_id from data_custom where external_id like '{postfix}' order by custom->>'{server}' desc limit 1"
@@ -433,40 +358,25 @@ def prospect_get_start_ts(local=None, start_ts=None):
         return datetime.strptime(val, "%Y-%m-%d %H:%M")
 
 
-    # url, key = get_prospect_url_key(local, out=True)
-    # sid = 3 if local or local is None else 421 #!!!!!!!!!!
-    # url += f"/v1/out/custom/?size=100&page=1&q[source_id_eq]={sid}&q[external_id_start]=sys_&q[custom->>datetimeserver_gte]=2024-10-11     #&q[s]=updated_at+desc"
-    # payload = {}
-    # headers = {
-    #     "Authorization": f"Bearer {key}",
-    # }
-
-    # if start_ts is None:
-    #     response = requests.request(
-    #         "GET", url, headers=headers, data=payload, verify=const.VERIFY
-    #     )
-    #     #j = json.loads(response.text)
-    #     # json.dumps(j, indent=2)
-    #     start_ts = get_prospect_last_data(response)
-    
-    # logging.info(f"\n\n{url}\n{start_ts}")
-    # return start_ts
-
-
-def update_prospect(start_ts=None, local=None, table_name = const.LEONICS_RAW_TABLE):
+def update_prospect(start_ts=None, local=None, table_name=const.LEONICS_RAW_TABLE):
     """
-    Updates the Prospect API with new data entries.
+    Updates the Prospect API with new data entries from the database.
 
-    This function initiates the update process for the Prospect API by retrieving the
-    necessary keys and URL based on the local flag. It logs the starting timestamp
-    and handles any exceptions that occur during the process.
+    This function retrieves the latest data entries from the specified database table
+    since the given timestamp and sends them to the Prospect API. The data entries
+    are fetched in batches and transformed into a Pandas DataFrame before being sent
+    to the API. The function logs the update process and handles any exceptions that occur.
 
     Args:
-        start_ts (str, optional): The starting timestamp for the update process. Defaults to None.
-        local (bool, optional): A flag indicating whether the update is local or not. Defaults to True.
+        start_ts (str, optional): The starting timestamp for the data retrieval process. Defaults to None.
+        local (bool, optional): A flag indicating whether to use the local or external Prospect API. Defaults to None.
+        table_name (str, optional): The name of the database table to query. Defaults to const.LEONICS_RAW_TABLE.
 
-    Raises:
-        Exception: Logs any errors that occur during the prospect key retrieval process.
+    Returns:
+        tuple: A tuple containing the API response and an error message (if any). Returns None and an error message if the API call fails.
+
+    Logs:
+        Various informational and error logs, including the status of API calls and any exceptions that occur.
     """
 
     logging.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
@@ -474,7 +384,7 @@ def update_prospect(start_ts=None, local=None, table_name = const.LEONICS_RAW_TA
         start_ts = prospect_get_start_ts(local, start_ts)
         res, err = sql_execute(
             f"select * FROM {table_name} where DatetimeServer >= '{start_ts}' order by DatetimeServer  limit 50000;",
-            default_engine
+            default_engine,
         )
         assert err is None
         # Fetch all results as a list of dictionaries
@@ -483,7 +393,7 @@ def update_prospect(start_ts=None, local=None, table_name = const.LEONICS_RAW_TA
         # Convert the result to a Pandas DataFrame
         columns = res.keys()  # Get column names
         df = pd.DataFrame(rows, columns=columns)
-        postfix='sys_'
+        postfix = "sys_"
         # if local:
         #     postfix='raw_'
         df["external_id"] = df["external_id"].astype(str).apply(lambda x: postfix + x)
@@ -535,7 +445,9 @@ def backfill_prospect(start_ts=None, local=True):
 
 
 # WIP
-def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TAKUM_LEONICS_API_RAW'):
+def prospect_backfill_key(
+    func, start_ts, local=None, table_name="defaultdb.TAKUM_LEONICS_API_RAW"
+):
     """
     Retrieves data from the Prospect API and updates the DB database.
 
@@ -565,7 +477,6 @@ def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TA
         "Authorization": f"Bearer {key}",
     }
 
-    
     logging.info(f"\n\n{key}\n{url}\n{start_ts}")
 
     res, err = sql_execute(
@@ -580,7 +491,7 @@ def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TA
     # Convert the result to a Pandas DataFrame
     columns = res.keys()  # Get column names
     df = pd.DataFrame(rows, columns=columns)
-    postfix='sys_'
+    postfix = "sys_"
     # if local:
     #     postfix='raw_'
     df["external_id"] = df["external_id"].astype(str).apply(lambda x: postfix + x)
@@ -604,55 +515,3 @@ def prospect_backfill_key(func, start_ts, local=None, table_name = 'defaultdb.TA
         # df.to_json(f'sys_pros_{sts}.json', index=False)
 
     logging.info(f"Data has been saved to 'sys_pros'   LOCAL: {local}")
-
-
-###################################################
-# Hey there - I've reviewed your changes and found some issues that need to be addressed.
-
-# Blocking issues:
-
-# Potential SQL injection vulnerability in query construction (e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:259)
-# Overall Comments:
-
-# Critical security vulnerability: The update_rows function uses string formatting for SQL queries which enables SQL injection attacks. Switch to using parameterized queries with SQLAlchemy's text() function and parameter binding.
-# The ON DUPLICATE KEY UPDATE clause is hardcoded with a long list of columns. Consider generating this dynamically from the column list to improve maintainability and reduce potential errors.
-# Here's what I looked at during the review
-# 🟡 General issues: 2 issues found
-# 🔴 Security: 1 blocking issue
-# 🟢 Testing: all looks good
-# 🟢 Complexity: all looks good
-# 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:202
-
-# issue(security): Potential SQL injection vulnerability in query construction
-#         }
-
-
-# def update_rows(max_dt, df, table_name):
-#     """
-#     Updates the specified DB table with new data from a DataFrame.
-# The current method of constructing SQL queries by directly formatting values is extremely risky. Replace with SQLAlchemy's parameterized query methods or prepared statements to prevent potential SQL injection attacks. The commented-out code shows a better approach with parameterized queries.
-
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:259
-
-# issue(security): Potential SQL injection vulnerability in query construction
-#     )
-#     values = values.replace("err", "NULL")
-#     # Full DB INSERT statement
-#     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values}"
-#     sql_query += """ ON DUPLICATE KEY UPDATE
-#     BDI1_Power_P1_kW = VALUES(BDI1_Power_P1_kW),
-# Replace manual string concatenation with SQLAlchemy's parameterized query methods. The commented-out approach using text() and params was closer to a secure implementation.
-
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/db.py:185
-
-# suggestion(code_refinement): Function has multiple responsibilities and complex logic
-#         }
-
-
-# def update_rows(max_dt, df, table_name):
-#     """
-#     Updates the specified DB table with new data from a DataFrame.
-# Break down the function into smaller, more focused methods. Separate concerns like data filtering, SQL query generation, and execution.

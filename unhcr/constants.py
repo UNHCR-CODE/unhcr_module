@@ -39,6 +39,7 @@ from unhcr import utils
 PROD = None
 DEBUG = None
 LOCAL = None
+MOD_PATH = None
 
 # Leonics API
 LEONICS_BASE_URL = None
@@ -111,6 +112,8 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         Indicates if the module is running in debug mode.
     LOCAL : bool
         Indicates if the module is running in a local environment.
+    MOD_PATH : str
+        Path to the directory where the modules are located.
     LEONICS_BASE_URL : str
         Base URL for the Leonics API.
     LEONICS_USER_CODE : str
@@ -119,10 +122,22 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         Key for Leonics API.
     VERIFY : bool
         SSL verification flag for Leonics API, set to False due to unverified certificate.
+    PROS_CONN_LOCAL_STR: str
+        Connection string for local instance of Prospect data_custom table
+    PROS_CONN_AZURE_STR: str
+        Connection string for Azure instance of Prospect data_custom table.
     TAKUM_RAW_CONN_STR : str
-        Connection string for Aiven MySQL database.
+        Connection string for Aiven MySQL database Leonics raw data.
     LEONICS_RAW_TABLE : str
         Table name for Leonics raw data.
+    SQLALCHEMY_POOL_SIZE : int
+        Size of the connection pool for SQLAlchemy.
+    SQLALCHEMY_POOL_TIMEOUT : int
+        Timeout for the connection pool for SQLAlchemy.
+    SQLALCHEMY_POOL_RECYCLE : int
+        Recycle time for the connection pool for SQLAlchemy.
+    SQLALCHEMY_MAX_OVERFLOW : int
+        Maximum overflow for the connection pool for SQLAlchemy.
     ACCESS_KEY : str
         AWS access key for Eyedro S3.
     SECRET_KEY : str
@@ -164,6 +179,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     global PROD
     global DEBUG
     global LOCAL
+    global MOD_PATH
     global LEONICS_BASE_URL
     global LEONICS_USER_CODE
     global LEONICS_KEY
@@ -201,63 +217,11 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     global SM_TOKEN_URL
     global SM_HISTORY_URL
 
-    PROD = os.getenv("PROD") == "1"
-    DEBUG = os.getenv("DEBUG") == "1"
-    LOCAL = os.getenv("LOCAL") == "1" and not PROD
-
-    logging.debug(f"PROD: {PROD}, DEBUG: {DEBUG}, LOCAL: {LOCAL} ")
-
-    # Leonics API
-    # sorcery skip
-    LEONICS_BASE_URL = os.getenv("LEONICS_BASE_URL")
-    LEONICS_USER_CODE = os.getenv("LEONICS_USER_CODE")
-    LEONICS_KEY = os.getenv("LEONICS_KEY")
-
-    # Verify SSL --- note that leonic's cert does not verify
-    # sorcery skip
-    VERIFY = False
-
-    # Prospect DB
-    PROS_CONN_LOCAL_STR = os.getenv("PROS_CONN_LOCAL_STR")
-    PROS_CONN_AZURE_STR = os.getenv("PROS_CONN_AZURE_STR")
-
-    # Aiven Mysql DB
-    TAKUM_RAW_CONN_STR = os.getenv("AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR")
-    LEONICS_RAW_TABLE = os.getenv("LEONICS_RAW_TABLE")
-
-    SQLALCHEMY_POOL_SIZE = int(os.getenv('SQLALCHEMY_POOL_SIZE', 5))
-    SQLALCHEMY_POOL_TIMEOUT = int(os.getenv('SQLALCHEMY_POOL_TIMEOUT', 30))
-    SQLALCHEMY_POOL_RECYCLE = int(os.getenv('SQLALCHEMY_POOL_RECYCLE', 3600))
-    SQLALCHEMY_MAX_OVERFLOW = int(os.getenv('SQLALCHEMY_MAX_OVERFLOW', 10))
-
-    # Eyedro S3
-    ACCESS_KEY = os.getenv("GB_AWS_ACCESS_KEY")
-    SECRET_KEY = os.getenv("GB_AWS_SECRET_KEY")
-    BUCKET_NAME = os.getenv("GB_AWS_BUCKET_NAME")
-    FOLDER_NAME = os.getenv("GB_AWS_FOLDER_NAME")
-
-    # Prospect API
-    BASE_URL = os.getenv("PROS_BASE_URL")
-    API_IN_KEY = os.getenv("PROS_IN_API_KEY")
-    API_OUT_KEY = os.getenv("PROS_OUT_API_KEY")
-
-    # if your running a local instance of Prospect
-    LOCAL_BASE_URL = os.getenv("PROS_LOCAL_BASE_URL")
-    AZURE_BASE_URL = os.getenv("PROS_AZURE_BASE_URL")
-    LOCAL_API_IN_KEY = os.getenv("PROS_IN_LOCAL_API_KEY")
-    AZURE_API_IN_KEY = os.getenv("PROS_IN_AZURE_API_KEY")
-    LOCAL_API_OUT_KEY = os.getenv("PROS_OUT_LOCAL_API_KEY")
-
-    # SOLARMAN NIGERIA
-    SM_APP_ID = os.getenv("SM_APP_ID")
-    SM_APP_SECRET = os.getenv("SM_APP_SECRET")
-    # token will expire every 2 months
-    SM_BIZ_ACCESS_TOKEN = os.getenv("SM_BIZ_ACCESS_TOKEN")
-    SM_URL = os.getenv("SM_URL")
-    SM_TOKEN_URL = f"{SM_URL}/account/v1.0/token"
-    SM_HISTORY_URL = f"{SM_URL}/device/v1.0/historical?language=en"
-
-    MOD_PATH = r"E:\_UNHCR\CODE\unhcr_module\unhcr"
+    PROD = os.getenv("PROD", "PROD missing") == "1"
+    DEBUG = os.getenv("DEBUG", "DEBUG missing") == "1"
+    LOCAL = os.getenv("LOCAL", "LOCAL missing") == "1" and not PROD
+    # change in .env file to your path to use local modules
+    MOD_PATH = os.getenv("MOD_PATH", "MOD_PATH missing")
     MODULES = [
         ["utils", "utils"],
         ["constants", "const"],
@@ -266,6 +230,80 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         ["api_leonics", "api_leonics"],
         ["api_prospect", "api_prospect"],
     ]
+    logging.debug(f"PROD: {PROD}, DEBUG: {DEBUG}, LOCAL: {LOCAL} ")
+
+    # Leonics API
+    # sorcery skip
+    LEONICS_BASE_URL = os.getenv("LEONICS_BASE_URL", "LEONICS_BASE_URL missing")
+    LEONICS_USER_CODE = os.getenv("LEONICS_USER_CODE", "LEONICS_USER_CODE missing")
+    LEONICS_KEY = os.getenv("LEONICS_KEY", "LEONICS_KEY missing")
+
+    # Verify SSL --- note that leonic's cert does not verify
+    # sorcery skip
+    VERIFY = False
+
+    # Prospect DB
+    PROS_CONN_LOCAL_STR = os.getenv(
+        "PROS_CONN_LOCAL_STR", "PROS_CONN_LOCAL_STR missing"
+    )
+    PROS_CONN_AZURE_STR = os.getenv(
+        "PROS_CONN_AZURE_STR", "PROS_CONN_AZURE_STR missing"
+    )
+
+    # Aiven Mysql DB
+    TAKUM_RAW_CONN_STR = os.getenv(
+        "AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR",
+        "AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR missing",
+    )
+    LEONICS_RAW_TABLE = os.getenv("LEONICS_RAW_TABLE", "LEONICS_RAW_TABLE missing")
+
+    SQLALCHEMY_POOL_SIZE = int(
+        os.getenv("SQLALCHEMY_POOL_SIZE", "SQLALCHEMY_POOL_SIZE missing") or 5
+    )
+    SQLALCHEMY_POOL_TIMEOUT = int(
+        os.getenv("SQLALCHEMY_POOL_TIMEOUT", "SQLALCHEMY_POOL_TIMEOUT missing") or 30
+    )
+    SQLALCHEMY_POOL_RECYCLE = int(
+        os.getenv("SQLALCHEMY_POOL_RECYCLE", "SQLALCHEMY_POOL_RECYCLE missing") or 3600
+    )
+    SQLALCHEMY_MAX_OVERFLOW = int(
+        os.getenv("SQLALCHEMY_MAX_OVERFLOW", "SQLALCHEMY_MAX_OVERFLOW missing") or 10
+    )
+
+    # Eyedro S3
+    ACCESS_KEY = os.getenv("GB_AWS_ACCESS_KEY", "GB_AWS_ACCESS_KEY missing")
+    SECRET_KEY = os.getenv("GB_AWS_SECRET_KEY", "GB_AWS_SECRET_KEY missing")
+    BUCKET_NAME = os.getenv("GB_AWS_BUCKET_NAME", "GB_AWS_BUCKET_NAME missing")
+    FOLDER_NAME = os.getenv("GB_AWS_FOLDER_NAME", "GB_AWS_FOLDER_NAME missing")
+
+    # Prospect API
+    BASE_URL = os.getenv("PROS_BASE_URL", "PROS_BASE_URL missing")
+    API_IN_KEY = os.getenv("PROS_IN_API_KEY", "PROS_IN_API_KEY missing")
+    API_OUT_KEY = os.getenv("PROS_OUT_API_KEY", "PROS_OUT_API_KEY missing")
+
+    # if your running a local instance of Prospect
+    LOCAL_BASE_URL = os.getenv("PROS_LOCAL_BASE_URL", "PROS_LOCAL_BASE_URL missing")
+    AZURE_BASE_URL = os.getenv("PROS_AZURE_BASE_URL", "PROS_AZURE_BASE_URL missing")
+    LOCAL_API_IN_KEY = os.getenv(
+        "PROS_IN_LOCAL_API_KEY", "PROS_IN_LOCAL_API_KEY missing"
+    )
+    AZURE_API_IN_KEY = os.getenv(
+        "PROS_IN_AZURE_API_KEY", "PROS_IN_AZURE_API_KEY missing"
+    )
+    LOCAL_API_OUT_KEY = os.getenv(
+        "PROS_OUT_LOCAL_API_KEY", "PROS_OUT_LOCAL_API_KEY missing"
+    )
+
+    # SOLARMAN NIGERIA
+    SM_APP_ID = os.getenv("SM_APP_ID", "SM_APP_ID missing")
+    SM_APP_SECRET = os.getenv("SM_APP_SECRET", "SM_APP_SECRET missing")
+    # token will expire every 2 months
+    SM_BIZ_ACCESS_TOKEN = os.getenv(
+        "SM_BIZ_ACCESS_TOKEN", "SM_BIZ_ACCESS_TOKEN missing"
+    )
+    SM_URL = os.getenv("SM_URL", "SM_URL missing")
+    SM_TOKEN_URL = f"{SM_URL}/account/v1.0/token"
+    SM_HISTORY_URL = f"{SM_URL}/device/v1.0/historical?language=en"
 
 
 def load_env(path=".env"):
@@ -343,18 +381,22 @@ def env_cmdline_parser():
         type="string",
         help="Set the logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
-      # Parse pytest arguments first by letting pytest handle them -- these are the ones we use
+    # Parse pytest arguments first by letting pytest handle them -- these are the ones we use
     original_args = list(sys.argv)
 
     # Remove pytest's own options from the argument list
-    sys.argv = [arg for arg in sys.argv if arg not in ['-v', '--cov=..', '--cov-report=html', '--cache-clear']]
+    sys.argv = [
+        arg
+        for arg in sys.argv
+        if arg not in ["-v", "--cov=..", "--cov-report=html", "--cache-clear"]
+    ]
 
-    logging.info(f'LLLLLLLLL: {sys.argv}        {original_args}')
+    logging.debug(f"Modified args: {sys.argv}     Original args:   {original_args}")
     try:
         # Now, parse custom arguments
         (options, args) = parser.parse_args()
         sys.argv = original_args
-        logging.info(f'LLLLLLLLL: {sys.argv}        {original_args}')
+        logging.debug(f"Modified args: {sys.argv}     Original args:   {original_args}")
         # List of valid choices
         valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -368,6 +410,7 @@ def env_cmdline_parser():
     except Exception as e:
         print(f"ERROR: {e}")
         return None
+
 
 utils.log_setup(override=True)
 # loads environment variables and sets constants
@@ -390,7 +433,6 @@ MODULES = [
 ]
 
 
-# sorcery skip
 def import_local_libs(mpath=MOD_PATH, mods=MODULES):
     """
     Dynamically imports local modules from the specified local directory, allowing their functions and variables to be accessed globally by assigning them to the globals() dictionary.
@@ -433,59 +475,8 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
             spec = importlib.util.spec_from_file_location(global_name, module_path)
             loaded_mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(loaded_mod)
-            # exists = False
-            # for val in loaded_modules:
-            #     if val.__file__ == loaded_mod.__file__:
-            #         exists = True
-            #         break
-
-            # if not exists:
             loaded_modules.append(loaded_mod)
         except Exception as e:
             print(f"Failed to load module {module_name}: {e}")
 
-    # print(f"Load modules: {mpath}\n {mods}" )
-    # print('!!!!!!!!!')
-    # print(loaded_modules)
-    # print('!!!!!!!!!')
     return tuple(loaded_modules)
-
-
-##############################
-# Hey there - I've reviewed your changes and found some issues that need to be addressed.
-
-# Blocking issues:
-
-# Hardcoded SSL verification disable is a security risk (e:/_UNHCR/CODE/unhcr_module/unhcr/constants.py:154)
-# Overall Comments:
-
-# CRITICAL: Hardcoded SSL verification disable (VERIFY=False) creates a significant security vulnerability. This should be configurable via environment variables and default to True. If dealing with self-signed certificates, implement certificate pinning instead of disabling verification entirely.
-# Replace generic exception handling in import_local_libs() with specific exception types (e.g., ImportError, ModuleNotFoundError) to prevent masking unexpected errors and improve debugging.
-# Here's what I looked at during the review
-# 🟡 General issues: 1 issue found
-# 🔴 Security: 1 blocking issue
-# 🟢 Testing: all looks good
-# 🟢 Complexity: all looks good
-# 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/constants.py:154
-
-# issue(security): Hardcoded SSL verification disable is a security risk
-
-#     # Verify SSL --- note that leonic's cert does not verify
-#     # sorcery skip
-#     VERIFY = False
-
-#     # Aiven Mysql DB
-# SSL verification should be configurable and default to True. Disabling SSL verification exposes the application to man-in-the-middle attacks and other security vulnerabilities. Consider obtaining a valid certificate or implementing certificate pinning.
-
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/constants.py:266
-
-# suggestion(bug_risk): Generic exception handling lacks specificity
-#             )
-
-#         return options
-#     except Exception as e:
-#         print(f"ERROR: {e}")
-#         return None
-# Replace generic exception handling with specific exception types like ImportError. Log the full traceback and implement more granular error handling to prevent silent failures and improve debuggability.
