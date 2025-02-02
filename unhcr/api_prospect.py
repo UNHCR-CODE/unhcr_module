@@ -15,15 +15,11 @@ Key Components
         and sends a POST request to the appropriate URL with the necessary headers, including the API key. 
         It includes basic error handling. The local flag determines whether to send data to the local or external API.
 
-    get_prospect_last_data(response): 
+    get_prospect_last_data(response, key="datetimeserver"): 
         Parses the Prospect API response and extracts the latest timestamp from the returned data. This timestamp is
         used to retrieve newer records in subsequent calls.
-
-    prospect_get_start_ts(local=None, start_ts=None): 
-        Retrieves data from the Prospect API and determines the starting timestamp for data synchronization. 
-        If start_ts is not provided, it fetches the latest timestamp from the API. The local flag indicates whether to 
-        interact with the local or external Prospect instance.
 """
+
 import json
 import logging
 import re
@@ -31,8 +27,9 @@ import requests
 
 from unhcr import constants as const
 
-if const.LOCAL: # testing with local python files
-    const, *rest = const.import_local_libs(mods=[ ["constants", "const"]])
+if const.LOCAL:  # testing with local python files
+    const, *rest = const.import_local_libs(mods=[["constants", "const"]])
+
 
 def get_prospect_url_key(local=None, out=False):
     """
@@ -59,17 +56,21 @@ def get_prospect_url_key(local=None, out=False):
         key = const.API_OUT_KEY if out else const.API_IN_KEY
     elif out:
         key = const.LOCAL_API_OUT_KEY
-    #AZURE
+    # AZURE
     if local is None:
         url = const.AZURE_BASE_URL
+        if not out:
+            key = const.AZURE_API_IN_KEY
 
-    logging.debug(f'ZZZZZZZZZZZZZZZ\nlocal  {local}\n out {out}\nurl {url}\nZZZZZZZZZZZZZZ')
+    logging.debug(
+        f"ZZZZZZZZZZZZZZZ\nlocal  {local}\n out {out}\nurl {url}\nZZZZZZZZZZZZZZ"
+    )
     return url, key
 
-# sorcery: skip
-def api_in_prospect(df, local=None, ):  # sourcery skip: extract-method
+
+def api_in_prospect(df, local=None):
     """
-    Sends data to the prospect API's inbound endpoint.
+    Sends data to the prospect API's inbound custom endpoint.
 
     This function takes a Pandas DataFrame (df), converts it to JSON, and sends a POST request to the
     appropriate URL with the necessary headers, including the API key. It includes basic error handling.
@@ -79,22 +80,149 @@ def api_in_prospect(df, local=None, ):  # sourcery skip: extract-method
     df : pd.DataFrame
         The Pandas DataFrame containing the data to be sent to the Prospect API.
     local : bool, optional
-        A flag indicating whether to send data to the local or external Prospect API. When True, sends to the local API. Default is True.
+        A flag indicating whether to send data to the local or external Prospect API. When True, sends to the local API.
+        Default is None (AZURE).
 
     Returns
     -------
     requests.Response or None
         The response from the Prospect API, or None if the request fails.
     """
+
     def map_columns(df):
-        #AZURE dependant on field order
-        columns = ["In4", "In5", "In6", "In7", "In8", "Out4", "Out5", "Out6", "Out7", "Out8", "HVB1_SOC", "BDI1_Freq", "BDI2_Freq", "DCgen_RPM", "HVB1_Avg_V", "HVB1_Batt_I", "In3_door_sw", "In1_BDI_Fail", "DCgen_Max_RPM", "DCgen_Min_RPM", "Out1_CloseMC1", "Out2_StartGen", "DatetimeServer", "In2_ATS_status", "DCgen_Today_kWh", "DCgen_Total_kWh", "SCC1_PV_Current", "SCC1_PV_Voltage", "BDI1_Power_P1_kW", "BDI1_Power_P2_kW", "BDI1_Power_P3_kW", "BDI2_Power_P1_kW", "BDI2_Power_P2_kW", "BDI2_Power_P3_kW", "DCgen_Diode_Temp", "DCgen_Fuel_Level", "SCC1_Chg_Current", "SCC1_Chg_Voltage", "SCC1_PV_Power_kW", "ana2_Inv_room_RH", "ana5_Fuel_Level1", "ana6_Fuel_Level2", "BDI1_Batt_Voltage", "DCgen_Max_Current", "DCgen_Max_Voltage", "LoadPM_Import_kWh", "LoadPM_Total_P_kW", "SCC1_Chg_Power_kW", "SCC1_Today_PV_kWh", "ana4_Batt_room_RH", "BDI1_ACinput_P1_kW", "BDI1_ACinput_P2_kW", "BDI1_ACinput_P3_kW", "BDI2_ACinput_P1_kW", "BDI2_ACinput_P2_kW", "BDI2_ACinput_P3_kW", "DCgen_Ambient_Temp", "DCgen_Coolant_Temp", "DCgen_Oil_Pressure", "LoadPM_Power_P1_kW", "LoadPM_Power_P2_kW", "LoadPM_Power_P3_kW", "Out3_EmergencyStop", "SCC1_Todate_PV_kWh", "SCC1_Today_Chg_kWh", "ana1_Inv_Room_Temp", "BDI1_Total_Power_kW", "BDI2_Total_Power_kW", "DCgen_RPM_Frequency", "DCgen_Throttle_Stop", "FlowMeter_Fuel_Temp", "SCC1_Todate_Chg_kWh", "ana3_Batt_Room_Temp", "DCgen_Engine_Runtime", "BDI1_ACinput_Total_kW", "BDI2_ACinput_Total_kW", "DCgen_Alternator_Temp", "DCgen_Low_Current_Stop", "BDI1_ACinput_Voltage_L1", "BDI1_ACinput_Voltage_L2", "BDI1_ACinput_Voltage_L3", "BDI2_ACinput_Voltage_L1", "BDI2_ACinput_Voltage_L2", "BDI2_ACinput_Voltage_L3", "BDI2_Today_Batt_Chg_kWh", "DCgen_High_Voltage_Stop", "DCgen_Low_Voltage_Start", "LoadPM_Today_Import_kWh", "BDI1_Today_Supply_AC_kWh", "BDI2_Todate_Batt_Chg_kWh", "DCgen_Alternator_Current", "DCgen_Alternator_Voltage", "BDI1_Todate_Supply_AC_kWh", "DCgen_Alternator_Power_kW", "DCgen_LoadBattery_Current", "DCgen_LoadBattery_Voltage", "BDI2_Today_Batt_DisChg_kWh", "DCgen_LoadBattery_Power_kW", "BDI2_Todate_Batt_DisChg_kWh", "DCgen_StartingBatteryVoltage", "FlowMeter_Today_Fuel_consumption", "FlowMeter_Total_Fuel_consumption", "FlowMeter_Hourly_Fuel_consumptionRate"]
+        # AZURE dependant on field order
+        """
+        Maps the columns of the dataframe to the correct column names in the
+        correct order for the Azure API.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            The Pandas DataFrame containing the data to be sent to the Azure API.
+
+        Returns
+        -------
+        pd.DataFrame
+            The mapped DataFrame with the columns in the correct order.
+        """
+        columns = [
+            "In4",
+            "In5",
+            "In6",
+            "In7",
+            "In8",
+            "Out4",
+            "Out5",
+            "Out6",
+            "Out7",
+            "Out8",
+            "HVB1_SOC",
+            "BDI1_Freq",
+            "BDI2_Freq",
+            "DCgen_RPM",
+            "HVB1_Avg_V",
+            "HVB1_Batt_I",
+            "In3_door_sw",
+            "In1_BDI_Fail",
+            "DCgen_Max_RPM",
+            "DCgen_Min_RPM",
+            "Out1_CloseMC1",
+            "Out2_StartGen",
+            "DatetimeServer",
+            "In2_ATS_status",
+            "DCgen_Today_kWh",
+            "DCgen_Total_kWh",
+            "SCC1_PV_Current",
+            "SCC1_PV_Voltage",
+            "BDI1_Power_P1_kW",
+            "BDI1_Power_P2_kW",
+            "BDI1_Power_P3_kW",
+            "BDI2_Power_P1_kW",
+            "BDI2_Power_P2_kW",
+            "BDI2_Power_P3_kW",
+            "DCgen_Diode_Temp",
+            "DCgen_Fuel_Level",
+            "SCC1_Chg_Current",
+            "SCC1_Chg_Voltage",
+            "SCC1_PV_Power_kW",
+            "ana2_Inv_room_RH",
+            "ana5_Fuel_Level1",
+            "ana6_Fuel_Level2",
+            "BDI1_Batt_Voltage",
+            "DCgen_Max_Current",
+            "DCgen_Max_Voltage",
+            "LoadPM_Import_kWh",
+            "LoadPM_Total_P_kW",
+            "SCC1_Chg_Power_kW",
+            "SCC1_Today_PV_kWh",
+            "ana4_Batt_room_RH",
+            "BDI1_ACinput_P1_kW",
+            "BDI1_ACinput_P2_kW",
+            "BDI1_ACinput_P3_kW",
+            "BDI2_ACinput_P1_kW",
+            "BDI2_ACinput_P2_kW",
+            "BDI2_ACinput_P3_kW",
+            "DCgen_Ambient_Temp",
+            "DCgen_Coolant_Temp",
+            "DCgen_Oil_Pressure",
+            "LoadPM_Power_P1_kW",
+            "LoadPM_Power_P2_kW",
+            "LoadPM_Power_P3_kW",
+            "Out3_EmergencyStop",
+            "SCC1_Todate_PV_kWh",
+            "SCC1_Today_Chg_kWh",
+            "ana1_Inv_Room_Temp",
+            "BDI1_Total_Power_kW",
+            "BDI2_Total_Power_kW",
+            "DCgen_RPM_Frequency",
+            "DCgen_Throttle_Stop",
+            "FlowMeter_Fuel_Temp",
+            "SCC1_Todate_Chg_kWh",
+            "ana3_Batt_Room_Temp",
+            "DCgen_Engine_Runtime",
+            "BDI1_ACinput_Total_kW",
+            "BDI2_ACinput_Total_kW",
+            "DCgen_Alternator_Temp",
+            "DCgen_Low_Current_Stop",
+            "BDI1_ACinput_Voltage_L1",
+            "BDI1_ACinput_Voltage_L2",
+            "BDI1_ACinput_Voltage_L3",
+            "BDI2_ACinput_Voltage_L1",
+            "BDI2_ACinput_Voltage_L2",
+            "BDI2_ACinput_Voltage_L3",
+            "BDI2_Today_Batt_Chg_kWh",
+            "DCgen_High_Voltage_Stop",
+            "DCgen_Low_Voltage_Start",
+            "LoadPM_Today_Import_kWh",
+            "BDI1_Today_Supply_AC_kWh",
+            "BDI2_Todate_Batt_Chg_kWh",
+            "DCgen_Alternator_Current",
+            "DCgen_Alternator_Voltage",
+            "BDI1_Todate_Supply_AC_kWh",
+            "DCgen_Alternator_Power_kW",
+            "DCgen_LoadBattery_Current",
+            "DCgen_LoadBattery_Voltage",
+            "BDI2_Today_Batt_DisChg_kWh",
+            "DCgen_LoadBattery_Power_kW",
+            "BDI2_Todate_Batt_DisChg_kWh",
+            "DCgen_StartingBatteryVoltage",
+            "FlowMeter_Today_Fuel_consumption",
+            "FlowMeter_Total_Fuel_consumption",
+            "FlowMeter_Hourly_Fuel_consumptionRate",
+        ]
         new_cols = df.columns.tolist()
 
         mapped = []
         for item in new_cols:
             # Find the closest match ignoring case
-            match = next((a for a in columns if re.sub(r'_', '', a.lower()) == item.replace('_', '').lower()), item)
+            match = next(
+                (
+                    a
+                    for a in columns
+                    if re.sub(r"_", "", a.lower()) == item.replace("_", "").lower()
+                ),
+                item,
+            )
             mapped.append(match)
         print(len(mapped), len(new_cols), len(columns))
 
@@ -106,26 +234,24 @@ def api_in_prospect(df, local=None, ):  # sourcery skip: extract-method
         return df
 
     try:
-        df = map_columns(df)
         url, key = get_prospect_url_key(local)
-        url += '/v1/in/custom'
+        url += "/v1/in/custom"
 
-        json_str = df.to_json(orient='records')
-        data = '{"data": ' + json_str +'}'
+        json_str = df.to_json(orient="records")
+        data = '{"data": ' + json_str + "}"
 
-        headers = {
-        'Authorization': f'Bearer {key}',
-        'Content-Type': 'application/json'
-        }
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
-        return requests.request("POST", url, headers=headers, data=data, verify=const.VERIFY)
-    #TODO more specific error trapping
+        return requests.request(
+            "POST", url, headers=headers, data=data, verify=const.VERIFY
+        )
+    # TODO more specific error trapping
     except Exception as e:
-        logging.error('api_in_prospect ERROR', e)
+        logging.error("api_in_prospect ERROR", e)
         return None
 
 
-def get_prospect_last_data(response, key='datetimeserver'):
+def get_prospect_last_data(response, key="datetimeserver"):
     """
     Retrieves the latest timestamp from the Prospect API response.
 
@@ -134,6 +260,7 @@ def get_prospect_last_data(response, key='datetimeserver'):
 
     Args:
         response (requests.Response): The Prospect API response.
+        key (str, optional): The key to use for the timestamp column. Defaults to "datetimeserver".
 
     Returns:
         str: The latest timestamp.
@@ -141,7 +268,7 @@ def get_prospect_last_data(response, key='datetimeserver'):
     """
 
     j = json.loads(response.text)
-    #print(json.dumps(j, indent=2))
+    # print(json.dumps(j, indent=2))
     # logging.info(f'\n\n{j['data'][0]}')
     res = ""
     idd = ""
@@ -153,80 +280,5 @@ def get_prospect_last_data(response, key='datetimeserver'):
                 idd = d["external_id"]
                 res = d["custom"][key]
     except Exception as e:
-        logging.error(f'ERROR: get_prospect_last_data {e}')
+        logging.error(f"ERROR: get_prospect_last_data {e}")
     return res
-
-
-def prospect_get_start_ts(local=None, start_ts=None):
-    """
-    Retrieves data from the Prospect API and updates the MySQL database.
-
-    This function constructs a URL and fetches data from the Prospect API using the provided
-    function to get the necessary URL and API key. It then retrieves the latest timestamp
-    from the API response, queries the MySQL database for newer records, and sends this data
-    back to the Prospect API. If the API call fails, it logs an error and exits the program.
-
-    Args:
-        func (callable): A function that returns the API URL and key based on the 'local' flag.
-        local (bool): A flag indicating whether to retrieve data from the local or external
-                      Prospect API. When True, retrieves from the local API.
-        start_ts (str, optional): The timestamp to start retrieval from. If not provided (default),
-                                  retrieves the latest timestamp from the Prospect API.
-
-    Raises:
-        SystemExit: Exits the program if the Prospect API call fails.
-
-    Logs:
-        Various debug and informational logs, including headers, keys, URLs, and response
-        statuses. Also logs errors if API calls or database operations fail.
-    """
-    url, key = get_prospect_url_key(local, out=True)
-    sid = 1 if local or local is None else 421
-    url += f"/v1/out/custom/?size=10&page=1&q[source_id_eq]={sid}&q[external_id_start]=sys_&q[s]=external_id+desc"
-    payload = {}
-    headers = {
-        "Authorization": f"Bearer {key}",
-    }
-
-    response = requests.request(
-        "GET", url, headers=headers, data=payload, verify=const.VERIFY
-    )
-    if start_ts is None:
-        start_ts = get_prospect_last_data(response)
-    j = json.loads(response.text)
-    # json.dumps(j, indent=2)
-    logging.info(f"\n\n{url}\n{start_ts}")
-    return start_ts
-
-########################################
-# Hey there - I've reviewed your changes - here's some feedback:
-
-# Overall Comments:
-
-# Consider moving API keys to environment variables or a secure secrets management service rather than storing them in constants.py
-# Replace generic Exception handling with specific exceptions (e.g., requests.exceptions.RequestException) to properly handle different failure modes
-# Here's what I looked at during the review
-# 🟢 General issues: all looks good
-# 🟡 Security: 2 issues found
-# 🟢 Testing: all looks good
-# 🟢 Complexity: all looks good
-# 🟢 Documentation: all looks good
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:91
-
-# suggestion(security): Use specific exception handling instead of generic Exception
-
-#         return requests.request("POST", url, headers=headers, data=data, verify=const.VERIFY)
-#     #TODO more specific error trapping
-#     except Exception as e:
-#         logging.error('api_in_prospect ERROR', e)
-#         return None
-# Resolve
-# e:/_UNHCR/CODE/unhcr_module/unhcr/api_prospect.py:89
-
-# suggestion(security): Add response validation and error checking
-#         'Content-Type': 'application/json'
-#         }
-
-#         return requests.request("POST", url, headers=headers, data=data, verify=const.VERIFY)
-#     #TODO more specific error trapping
-#     except Exception as e:

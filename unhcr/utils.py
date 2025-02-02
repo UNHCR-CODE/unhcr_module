@@ -32,6 +32,7 @@ import optparse
 import os
 import sys
 
+
 def filter_nested_dict(obj, val=-0.999):
     """
     Recursively remove all entries of a nested dict that have a value equal to val. If the object is a dictionary,
@@ -156,13 +157,17 @@ def create_cmdline_parser(level="INFO"):
     original_args = list(sys.argv)
 
     # Remove pytest's own options from the argument list
-    sys.argv = [arg for arg in sys.argv if arg not in ['-v', '--cov=..', '--cov-report=html', '--cache-clear']]
-    logging.debug(f'{sys.argv}        {original_args}')
+    sys.argv = [
+        arg
+        for arg in sys.argv
+        if arg not in ["-v", "--cov=..", "--cov-report=html", "--cache-clear"]
+    ]
+    logging.debug(f"{sys.argv}        {original_args}")
     try:
         # Now, parse custom arguments
         (options, args) = parser.parse_args()
         sys.argv = original_args
-        logging.debug(f'{sys.argv}        {original_args}')
+        logging.debug(f"{sys.argv}        {original_args}")
         # Validate the logging level
         valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if options.log not in valid_log_levels:
@@ -235,28 +240,5 @@ def get_module_version(name="unhcr_module"):
         err = str(e)
     return v_number, err
 
+
 log_setup(override=True)
-
-##################
-# Hey there - I've reviewed your changes - here's some feedback:
-
-# Overall Comments:
-
-# Consider replacing the deprecated optparse with argparse throughout the codebase for better maintainability and consistency with modern Python practices.
-# Here's what I looked at during the review
-# 🟡 General issues: 1 issue found
-# 🟢 Security: all looks good
-# 🟢 Testing: all looks good
-# 🟢 Complexity: all looks good
-# 🟢 Documentation: all looks good
-# outdated
-# e:_UNHCR\CODE\unhcr_module\unhcr\utils.py:198
-
-# suggestion(code_refinement): Hardcoded module name in version retrieval
-#         logging.error(f'str_to_float_or_zero !!!!!!  {ValueError}, {TypeError}')
-#         return 0.0
-
-# def get_module_version(name='unhcr_module'):
-#     """
-#     Retrieve the version number of the specified module (default: 'unhcr_module').
-# The function accepts a 'name' parameter, but internally always uses 'unhcr_module'. Consider using the passed name parameter for more flexibility.
