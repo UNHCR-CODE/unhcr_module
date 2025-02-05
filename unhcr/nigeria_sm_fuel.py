@@ -5,15 +5,7 @@ Overview
     The script includes some commented-out code suggesting past or future integration with an Oracle database and AWS S3. 
     It appears designed for testing the integration process.
 
-    extract_data(data_list,site=None): 
-        Extracts and returns site, table, fn, and label from a list of dictionaries. 
-        It iterates over each dictionary in the given data_list. If the site parameter is None, 
-        it assigns the values from the first dictionary's "site", "table", "fn", and "label" 
-        (if available) keys to the respective variables. If the site parameter matches the 
-        "site" key in any dictionary, it updates the table, fn, and label (if available) 
-        variables with the values from that dictionary. Prints the extracted values for each 
-        matching dictionary.
-
+Key Components
     solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1): 
         Retrieves historical data from the Solarman API for the given site and period. 
         It returns a list of dictionaries containing the retrieved data. 
@@ -124,52 +116,6 @@ BULK = [
         "label": "BIOHENRY - UNHCR TAKUM OFFICE BULK TANK",
     },
 ]
-
-def extract_data(data_list,site=None):
-    """
-    Extracts and returns site, table, fn, and label from a list of dictionaries.
-
-    Iterates over each dictionary in the given data_list. If the site parameter is None, 
-    it assigns the values from the first dictionary's "site", "table", "fn", and "label" 
-    (if available) keys to the respective variables. If the site parameter matches the 
-    "site" key in any dictionary, it updates the table, fn, and label (if available) 
-    variables with the values from that dictionary. Prints the extracted values for each 
-    matching dictionary.
-
-    Parameters
-    ----------
-    data_list : list of dict
-        A list of dictionaries containing keys "site", "table", "fn", and optionally "label".
-    site : str, optional
-        The site to search for within the data_list. If None, uses the first site's data.
-
-    Returns
-    -------
-    site : str
-        The extracted site value.
-    table : str
-        The extracted table value.
-    fn : str
-        The extracted fn (function) value.
-    label : str
-        The extracted label value (if available).
-    """
-
-    for key in data_list:
-        if site is None:
-            # print(k, k == site)
-            site = key["site"]
-            table = key["table"]
-            fn = key["fn"]
-            if key.has_key("label"):
-                label = key["label"]
-            print(site, table, fn, label)
-        elif site == key["site"]:
-            table = key["table"]
-            fn = key["fn"]
-            label = key["label"]
-            print(site, table, fn)
-    return site,table,fn,label
 
 
 def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):

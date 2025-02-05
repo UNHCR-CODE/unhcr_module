@@ -40,6 +40,12 @@ update_bulk_fuel(conn_str, df, df1):
     The SQL query is then executed using the connection string and the updated row count is printed.
     Finally, the first DataFrame is saved to a CSV file named 'mhs_<site>.csv' and the function returns None, None, None.
 
+update_takum_raw_db(token, start_ts): 
+    Updates the Takum raw data in the database. 
+    This function takes in the API token and the start timestamp.
+    It queries the Takum API for the raw data, filters it, and updates the database.
+    The function returns None, None, None.
+
 WIP backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, start_ts, local, table_name): 
     These functions appear to be related to backfilling data into the Prospect API but are marked as "WIP" 
     (work in progress) and are not fully functional.
@@ -677,3 +683,78 @@ def update_bulk_fuel(conn_str, df, df1):
 
     engine = create_engine(conn_str)
     return sql_execute(sql, engine)
+
+
+# TODO Rename this here and in `execute`
+def update_takum_raw_db(token, start_ts):
+    def set_date_range(st_dt, num_days, backfill=False):
+        st = (st_dt + timedelta(minutes=1)).date().isoformat()
+        st = st.replace('-', '')
+        ed = datetime.now() + timedelta(days=num_days)
+        if backfill:
+            ed = st_dt + timedelta(days=num_days)
+        # Leonics API has a limit of 10 days
+        if ed - st_dt > timedelta(days=10):
+            ed = st_dt + timedelta(days=10)
+        ed = ed.date().isoformat()
+        start_ts = ed
+        ed = ed.replace('-', '')
+        return st, ed
+
+    num_days = 2
+    max_dt = start_ts
+    if start_ts is None:
+        default_engine = set_db_engine('postgresql')
+        max_dt1, err = get_db_max_date(default_engine, const.LEONICS_RAW_TABLE)
+        if err:
+            logging.error(f"get_db_max_date Error occurred: {err}")
+            exit(1)
+        assert(max_dt1 is not None)
+        default_engine = set_db_engine('mysql')
+        max_dt, err = get_db_max_date(default_engine, const.LEONICS_RAW_TABLE)
+        if err:
+            logging.error(f"get_db_max_date1 Error occurred: {err}")
+            exit(1)
+        assert(max_dt is not None)
+
+        # backfill 1 week
+        #max_dt = max_dt - timedelta(days=7)
+    st, ed = set_date_range(max_dt, num_days)
+    default_engine = set_db_engine('mysql')
+    df_leonics, err = api_leonics.getData(start=st,end=ed,token=token)
+    if err:
+        logging.error(f"api_leonics.getData Error occurred: {err}")
+        exit(2)
+    # Convert the 'datetime_column' to pandas datetime
+    df_leonics['DatetimeServer'] = pd.to_datetime(df_leonics['DatetimeServer'])
+    res, err = update_leonics_db(max_dt,df_leonics, const.LEONICS_RAW_TABLE)
+    if err:
+        logging.error(f"update_leonics_db Error occurred: {err}")
+        exit(3)
+    else:
+        logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
+
+    default_engine = set_db_engine('postgresql')
+
+    st, ed = set_date_range(max_dt1, num_days)
+    default_engine = set_db_engine('postgresql')
+    df_azure, err = api_leonics.getData(start=st,end=ed,token=token)
+    if err:
+        logging.error(f"api_leonics.getData Error occurred: {err}")
+        exit(2)
+    # Convert the 'datetime_column' to pandas datetime
+    df_azure['DatetimeServer'] = pd.to_datetime(df_azure['DatetimeServer'])
+    #df_azure['datetimeserver'] = df_leonics['DatetimeServer'].copy()
+    #df_azure = df_azure.drop(columns=['DatetimeServer'])
+    # we use all lowercase column names in AZURE
+    df_azure.columns = df_azure.columns.str.lower()
+    res, err = update_leonics_db(max_dt1,df_azure, const.LEONICS_RAW_TABLE, 'datetimeserver')
+    assert(res is not None)
+    assert(err is None)
+    if err:
+        logging.error(f"update_leonics_db Error occurred: {err}")
+        exit(3)
+    else:
+        logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
+
+    return start_ts
