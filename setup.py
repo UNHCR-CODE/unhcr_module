@@ -14,14 +14,15 @@ Here's what I looked at during the review
 """
 setup(
     name='unhcr_module',
-    version='0.4.4',
+    version='0.4.5',
     packages=find_packages(),
     install_requires=[
-        'python-dotenv',
-        'requests',
-        'mysqlclient',
-        'pandas',
         'sqlalchemy',
+        'requests',
+        'pytz',
+        'python-dotenv',
+        'pandas',
+        'mysqlclient',
         'boto3'
     ],
     entry_points={

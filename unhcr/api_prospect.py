@@ -239,7 +239,8 @@ def api_in_prospect(df, local=None):
 
         json_str = df.to_json(orient="records")
         data = '{"data": ' + json_str + "}"
-
+        if len(data) == 0:
+            return None
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
         return requests.request(
