@@ -79,41 +79,30 @@ UPDATE_DB = True
 PROSPECT = True
 ORACLE = False
 
-def set_db_engine(ename):
-    #print(const.TAKUM_RAW_CONN_STR, const.LEONICS_RAW_TABLE)
-    ### set to AZURE
-    if db.default_engine.engine.name != ename:
-        if ename == 'postgresql':
-            const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','xxxxxx')
-            const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','pppppp')
-        else:
-            const.TAKUM_RAW_CONN_STR =  os.getenv('AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
-            const.LEONICS_RAW_TABLE = os.getenv('LEONICS_RAW_TABLE','qqqqq')
-    return db.set_db_engine(const.TAKUM_RAW_CONN_STR)
 
-if ORACLE:
-    try:
-        orc_table = 'ORC_TAKUM_LEONICS_API_RAW'
+# if ORACLE:
+#     try:
+#         orc_table = 'ORC_TAKUM_LEONICS_API_RAW'
 
-        match = re.search(r'INSERT INTO (\w+) \((.*?)\) VALUES', s)
-        table_name = match[1]
-        columns = match[2]
-        columns = '"' + columns.replace(', ','", "') + '"'
+#         match = re.search(r'INSERT INTO (\w+) \((.*?)\) VALUES', s)
+#         table_name = match[1]
+#         columns = match[2]
+#         columns = '"' + columns.replace(', ','", "') + '"'
 
-        # Extract individual rows
-        rows = re.findall(r'\((.*?)\)', s)
+#         # Extract individual rows
+#         rows = re.findall(r'\((.*?)\)', s)
 
-        # Format for Oracle INSERT ALL
-        oracle_insert = f"INSERT ALL\n"
-        for x, row in enumerate(rows):
-            if x != 0:
-                oracle_insert += f"    INTO {table_name} ({columns}) VALUES ({row})\n"
-        oracle_insert += "SELECT * FROM dual;"
+#         # Format for Oracle INSERT ALL
+#         oracle_insert = f"INSERT ALL\n"
+#         for x, row in enumerate(rows):
+#             if x != 0:
+#                 oracle_insert += f"    INTO {table_name} ({columns}) VALUES ({row})\n"
+#         oracle_insert += "SELECT * FROM dual;"
 
-        with open("orc_sql.txt", "w") as file:
-            file.write(oracle_insert)
-    except Exception as e:
-        logging.error(f"ORACLE Error occurred: {e}")
+#         with open("orc_sql.txt", "w") as file:
+#             file.write(oracle_insert)
+#     except Exception as e:
+#         logging.error(f"ORACLE Error occurred: {e}")
 
 
 def execute(token, start_ts=None):
@@ -122,16 +111,16 @@ def execute(token, start_ts=None):
     if UPDATE_DB:
         start_ts = db.update_takum_raw_db(token, start_ts)
     if PROSPECT:
-        # db.default_engine = set_db_engine('mysql')
+        # db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name('mysql')
         # res, err = db.update_prospect(local=False)
         # assert(res is not None)
         # assert(err is None)
         # logging.info(f"LOCAL: FALSE {res.status_code}:  {res.text}")
-        db.default_engine = set_db_engine('postgresql')
+        db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name('postgresql')
         if BACKFILL_DT:
             db.update_prospect(start_ts=start_ts) #AZURE
         else:
-            db.update_prospect() #AZURE
+            db.update_prospect(table_name=const.LEONICS_RAW_TABLE) #AZURE
 
 
         url = "http://localhost:3000"
@@ -140,8 +129,8 @@ def execute(token, start_ts=None):
             response = requests.get(url)
             if response.status_code == 200:
                 logging.info(f"Server at {url} is responding. Status code: {response.status_code}")
-                db.default_engine = set_db_engine('postgresql')
-                res, err = db.update_prospect(start_ts=start_ts, local=True)
+                db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name('postgresql')
+                res, err = db.update_prospect(start_ts=start_ts, local=True, table_name= const.LEONICS_RAW_TABLE)
                 assert(res is not None)
                 assert(err is None)
                 logging.info(f"LOCAL: TRUE {res.status_code}:  {res.text}")

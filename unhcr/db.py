@@ -26,7 +26,10 @@ set_db_engine(connection_string):
     Creates and returns a SQLAlchemy engine with connection pooling for efficient database access. Pool parameters are 
     configurable via environment variables.
 
-def update_fuel_data(merged_hourly_sums, conn_str, table, site):
+set_db_engine_by_name(ename): 
+    Sets the database engine by name and configures connection strings accordingly.
+
+update_fuel_data(conn_str, merged_hourly_sums, table, site):
     Updates the fuel data in the database. 
     This function takes in the merged hourly sums DataFrame, connection string, table name, and site name.
     It constructs the SQL query string by replacing 'TABLE' with the table name and adds the VALUES clause.
@@ -54,7 +57,10 @@ WIP backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, s
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 import logging
+import math
+import os
 from types import SimpleNamespace
+import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, exc, orm, text
 
@@ -62,8 +68,8 @@ from unhcr import constants as const
 from unhcr import api_prospect
 
 if const.LOCAL:  # testing with local python files
-    const, api_prospect, *rest = const.import_local_libs(
-        mods=[["constants", "const"], ["api_prospect", "api_prospect"]]
+    const, api_leonics, api_prospect, *rest = const.import_local_libs(
+        mods=[["constants", "const"],["api_leonics", "api_leonics"], ["api_prospect", "api_prospect"]]
     )
 
 default_engine = None
@@ -94,6 +100,31 @@ def set_db_engine(connection_string):
         pool_recycle=const.SQLALCHEMY_POOL_RECYCLE,
         max_overflow=const.SQLALCHEMY_MAX_OVERFLOW,
     )
+
+
+def set_db_engine_by_name(ename):
+    """
+    Sets the database engine by name and configures connection strings accordingly.
+
+    This function checks if the current default engine's name matches the given engine
+    name (`ename`). If not, it updates the connection strings for the `TAKUM_RAW_CONN_STR`
+    and `LEONICS_RAW_TABLE` constants based on the specified engine name.
+    
+    If `ename` is 'postgresql', it sets the connection strings to the Azure environment
+    variables. Otherwise, it uses the Aiven connection strings.
+
+    :param ename: The name of the database engine (e.g., 'postgresql').
+    :return: The newly created SQLAlchemy engine.
+    """
+
+    ##if default_engine.engine.name != ename:
+    if ename == 'postgresql':
+        const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','xxxxxx')
+        const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','pppppp')
+    else:
+        const.TAKUM_RAW_CONN_STR =  os.getenv('AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
+        const.LEONICS_RAW_TABLE = os.getenv('LEONICS_RAW_TABLE','qqqqq')
+    return set_db_engine(const.TAKUM_RAW_CONN_STR), const.LEONICS_RAW_TABLE
 
 
 @contextmanager
@@ -319,11 +350,13 @@ def update_rows(max_dt, df, table_name, key="DateTimeServer"):
     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values}"
     sql_pred = " ON DUPLICATE KEY UPDATE "
 
-    if default_engine.engine.name == "postgresql":
+    if key == "datetimeserver":
+        default_engine, _ = set_db_engine_by_name('postgresql')
         sql_pred = " ON CONFLICT (datetimeserver) DO UPDATE SET "
         for col in df_filtered.columns:
             sql_pred += f"{col} = EXCLUDED.{col}, "
     else:
+        default_engine, _ = set_db_engine_by_name('mysql')
         for col in df_filtered.columns:
             sql_pred += f"{col} = VALUES({col}), "
     sql_pred = sql_pred[:-2] + ";"
@@ -537,7 +570,7 @@ def prospect_backfill_key(
     logging.info(f"Data has been saved to 'sys_pros'   LOCAL: {local}")
 
 
-def update_fuel_data(merged_hourly_sums, conn_str, table, site):
+def update_fuel_data(conn_str, merged_hourly_sums, table, site):
         """
         Updates the fuel data in the database.
 
@@ -548,8 +581,8 @@ def update_fuel_data(merged_hourly_sums, conn_str, table, site):
         file named 'mhs_<site>.csv' and the function returns None, None, None.
 
         Args:
-            merged_hourly_sums (pd.DataFrame): The merged hourly sums DataFrame.
             conn_str (str): The connection string to the database.
+            merged_hourly_sums (pd.DataFrame): The merged hourly sums DataFrame.
             table (str): The name of the table to update.
             site (str): The name of the site.
 
@@ -605,7 +638,7 @@ def update_fuel_data(merged_hourly_sums, conn_str, table, site):
         return None, None, None
 
 
-def update_bulk_fuel(conn_str, df, df1):
+def update_bulk_fuel(conn_str, df, df1, table, spath, fn1):
     """
     Updates the bulk fuel data in the database.
 
@@ -704,13 +737,13 @@ def update_takum_raw_db(token, start_ts):
     num_days = 2
     max_dt = start_ts
     if start_ts is None:
-        default_engine = set_db_engine('postgresql')
+        default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('postgresql')
         max_dt1, err = get_db_max_date(default_engine, const.LEONICS_RAW_TABLE)
         if err:
             logging.error(f"get_db_max_date Error occurred: {err}")
             exit(1)
         assert(max_dt1 is not None)
-        default_engine = set_db_engine('mysql')
+        default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('mysql')
         max_dt, err = get_db_max_date(default_engine, const.LEONICS_RAW_TABLE)
         if err:
             logging.error(f"get_db_max_date1 Error occurred: {err}")
@@ -720,7 +753,7 @@ def update_takum_raw_db(token, start_ts):
         # backfill 1 week
         #max_dt = max_dt - timedelta(days=7)
     st, ed = set_date_range(max_dt, num_days)
-    default_engine = set_db_engine('mysql')
+    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('mysql')
     df_leonics, err = api_leonics.getData(start=st,end=ed,token=token)
     if err:
         logging.error(f"api_leonics.getData Error occurred: {err}")
@@ -734,10 +767,10 @@ def update_takum_raw_db(token, start_ts):
     else:
         logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
 
-    default_engine = set_db_engine('postgresql')
+    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('postgresql')
 
     st, ed = set_date_range(max_dt1, num_days)
-    default_engine = set_db_engine('postgresql')
+    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('postgresql')
     df_azure, err = api_leonics.getData(start=st,end=ed,token=token)
     if err:
         logging.error(f"api_leonics.getData Error occurred: {err}")
