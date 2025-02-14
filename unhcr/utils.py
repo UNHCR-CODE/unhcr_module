@@ -344,21 +344,21 @@ def extract_data(data_list,site=None):
     label : str
         The extracted label value (if available).
     """
-
+    label = None
     for key in data_list:
         if site is None:
-            if key.has_key("site"):
+            if "site" in key:
                 site = key["site"]
             else:
-                site = list(key.keys())[0]
+                return None,None,None,None
             table = key["table"]
             fn = key["fn"]
-            if key.has_key("label"):
+            if "label" in key:
                 label = key["label"]
-            print(site, table, fn, label)
+            return site,table,fn,label
         elif site == key["site"]:
             table = key["table"]
             fn = key["fn"]
-            label = key["label"]
-            print(site, table, fn)
-    return site,table,fn,label
+            if "label" in key:
+                label = key["label"]
+            return site,table,fn,label

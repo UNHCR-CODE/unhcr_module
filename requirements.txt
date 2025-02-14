@@ -4,6 +4,7 @@ certifi==2024.12.14
 charset-normalizer==3.4.1
 colorama==0.4.6
 et_xmlfile==2.0.0
+fuzzywuzzy==0.18.0
 greenlet==3.1.1
 idna==3.10
 iniconfig==2.0.0
@@ -19,6 +20,7 @@ pytest==8.3.4
 pytest-cov==6.0.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
+Levenshtein==0.26.1
 pytz==2024.2
 requests==2.32.3
 s3transfer==0.10.4
@@ -27,3 +29,4 @@ SQLAlchemy==2.0.36
 typing_extensions==4.12.2
 tzdata==2024.2
 urllib3==2.3.0
+xlsxwriter==3.2.2

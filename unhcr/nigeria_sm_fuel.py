@@ -53,6 +53,7 @@ tz = "GMT"
 # inverter data list of dictionaries of deviceSn and deviceId to be extracted
 INVERTERS = [
     {
+        "site": "ABUJA",
         "ABUJA": [
             {"deviceSn": "2309200154", "deviceId": 240030917},
             {"deviceSn": "2309184208", "deviceId": 240031597},
@@ -66,6 +67,7 @@ INVERTERS = [
         "fn": "ABUJA_OFFICE_DG1_and_DG2_TANK.csv",
     },
     {
+        "site": "OGOJA_GH",
         "OGOJA_GH": [
             {"deviceSn": "2309182179", "deviceId": 240480864},
             {"deviceSn": "2309198004", "deviceId": 240481013},
@@ -77,6 +79,7 @@ INVERTERS = [
         "fn": "OGOJA_GH_DG1_and_DG2_TANK.csv",
     },
     {
+        "site": "OGOJA",
         "OGOJA": [
             {"deviceSn": "2408202575", "deviceId": 240897791},
             {"deviceSn": "2405052283", "deviceId": 240844835},
