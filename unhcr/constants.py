@@ -96,6 +96,8 @@ SM_HISTORY_URL = None
 
 environ_path = None
 
+def is_wsl():
+    return "WSL_DISTRO_NAME" in os.environ or "WSL_INTEROP" in os.environ
 
 # sorcery skip
 def set_environ():  # sourcery skip: extract-duplicate-method
@@ -232,7 +234,10 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     DEBUG = os.getenv("DEBUG", "DEBUG missing") == "1"
     LOCAL = os.getenv("LOCAL", "LOCAL missing") == "1" and not PROD
     # change in .env file to your path to use local modules
-    MOD_PATH = os.getenv("MOD_PATH", "MOD_PATH missing")
+    if is_wsl():
+        MOD_PATH = os.getenv("MOD_PATH_WSL", "MOD_PATH_WSL missing")
+    else:
+        MOD_PATH = os.getenv("MOD_PATH", "MOD_PATH missing")
     MODULES = [
         ["utils", "utils"],
         ["constants", "const"],

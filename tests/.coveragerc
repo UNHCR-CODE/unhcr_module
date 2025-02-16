@@ -13,6 +13,8 @@ omit =
     ../unhcr/utils.py
     ../unhcr/leonics_backfill.py
     ../setup.py
+    ../update_all.py
+    ../gb_serial_nums.py
 
 
 [coverage:report]

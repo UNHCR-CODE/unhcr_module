@@ -37,11 +37,8 @@ Key Components
         changes and deployments.
 """
 
-from datetime import datetime, timedelta
 import logging
 import os
-import pandas as pd
-import re
 import requests
 
 
@@ -55,9 +52,9 @@ from unhcr import db
 from unhcr import api_leonics
 
 
-#if const.LOCAL: # testing with local python files
-mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
-utils, const, db, api_leonics, *rest = mods
+if const.LOCAL: # testing with local python files
+    mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
+    utils, const, db, api_leonics, *rest = mods
 
 utils.log_setup(override=True)
 logging.info(f"PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
