@@ -33,13 +33,16 @@ import logging
 
 from dotenv import find_dotenv, load_dotenv
 
+import requests
 from unhcr import utils
 
 # Define constants
 PROD = None
 DEBUG = None
 LOCAL = None
+AZURE_URL = None
 MOD_PATH = None
+
 
 # Leonics API
 LEONICS_BASE_URL = None
@@ -99,6 +102,17 @@ environ_path = None
 def is_wsl():
     return "WSL_DISTRO_NAME" in os.environ or "WSL_INTEROP" in os.environ
 
+def is_running_on_azure():
+    try:
+        response = requests.get(
+            "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
+            headers={"Metadata": "true"},
+            timeout=5,
+        )
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
+    
 # sorcery skip
 def set_environ():  # sourcery skip: extract-duplicate-method
     """
@@ -118,6 +132,8 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         Indicates if the module is running in debug mode.
     LOCAL : bool
         Indicates if the module is running in a local environment.
+    AZURE_URL : str
+        URL for the Azure VM.
     MOD_PATH : str
         Path to the directory where the modules are located.
     LEONICS_BASE_URL : str
@@ -190,6 +206,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     global DEBUG
     global LOCAL
     global MOD_PATH
+    global AZURE_URL
     global LEONICS_BASE_URL
     global LEONICS_USER_CODE
     global LEONICS_KEY
@@ -233,6 +250,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     PROD = os.getenv("PROD", "PROD missing") == "1"
     DEBUG = os.getenv("DEBUG", "DEBUG missing") == "1"
     LOCAL = os.getenv("LOCAL", "LOCAL missing") == "1" and not PROD
+    AZURE_URL = os.getenv("AZURE_URL", "AZURE_URL missing")
     # change in .env file to your path to use local modules
     if is_wsl():
         MOD_PATH = os.getenv("MOD_PATH_WSL", "MOD_PATH_WSL missing")
@@ -265,6 +283,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     PROS_CONN_AZURE_STR = os.getenv(
         "PROS_CONN_AZURE_STR", "PROS_CONN_AZURE_STR missing"
     )
+    
 
     # Aiven Mysql DB
     TAKUM_RAW_CONN_STR = os.getenv(
@@ -317,6 +336,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         "PROS_OUT_LOCAL_API_KEY", "PROS_OUT_LOCAL_API_KEY missing"
     )
 
+
     # SOLARMAN NIGERIA
     SM_APP_ID = os.getenv("SM_APP_ID", "SM_APP_ID missing")
     SM_APP_SECRET = os.getenv("SM_APP_SECRET", "SM_APP_SECRET missing")
@@ -328,6 +348,10 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     SM_TOKEN_URL = f"{SM_URL}/account/v1.0/token"
     SM_HISTORY_URL = f"{SM_URL}/device/v1.0/historical?language=en"
 
+    if is_running_on_azure():
+        PROS_CONN_AZURE_STR = PROS_CONN_LOCAL_STR.replace(AZURE_URL, "localhost")
+        AZURE_FUEL_DB_CONN_STR = AZURE_FUEL_DB_CONN_STR.replace(AZURE_URL, "localhost")
+        AZURE_BASE_URL = AZURE_BASE_URL.replace(AZURE_URL, "localhost")
 
 def load_env(path=".env"):
     """
@@ -445,7 +469,6 @@ if res is None:
     print("No .env file found or could not be loaded")
     exit(999)
 
-MOD_PATH = r"E:\_UNHCR\CODE\unhcr_module\unhcr"
 MODULES = [
     ["utils", "utils"],
     ["constants", "const"],

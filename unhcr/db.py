@@ -122,6 +122,8 @@ def set_db_engine_by_name(ename):
     if ename == 'postgresql':
         const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','xxxxxx')
         const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','pppppp')
+        if const.is_running_on_azure():
+            const.TAKUM_RAW_CONN_STR = const.TAKUM_RAW_CONN_STR.replace(const.AZURE_URL, 'localhost')
     else:
         const.TAKUM_RAW_CONN_STR =  os.getenv('AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
         const.LEONICS_RAW_TABLE = os.getenv('LEONICS_RAW_TABLE','qqqqq')

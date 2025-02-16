@@ -16,6 +16,7 @@ if not exist "%VENV_DIR%" (
     call .venv\Scripts\activate.bat
 )
 
+pip install --upgrade pip
 .venv\Scripts\python.exe -c "import unhcr" 2>NUL
 if %errorlevel% equ 0 (
     echo Module 'unhcr' is installed.

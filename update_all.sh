@@ -17,6 +17,7 @@ else
     source venvl/bin/activate
 fi
 
+pip install --upgrade pip
 python3 -c "import unhcr" 2>/dev/null
 if [ $? -eq 0 ]; then
     echo "Module 'unhcr' is installed."
