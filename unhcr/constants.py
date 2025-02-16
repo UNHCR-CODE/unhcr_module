@@ -57,6 +57,10 @@ PROS_CONN_AZURE_STR = None
 TAKUM_RAW_CONN_STR = None
 LEONICS_RAW_TABLE = None
 
+# Fuel DB
+AIVEN_FUEL_DB_CONN_STR=None
+AZURE_FUEL_DB_CONN_STR=None
+
 # DB connection pool
 SQLALCHEMY_POOL_SIZE = None
 SQLALCHEMY_POOL_TIMEOUT = None
@@ -92,6 +96,8 @@ SM_HISTORY_URL = None
 
 environ_path = None
 
+def is_wsl():
+    return "WSL_DISTRO_NAME" in os.environ or "WSL_INTEROP" in os.environ
 
 # sorcery skip
 def set_environ():  # sourcery skip: extract-duplicate-method
@@ -130,6 +136,10 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         Connection string for Aiven MySQL database Leonics raw data.
     LEONICS_RAW_TABLE : str
         Table name for Leonics raw data.
+    AIVEN_FUEL_DB_CONN_STR : str
+        Connection string for Aiven MySQL database Fuel data.
+    AZURE_FUEL_DB_CONN_STR : str
+        Connection string for Azure MySQL database Fuel data.
     SQLALCHEMY_POOL_SIZE : int
         Size of the connection pool for SQLAlchemy.
     SQLALCHEMY_POOL_TIMEOUT : int
@@ -190,6 +200,9 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     global PROS_CONN_AZURE_STR
     global TAKUM_RAW_CONN_STR
     global LEONICS_RAW_TABLE
+    global AIVEN_FUEL_DB_CONN_STR
+    global AZURE_FUEL_DB_CONN_STR
+
     global SQLALCHEMY_POOL_SIZE
     global SQLALCHEMY_POOL_TIMEOUT
     global SQLALCHEMY_POOL_RECYCLE
@@ -221,7 +234,10 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     DEBUG = os.getenv("DEBUG", "DEBUG missing") == "1"
     LOCAL = os.getenv("LOCAL", "LOCAL missing") == "1" and not PROD
     # change in .env file to your path to use local modules
-    MOD_PATH = os.getenv("MOD_PATH", "MOD_PATH missing")
+    if is_wsl():
+        MOD_PATH = os.getenv("MOD_PATH_WSL", "MOD_PATH_WSL missing")
+    else:
+        MOD_PATH = os.getenv("MOD_PATH", "MOD_PATH missing")
     MODULES = [
         ["utils", "utils"],
         ["constants", "const"],
@@ -256,6 +272,13 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         "AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR missing",
     )
     LEONICS_RAW_TABLE = os.getenv("LEONICS_RAW_TABLE", "LEONICS_RAW_TABLE missing")
+    
+    AIVEN_FUEL_DB_CONN_STR = os.getenv(
+        "AIVEN_FUEL_DB_CONN_STR", "AIVEN_FUEL_DB_CONN_STR missing"
+    )
+    AZURE_FUEL_DB_CONN_STR = os.getenv(
+        "AZURE_FUEL_DB_CONN_STR", "AZURE_FUEL_DB_CONN_STR missing"
+    )
 
     SQLALCHEMY_POOL_SIZE = int(
         os.getenv("SQLALCHEMY_POOL_SIZE", "SQLALCHEMY_POOL_SIZE missing") or 5
@@ -426,10 +449,11 @@ MOD_PATH = r"E:\_UNHCR\CODE\unhcr_module\unhcr"
 MODULES = [
     ["utils", "utils"],
     ["constants", "const"],
-    ["s3", "s3"],
     ["db", "db"],
     ["api_leonics", "api_leonics"],
     ["api_prospect", "api_prospect"],
+    ["nigeria_sm_fuel", "sm_fuel"],
+    ["s3", "s3"],
 ]
 
 

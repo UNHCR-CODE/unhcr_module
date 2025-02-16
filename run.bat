@@ -18,9 +18,9 @@ if not exist "%VENV_DIR%" (
 
 .venv\Scripts\python.exe -c "import unhcr" 2>NUL
 if %errorlevel% equ 0 (
-    echo Module '<module_name>' is installed.
+    echo Module 'unhcr' is installed.
 ) else (
-    echo Module '<module_name>' is not installed.
+    echo Module 'unhcr' is not installed.
     .venv\Scripts\pip install .
 )
 

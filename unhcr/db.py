@@ -26,24 +26,51 @@ set_db_engine(connection_string):
     Creates and returns a SQLAlchemy engine with connection pooling for efficient database access. Pool parameters are 
     configurable via environment variables.
 
+set_db_engine_by_name(ename): 
+    Sets the database engine by name and configures connection strings accordingly.
+
+update_fuel_data(conn_str, merged_hourly_sums, table, site):
+    Updates the fuel data in the database. 
+    This function takes in the merged hourly sums DataFrame, connection string, table name, and site name.
+    It constructs the SQL query string by replacing 'TABLE' with the table name and adds the VALUES clause.
+    The SQL query is then executed using the connection string and the updated row count is printed.
+    Finally, the merged hourly sums DataFrame is saved to a CSV file named 'mhs_<site>.csv' and the function returns None, None, None.
+
+update_bulk_fuel(conn_str, df, df1): 
+    Updates the bulk fuel data in the database. 
+    This function takes in the connection string, the first DataFrame, and the second DataFrame.
+    It constructs the SQL query string by replacing 'TABLE' with the table name and adds the VALUES clause.
+    The SQL query is then executed using the connection string and the updated row count is printed.
+    Finally, the first DataFrame is saved to a CSV file named 'mhs_<site>.csv' and the function returns None, None, None.
+
+update_takum_raw_db(token, start_ts): 
+    Updates the Takum raw data in the database. 
+    This function takes in the API token and the start timestamp.
+    It queries the Takum API for the raw data, filters it, and updates the database.
+    The function returns None, None, None.
+
 WIP backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, start_ts, local, table_name): 
     These functions appear to be related to backfilling data into the Prospect API but are marked as "WIP" 
     (work in progress) and are not fully functional.
 """
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
+import math
+import os
 from types import SimpleNamespace
+import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, exc, orm, text
 
 from unhcr import constants as const
 from unhcr import api_prospect
+from unhcr import api_leonics
 
 if const.LOCAL:  # testing with local python files
-    const, api_prospect, *rest = const.import_local_libs(
-        mods=[["constants", "const"], ["api_prospect", "api_prospect"]]
+    const, api_leonics, api_prospect, *rest = const.import_local_libs(
+        mods=[["constants", "const"],["api_leonics", "api_leonics"], ["api_prospect", "api_prospect"]]
     )
 
 default_engine = None
@@ -74,6 +101,31 @@ def set_db_engine(connection_string):
         pool_recycle=const.SQLALCHEMY_POOL_RECYCLE,
         max_overflow=const.SQLALCHEMY_MAX_OVERFLOW,
     )
+
+
+def set_db_engine_by_name(ename):
+    """
+    Sets the database engine by name and configures connection strings accordingly.
+
+    This function checks if the current default engine's name matches the given engine
+    name (`ename`). If not, it updates the connection strings for the `TAKUM_RAW_CONN_STR`
+    and `LEONICS_RAW_TABLE` constants based on the specified engine name.
+    
+    If `ename` is 'postgresql', it sets the connection strings to the Azure environment
+    variables. Otherwise, it uses the Aiven connection strings.
+
+    :param ename: The name of the database engine (e.g., 'postgresql').
+    :return: The newly created SQLAlchemy engine.
+    """
+
+    ##if default_engine.engine.name != ename:
+    if ename == 'postgresql':
+        const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','xxxxxx')
+        const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','pppppp')
+    else:
+        const.TAKUM_RAW_CONN_STR =  os.getenv('AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
+        const.LEONICS_RAW_TABLE = os.getenv('LEONICS_RAW_TABLE','qqqqq')
+    return set_db_engine(const.TAKUM_RAW_CONN_STR), const.LEONICS_RAW_TABLE
 
 
 @contextmanager
@@ -299,11 +351,13 @@ def update_rows(max_dt, df, table_name, key="DateTimeServer"):
     sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values}"
     sql_pred = " ON DUPLICATE KEY UPDATE "
 
-    if default_engine.engine.name == "postgresql":
+    if key == "datetimeserver":
+        default_engine, _ = set_db_engine_by_name('postgresql')
         sql_pred = " ON CONFLICT (datetimeserver) DO UPDATE SET "
         for col in df_filtered.columns:
             sql_pred += f"{col} = EXCLUDED.{col}, "
     else:
+        default_engine, _ = set_db_engine_by_name('mysql')
         for col in df_filtered.columns:
             sql_pred += f"{col} = VALUES({col}), "
     sql_pred = sql_pred[:-2] + ";"
@@ -515,3 +569,226 @@ def prospect_backfill_key(
         # df.to_json(f'sys_pros_{sts}.json', index=False)
 
     logging.info(f"Data has been saved to 'sys_pros'   LOCAL: {local}")
+
+
+def update_fuel_data(conn_str, merged_hourly_sums, table, site):
+        """
+        Updates the fuel data in the database.
+
+        This function takes in the merged hourly sums DataFrame, connection string, table name, and site name.
+        It constructs the SQL query string by replacing 'TABLE' with the table name and adds the VALUES
+        clause based on the merged_hourly_sums DataFrame. The SQL query is then executed using the connection
+        string and the updated row count is printed. Finally, the merged_hourly_sums DataFrame is saved to a CSV
+        file named 'mhs_<site>.csv' and the function returns None, None, None.
+
+        Args:
+            conn_str (str): The connection string to the database.
+            merged_hourly_sums (pd.DataFrame): The merged hourly sums DataFrame.
+            table (str): The name of the table to update.
+            site (str): The name of the site.
+
+        Returns:
+            None, None, None
+        """
+        sql = """
+        INSERT INTO public.TABLE(
+            st_ts,
+            end_ts,
+            gen_kwh,
+            delta1,
+            delta2,
+            kwh_l_dg1,
+            kwh_l_dg2
+        )
+        VALUES
+        ON CONFLICT (st_ts)
+        DO UPDATE SET
+            end_ts = EXCLUDED.end_ts,
+            gen_kwh = EXCLUDED.gen_kwh,
+            delta1 = EXCLUDED.delta1,
+            delta2 = EXCLUDED.delta2,
+            kwh_l_dg1 = EXCLUDED.kwh_l_dg1,
+            kwh_l_dg2 = EXCLUDED.kwh_l_dg2;
+        """.replace('TABLE', table)
+
+        from sqlalchemy import create_engine
+
+        merged_hourly_sums_notnull = merged_hourly_sums.where(pd.notnull(merged_hourly_sums), 'null')
+        #date	hour	kwh	deltal1	deltal2	kWh/L1	kWh/L2
+        #  0     1       2    3        4      5       6
+        sql_vals = 'VALUES '
+        for v in merged_hourly_sums_notnull.values:
+            ts = datetime.combine(v[0], datetime.min.time()).replace(hour=int(v[1]))
+            ts_str = ts.isoformat()
+            end_str = (ts + timedelta(hours=1)).isoformat()
+            sql_vals += f" ('{ts_str}','{end_str}',{v[2]},{v[3]},{v[4]},{v[5]},{v[6]}),"
+
+        sql = sql.replace('VALUES',sql_vals[:-1]).replace('\n',' ')
+
+        #xx
+        db_url = conn_str  # Replace with your DB credentials
+        engine = create_engine(db_url)
+        res, err = sql_execute(sql, engine)
+        if res:
+            print('ROWS !!!!!!!!!!!!!!!!!!!', res.rowcount)
+        else:
+            print('ROWS ??????????????', err)
+
+
+        merged_hourly_sums_notnull.to_csv(f'mhs_{site}.csv')
+        return None, None, None
+
+
+def update_bulk_fuel(conn_str, df, df1, table, spath, fn1):
+    """
+    Updates the bulk fuel data in the database.
+
+    This function takes in the merged daily sums DataFrame, connection string, table name, and site name.
+    It constructs the SQL query string by replacing 'TABLE' with the table name and adds the VALUES
+    clause based on the merged daily sums DataFrame. The SQL query is then executed using the connection
+    string and the updated row count is printed. Finally, the merged daily sums DataFrame is saved to a CSV
+    file named 'mhs_<site>.csv' and the function returns None, None, None.
+
+    Args:
+        conn_str (str): The connection string to the database.
+        df (pd.DataFrame): The merged daily sums DataFrame.
+        df1 (pd.DataFrame): The DataFrame containing the last row of the database.
+
+    Returns:
+        str, str: The SQL query string and the result of the query execution.
+    """
+    df1["Time"] = pd.to_datetime(df1["Time"], dayfirst=True)
+    df1 = df1.sort_values(by="Time")
+    ts = df1.iloc[-1].to_dict()["Time"]
+
+    sql_vals = "VALUES "
+    # 'Unit Name', 'Time', 'Event Name', 'Value', 'liters_used', 'liter_bought'
+    found = False
+    for row in df.itertuples(index=True, name="Row"):
+        if row[2] <= ts:
+            continue
+        found = True
+        print(f"Index: {row[0]}, Event: {row[3]}, Time: {row[2]}")
+        lu = np.nan
+        lb = np.nan
+        val = row[4]
+        if " Liter" in val:
+            if " Fuel_Drop" in row[3]:
+                lu = val.replace(" Liter", "")
+            elif " Refueled" in row[3]:
+                lb = val.replace(" Liter", "")
+        if val == "nan":
+            val = ""
+        new_row = {
+            "Unit Name": row[1],
+            "Time": row[2],
+            "Event Name": row[3],
+            "Value": val,
+            "liters_used": lu,  # Fill with appropriate value or leave None
+            "liter_bought": lb,  # Fill with appropriate value or leave None
+        }
+        df1.loc[len(df1)] = new_row
+        if isinstance(lu, float) and math.isnan(lu):
+            lu = None
+        if isinstance(lb, float) and math.isnan(lb):
+            lb = None
+        sql_vals += f" ('{row[1]}','{row[2]}','{row[3]}','{val}',{lu},{lb}),"
+
+    if not found:
+        return None, "Nothing to update"
+
+    df1.to_excel(os.getcwd() + spath + fn1, index=False)
+
+    sql = """
+    INSERT INTO public.TABLE ("Unit Name", "Time", "Event Name", "Value", liters_used, liter_bought)
+    VALUES
+    ON CONFLICT ("Unit Name", "Time", "Event Name")
+    DO UPDATE SET
+        "Value" = EXCLUDED."Value",
+        liters_used = EXCLUDED.liters_used,
+        liter_bought = EXCLUDED.liter_bought
+    """.replace(
+        "TABLE", table
+    )
+
+    sql = (
+        sql.replace("VALUES", sql_vals[:-1]).replace("\n", " ").replace("None", "null")
+    )
+
+    engine = create_engine(conn_str)
+    return sql_execute(sql, engine)
+
+
+# TODO Rename this here and in `execute`
+def update_takum_raw_db(token, start_ts):
+    def set_date_range(st_dt, num_days, backfill=False):
+        st = (st_dt + timedelta(minutes=1)).date().isoformat()
+        st = st.replace('-', '')
+        ed = datetime.now() + timedelta(days=num_days)
+        if backfill:
+            ed = st_dt + timedelta(days=num_days)
+        # Leonics API has a limit of 10 days
+        if ed - st_dt > timedelta(days=10):
+            ed = st_dt + timedelta(days=10)
+        ed = ed.date().isoformat()
+        start_ts = ed
+        ed = ed.replace('-', '')
+        return st, ed
+
+    num_days = 2
+    max_dt = start_ts
+    if start_ts is None:
+        default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('postgresql')
+        max_dt1, err = get_db_max_date(default_engine, const.LEONICS_RAW_TABLE)
+        if err:
+            logging.error(f"get_db_max_date Error occurred: {err}")
+            exit(1)
+        assert(max_dt1 is not None)
+        default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('mysql')
+        max_dt, err = get_db_max_date(default_engine, const.LEONICS_RAW_TABLE)
+        if err:
+            logging.error(f"get_db_max_date1 Error occurred: {err}")
+            exit(1)
+        assert(max_dt is not None)
+
+        # backfill 1 week
+        #max_dt = max_dt - timedelta(days=7)
+    st, ed = set_date_range(max_dt, num_days)
+    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('mysql')
+    df_leonics, err = api_leonics.getData(start=st,end=ed,token=token)
+    if err:
+        logging.error(f"api_leonics.getData Error occurred: {err}")
+        exit(2)
+    # Convert the 'datetime_column' to pandas datetime
+    df_leonics['DatetimeServer'] = pd.to_datetime(df_leonics['DatetimeServer'])
+    res, err = update_leonics_db(max_dt,df_leonics, const.LEONICS_RAW_TABLE)
+    if err:
+        logging.error(f"update_leonics_db Error occurred: {err}")
+        exit(3)
+    else:
+        logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
+
+    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('postgresql')
+
+    st, ed = set_date_range(max_dt1, num_days)
+    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('postgresql')
+    df_azure, err = api_leonics.getData(start=st,end=ed,token=token)
+    if err:
+        logging.error(f"api_leonics.getData Error occurred: {err}")
+        exit(2)
+    # Convert the 'datetime_column' to pandas datetime
+    df_azure['DatetimeServer'] = pd.to_datetime(df_azure['DatetimeServer'])
+    #df_azure['datetimeserver'] = df_leonics['DatetimeServer'].copy()
+    #df_azure = df_azure.drop(columns=['DatetimeServer'])
+    # we use all lowercase column names in AZURE
+    df_azure.columns = df_azure.columns.str.lower()
+    res, err = update_leonics_db(max_dt1,df_azure, const.LEONICS_RAW_TABLE, 'datetimeserver')
+    assert(res is not None)
+    assert(err is None)
+    if err:
+        logging.error(f"update_leonics_db Error occurred: {err}")
+        exit(3)
+    else:
+        logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
+
+    return start_ts

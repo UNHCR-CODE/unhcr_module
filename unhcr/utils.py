@@ -5,6 +5,9 @@ Overview
     configuring logging, and managing module functionalities.
 
 Key Components
+    ts2Epoch(dt, offset_hrs=0):
+        Convert a date string to epoch time in seconds, adjusted for a given time offset, returns epoch in seconds
+
     filter_nested_dict(obj, val=-0.999): 
         Recursively removes a specified value (val, defaulting to -0.999) from nested dictionaries and lists. 
         This function is crucial for cleaning JSON-like data by removing placeholder values representing missing 
@@ -19,13 +22,28 @@ Key Components
         This function attempts to convert a given value to a float. If the conversion fails due to a ValueError 
         or TypeError, it logs the error and returns 0.0. This provides a safe way to handle potential 
         data type issues during processing.
-        
+
     get_module_version(name='unhcr_module'): 
         Retrieves the version number of the specified module (defaulting to 'unhcr_module'). 
         It returns the version number and any potential error message encountered during retrieval. 
         This is useful for tracking and managing module versions.
+    
+    is_version_greater_or_equal(ver): 
+        Determines if a given version is greater than or equal to the module version.
+        It compares a provided version string (ver) with the current module version. 
+        It uses semantic versioning (major.minor.patch) for comparison.
+
+    extract_data(data_list,site=None): 
+        Extracts and returns site, table, fn, and label from a list of dictionaries. 
+        It iterates over each dictionary in the given data_list. If the site parameter is None, 
+        it assigns the values from the first dictionary's "site", "table", "fn", and "label" 
+        (if available) keys to the respective variables. If the site parameter matches the 
+        "site" key in any dictionary, it updates the table, fn, and label (if available) 
+        variables with the values from that dictionary. Prints the extracted values for each 
+        matching dictionary.
 """
 
+from datetime import datetime, timedelta
 from importlib.metadata import version
 import logging
 import optparse
@@ -33,32 +51,24 @@ import os
 import sys
 
 
-def filter_nested_dict(obj, val=-0.999):
+def config_log_handler(handler, level, formatter, logger):
     """
-    Recursively remove all entries of a nested dict that have a value equal to val. If the object is a dictionary,
-    it creates a new dictionary containing only key-value pairs where the value is not equal to val. If the object is a list,
-    it creates a new list containing only items that are not equal to val. Otherwise, it returns the object unchanged.
-    The default value for val is -0.999. This function is crucial for cleaning JSON-like data by removing a specific placeholder value
-    representing missing or unwanted data.
+    Configure a log handler with the given level, formatter, and add it to the given logger.
 
     Parameters
     ----------
-    obj : dict | list
-        The object to be filtered
-    val : any, optional
-        The value to be removed from the object, by default -0.999
-
-    Returns
-    -------
-    dict | list
-        The filtered object
+    handler : logging.Handler
+        The log handler to be configured
+    level : str
+        The logging level to set for the handler
+    formatter : logging.Formatter
+        The formatter to set for the handler
+    logger : logging.Logger
+        The logger to add the handler to
     """
-    if isinstance(obj, dict):
-        return {k: filter_nested_dict(v) for k, v in obj.items() if v != val}
-    elif isinstance(obj, list):
-        return [filter_nested_dict(item) for item in obj]
-    else:
-        return obj
+    handler.setLevel(getattr(logging, level))
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 
 def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
@@ -112,6 +122,59 @@ def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
     logger.setLevel(getattr(logging, level))
 
     return logger
+
+# init logging
+log_setup(override=True)
+
+
+def ts2Epoch(dt, offset_hrs=0):
+    """
+    Convert a date string to epoch time in seconds, adjusted for a given time offset
+
+    Parameters
+    ----------
+    dt : str
+        Date string in format %Y-%m-%dT%H:%M:%S
+    offset_hrs : int
+        Number of hours to offset the epoch time by
+
+    Returns
+    -------
+    int
+        The epoch time in seconds
+    """
+    p = '%Y-%m-%dT%H:%M:%S'
+    epoch = datetime(1970, 1, 1)
+    e = (datetime.strptime(dt, p) - timedelta(hours= offset_hrs) - epoch).total_seconds()
+    return int(e)
+
+
+def filter_nested_dict(obj, val=-0.999):
+    """
+    Recursively remove all entries of a nested dict that have a value equal to val. If the object is a dictionary,
+    it creates a new dictionary containing only key-value pairs where the value is not equal to val. If the object is a list,
+    it creates a new list containing only items that are not equal to val. Otherwise, it returns the object unchanged.
+    The default value for val is -0.999. This function is crucial for cleaning JSON-like data by removing a specific placeholder value
+    representing missing or unwanted data.
+
+    Parameters
+    ----------
+    obj : dict | list
+        The object to be filtered
+    val : any, optional
+        The value to be removed from the object, by default -0.999
+
+    Returns
+    -------
+    dict | list
+        The filtered object
+    """
+    if isinstance(obj, dict):
+        return {k: filter_nested_dict(v) for k, v in obj.items() if v != val}
+    elif isinstance(obj, list):
+        return [filter_nested_dict(item) for item in obj]
+    else:
+        return obj
 
 
 def create_cmdline_parser(level="INFO"):
@@ -181,26 +244,6 @@ def create_cmdline_parser(level="INFO"):
         return None
 
 
-def config_log_handler(handler, level, formatter, logger):
-    """
-    Configure a log handler with the given level, formatter, and add it to the given logger.
-
-    Parameters
-    ----------
-    handler : logging.Handler
-        The log handler to be configured
-    level : str
-        The logging level to set for the handler
-    formatter : logging.Formatter
-        The formatter to set for the handler
-    logger : logging.Logger
-        The logger to add the handler to
-    """
-    handler.setLevel(getattr(logging, level))
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
-
 def str_to_float_or_zero(value):
     """
     Safely convert a value to a float, or return 0.0 if there is an error.
@@ -240,5 +283,82 @@ def get_module_version(name="unhcr_module"):
         err = str(e)
     return v_number, err
 
+def is_version_greater_or_equal(ver):
+    # Remove the "v_" prefix from version2 if it exists
+    """
+    Determine if a given version is greater than or equal to the module version.
 
-log_setup(override=True)
+    This function compares a provided version string (ver) with the current module
+    version. It uses semantic versioning (major.minor.patch) for comparison.
+
+    Parameters:
+        ver (str): The version string to compare against the module version.
+
+    Returns:
+        bool: True if the provided version is greater than or equal to the module 
+        version, False otherwise. If an error occurs while retrieving the module 
+        version, it logs the error and returns False.
+    """
+
+    version, err = get_module_version()
+    if err:
+        logging.error(f"get_module_version Error occurred: {err}")
+        return False
+
+    version.lstrip("v_")
+
+    # Split both version strings into major, minor, and patch
+    parts1 = list(map(int, ver.split(".")))
+    parts2 = list(map(int, version.split(".")))
+
+    # Compare each component: major, minor, patch
+    return parts1 >= parts2
+
+
+def extract_data(data_list,site=None):
+    """
+    Extracts and returns site, table, fn, and label from a list of dictionaries.
+
+    Iterates over each dictionary in the given data_list. If the site parameter is None, 
+    it assigns the values from the first dictionary's "site", "table", "fn", and "label" 
+    (if available) keys to the respective variables. If the site parameter matches the 
+    "site" key in any dictionary, it updates the table, fn, and label (if available) 
+    variables with the values from that dictionary. Prints the extracted values for each 
+    matching dictionary.
+
+    Parameters
+    ----------
+    data_list : list of dict
+        A list of dictionaries containing keys "site", "table", "fn", and optionally "label".
+    site : str, optional
+        The site to search for within the data_list. If None, uses the first site's data.
+
+    Returns
+    -------
+    site : str
+        The extracted site value.
+    table : str
+        The extracted table value.
+    fn : str
+        The extracted fn (function) value.
+    label : str
+        The extracted label value (if available).
+    """
+    label = None
+    for key in data_list:
+        if site is None:
+            if "site" in key:
+                site = key["site"]
+            else:
+                return None,None,None,None
+            table = key["table"]
+            fn = key["fn"]
+            if "label" in key:
+                label = key["label"]
+            return site,table,fn,label
+        elif site == key["site"]:
+            table = key["table"]
+            fn = key["fn"]
+            if "label" in key:
+                label = key["label"]
+            return site,table,fn,label
