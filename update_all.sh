@@ -27,7 +27,15 @@ else
 fi
 
 # Run the update_all.py script
-python3 update_all.py --log INFO
+python3 update_all.py --log INFO 
+EXIT_CODE=$?  # Store the exit code of Python
 
-# Deactivate the virtual environment
 deactivate
+
+# If Python script fails, log the exit code
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "$(date): update_all.py FAILED with exit code $EXIT_CODE" >> error.log
+fi
+
+# Exit with the same exit code as Python
+exit $EXIT_CODE
