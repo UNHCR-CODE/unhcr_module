@@ -56,8 +56,14 @@ if const.LOCAL: # testing with local python files
     mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
     utils, const, db, api_leonics, *rest = mods
 
-utils.log_setup(override=True)
+utils.log_setup(level="INFO", log_file="unhcr.update_all.log", override=True)
 logging.info(f"PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
+
+if not utils.is_version_greater_or_equal('0.4.6'):
+    logging.error(
+        "This version of the script requires at least version 0.4.6 of the unhcr module."
+    )
+    exit(46)
 
 # just to test S3
 # TODO waiting for new creds

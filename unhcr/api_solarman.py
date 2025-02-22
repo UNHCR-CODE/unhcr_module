@@ -1,11 +1,23 @@
+"""
+   Overview:
+    get_weather_data: Retrieves weather data from the Solarman API.
+    get_devices: Retrieves a list of devices from the Solarman API.
+    get_inverters: Retrieves a list of inverters from the Solarman API.
+    get_realtime_data: Retrieves real-time data from the Solarman API.
+    get_historical_data: Retrieves historical data from the Solarman API.
+    get_energy_data: Retrieves energy-related data from the Solarman API.
+    get_alarm_data: Retrieves alarm-related data from the Solarman API.
+    get_device_info: Retrieves detailed information about a specific device from the Solarman API.
+    get_site_info: Retrieves detailed information about a specific site from the Solarman API.
+"""
 import bisect
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, UTC
 import json
 import logging
-import os
 import pandas as pd
 import requests
 
+from sqlalchemy import text
 from unhcr import constants as const
 from unhcr import utils
 
@@ -28,6 +40,7 @@ URL = const.SM_URL
 TOKEN_URL = const.SM_TOKEN_URL
 HISTORICAL_URL = const.SM_HISTORY_URL
 
+# Constants for the Solarman API TODO: update by calling API
 INVERTERS = [
     {
         "ABUJA": [
@@ -197,6 +210,21 @@ WEATHER = {
 
 
 def get_weather_data(date_str, devices):
+    """
+    Retrieves weather data for specified devices and date.
+
+    This function sends a POST request to the historical weather data API for each
+    device in the provided list. It processes the response to extract relevant weather
+    parameters and compiles them into a DataFrame.
+
+    Parameters:
+    date_str (str): The start date for data retrieval in 'YYYY-MM-DD' format.
+    devices (list): A list of dictionaries, each containing 'deviceSn' and 'deviceId' keys.
+
+    Returns:
+    pd.DataFrame: A DataFrame containing the weather data, or None if no data is retrieved.
+    """
+
     url = HISTORICAL_URL
     data = []
     first = True
@@ -275,13 +303,65 @@ def get_weather_data(date_str, devices):
                     data.insert(index, info)
                     epoch_values = [item["epoch"] for item in data]
         else:
-            logging.info("??????????????????????????????????????????????????")
+            logging.error(f"get_weather_data ERROR: {response.status_code} {response.text}")
+            continue
     if len(data) == 0:
         return None
     df = pd.DataFrame(data)
-    
+
     #df["ts"] = df["ts"].dt.tz_localize(None)
     # # If the datetime index has timezone information
     # if isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
     #     df.index = df.index.tz_localize(None)
     return df
+
+def update_weather_db(df, epoch, engine):
+    """
+    Updates the weather database with new data.
+
+    This function processes a DataFrame of weather data, adjusts data types, and inserts
+    the data into the `solarman.weather` table. If any rows conflict on the primary key 
+    (device_id, ts), it updates the existing records with new values.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing weather data to be inserted or updated.
+    engine (sqlalchemy.engine.base.Engine): The SQLAlchemy engine to connect to the database.
+
+    Returns:
+    tuple: A tuple containing the number of records inserted/updated and an error message, if any.
+    """
+
+    try:
+        df["device_id"] = df["device_id"].astype("int32")  # int4
+        df["org_epoch"] = df["org_epoch"].astype("int32")  # int4
+        df["epoch"] = df["epoch"].astype("int32")  # int4
+        df["ts"] = pd.to_datetime(df["ts"])  # Ensure timestamp format
+        df["temp_c"] = df["temp_c"].astype("float32")  # float4
+        df["panel_temp"] = df["panel_temp"].astype("float32")  # float4
+        df["humidity"] = df["humidity"].astype("float32")  # float4
+        df["rainfall"] = df["rainfall"].astype("float32")  # float4
+        df["irr"] = df["irr"].astype("float32")  # float4
+        df["daily_irr"] = df["daily_irr"].astype("float32")  # float4
+
+        df = df[df["org_epoch"] >= epoch]
+
+        df.to_sql("temp_weather", engine, schema="solarman", if_exists="replace", index=False)
+
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO solarman.weather (device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr)
+                SELECT device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr FROM solarman.temp_weather
+                ON CONFLICT (device_id, ts) DO UPDATE 
+                SET org_epoch = EXCLUDED.org_epoch,
+                    epoch = EXCLUDED.epoch,
+                    temp_c = EXCLUDED.temp_c,
+                    panel_temp = EXCLUDED.panel_temp,
+                    humidity = EXCLUDED.humidity,
+                    rainfall = EXCLUDED.rainfall,
+                    irr = EXCLUDED.irr,
+                    daily_irr = EXCLUDED.daily_irr;
+            """))
+            conn.commit()
+            return len(df), None
+    except Exception as e:
+        return None, f"update_weather_db ERROR: {e}"

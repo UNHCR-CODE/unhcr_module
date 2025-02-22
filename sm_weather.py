@@ -21,10 +21,16 @@ if const.LOCAL:  # testing with local python files
         ]
     )
 
-
+utils.log_setup(level="INFO", log_file="unhcr.sm_weather.log", override=True)
 logging.info(
     f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}"
 )
+
+if not utils.is_version_greater_or_equal('0.4.6'):
+    logging.error(
+        "This version of the script requires at least version 0.4.6 of the unhcr module."
+    )
+    exit(46)
 
 engines = [db.set_local_defaultdb_engine()]
 if not const.is_running_on_azure():
@@ -57,40 +63,12 @@ for engine in engines:
                 date_obj = date_obj + timedelta(days=1)
                 date_str = date_obj.strftime("%Y-%m-%d")
                 continue
+            res, err = api_solarman.update_weather_db(df, epoch, engine)
+            if err:
+                logging.error(f"sm_weather update_weather_db (next site) ERROR: {err}")
+                break
 
-            df["device_id"] = df["device_id"].astype("int32")  # int4
-            df["org_epoch"] = df["org_epoch"].astype("int32")  # int4
-            df["epoch"] = df["epoch"].astype("int32")  # int4
-            df["ts"] = pd.to_datetime(df["ts"])  # Ensure timestamp format
-            df["temp_c"] = df["temp_c"].astype("float32")  # float4
-            df["panel_temp"] = df["panel_temp"].astype("float32")  # float4
-            df["humidity"] = df["humidity"].astype("float32")  # float4
-            df["rainfall"] = df["rainfall"].astype("float32")  # float4
-            df["irr"] = df["irr"].astype("float32")  # float4
-            df["daily_irr"] = df["daily_irr"].astype("float32")  # float4
-
-            df = df[df["org_epoch"] >= epoch]
-
-            df.to_sql("temp_weather", engine, schema="solarman", if_exists="replace", index=False)
-
-            with engine.begin() as conn:
-                conn.execute(text("""
-                    INSERT INTO solarman.weather (device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr)
-                    SELECT device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr FROM solarman.temp_weather
-                    ON CONFLICT (device_id, ts) DO UPDATE 
-                    SET org_epoch = EXCLUDED.org_epoch,
-                        epoch = EXCLUDED.epoch,
-                        temp_c = EXCLUDED.temp_c,
-                        panel_temp = EXCLUDED.panel_temp,
-                        humidity = EXCLUDED.humidity,
-                        rainfall = EXCLUDED.rainfall,
-                        irr = EXCLUDED.irr,
-                        daily_irr = EXCLUDED.daily_irr;
-                """))
-                ######conn.execute(text("DROP TABLE solarman.temp_weather;"))
-                conn.commit()
-
-            logging.info(date_str)
+            logging.info(f"sm_weather SITE: {site} Date: {date_str} Rows: {len(df)}")
             date_obj = date_obj + timedelta(days=1)
             date_str = date_obj.strftime("%Y-%m-%d")
 

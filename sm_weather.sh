@@ -26,15 +26,15 @@ else
     pip install .
 fi
 
-# Run the update_all.py script
-python3 update_all.py --log INFO 
+# Run the sm_weather.py script
+python3 sm_weather.py --log INFO 
 EXIT_CODE=$?  # Store the exit code of Python
 
 deactivate
 
 # If Python script fails, log the exit code
 if [ $EXIT_CODE -ne 0 ]; then
-    echo "$(date): update_all.py FAILED with exit code $EXIT_CODE" >> error_update_all.log
+    echo "$(date): sm_weather.py FAILED with exit code $EXIT_CODE" >> error_sm_weather.log
 fi
 
 # Exit with the same exit code as Python
