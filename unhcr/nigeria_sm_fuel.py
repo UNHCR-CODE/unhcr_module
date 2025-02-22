@@ -226,9 +226,7 @@ def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
                         if d["name"] == "SoC":
                             info["batt_soc"] = str(d["value"])
                         if d["name"] == "Total Charging Energy":
-                            info["batt_chg_ttl_kwh"] = utils.str_to_float_or_zero(
-                                d["value"]
-                            )
+                            info["batt_chg_ttl_kwh"] = utils.str_to_float_or_zero(d["value"])
 
                         if d["name"] == "Gen Daily Run Time":
                             info["gen_run_hrs"] = str(d["value"])
@@ -237,9 +235,46 @@ def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
                         if d["name"] == "Generator Active Power":
                             info["gen_pwr_w"] = utils.str_to_float_or_zero(d["value"])
                         if d["name"] == "Daily Production Generator":
-                            info["gen_produce_kwh"] = utils.str_to_float_or_zero(
-                                d["value"]
-                            )
+                            info["gen_produce_kwh"] = utils.str_to_float_or_zero(d["value"])
+
+                        if d["name"] == "Total Solar Power":
+                            info["solar_ttl_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "Cumulative Production (Active)":
+                            info["prod_cumulative_kwh"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "Daily Production (Active)":
+                            info["prod_daily_kwh"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV1":
+                            info["pv1_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV2":
+                            info["pv2_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV3":
+                            info["pv3_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV4":
+                            info["pv4_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV5":
+                            info["pv5_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV6":
+                            info["pv6_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV7":
+                            info["pv7_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV8":
+                            info["pv8_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV1":
+                            info["pv1_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV2":
+                            info["pv2_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV3":
+                            info["pv3_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV4":
+                            info["pv4_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV5":
+                            info["pv5_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV6":
+                            info["pv6_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV7":
+                            info["pv7_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV8":
+                            info["pv8_w"] = utils.str_to_float_or_zero(d["value"])
                     if first:
                         data.append(
                             [
@@ -521,6 +556,55 @@ def gen_file_from_csv(fn, dtStart, data, append=None):
         # Read the lines from the file and remove newline characters
         lines = [line.strip() for line in file.readlines()]
     return [-1, fn, dtStart, lines]
+
+def extract_solar_csv_data(site, fn, from_dt=None):
+    # default processing date
+    dt = datetime.utcnow() - timedelta(days=1)
+    yr= dt.year
+    mnth = dt.month
+    day= dt.day
+    days= 1
+    append = False
+    if from_dt is not None:
+        from_dt = '2024-10-01'
+
+    if os.path.exists(fn):
+        print('File exists, delete it to get new data %s' % fn)
+        with open(fn, 'r') as file:
+            # Read the lines from the file and remove newline characters
+            solar = [line.strip() for line in file.readlines()]
+        x, fnnn, dtStart, lines = gen_file_from_csv(fn, from_dt, solar)
+    else:
+        with open(fn1, 'r', encoding='utf-8', errors='replace') as file:
+            df1 = pd.read_csv(file)
+        df = pd.read_csv(fn)
+        start = df.iloc[-1].to_dict()['ts']
+        start1 = df1.iloc[-1].to_dict()['start']
+        st_ts = datetime.strptime(start, "%Y-%m-%d %H:%M")
+        st_ts1 = datetime.strptime(start1, "%Y-%m-%dT%H:%M:%S:%f")
+        if st_ts > st_ts1:
+            append = True
+            filtered_df = df[pd.to_datetime(df['ts']) > st_ts1]
+            df_data = filtered_df.astype(str).apply(lambda row: ",".join(row), axis=1).tolist()
+            x, fnnn, dtStart, lines = gen_file_from_csv(fn1, '2024-10-01', df_data, append=append)
+            yr= st_ts1.year
+            mnth = st_ts1.month
+            day= st_ts1.day
+            days= math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
+        elif from_dt is not None:
+            st_ts1 = datetime.strptime(from_dt, "%Y-%m-%d")
+            yr= st_ts1.year
+            mnth = st_ts1.month
+            day= st_ts1.day
+            days= math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
+        else:
+            return None, None, None
+    with open(fn1, 'r', encoding='utf-8', errors='replace') as file:
+        df1 = pd.read_csv(file, usecols=['epoch', 'deltal1', 'deltal2'])
+
+    # Extract and filter epochs from data
+    data = solarman_api_historical(site=site, year=yr, month=mnth, day=day, days= days)
+    return df, df1, data
 
 
 def extract_csv_data(site, fn, fn1, from_dt=None):

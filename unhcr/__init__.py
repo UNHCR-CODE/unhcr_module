@@ -6,6 +6,7 @@ from unhcr import api_prospect
 from unhcr import db
 from unhcr import s3
 from unhcr import nigeria_sm_fuel
+from unhcr import api_solarman
 
 ##############################
 # Hey there - I've reviewed your changes - here's some feedback:

@@ -45,6 +45,8 @@ Key Components
 
 from datetime import datetime, timedelta
 from importlib.metadata import version
+import csv
+import glob
 import logging
 import optparse
 import os
@@ -123,6 +125,7 @@ def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
 
     return logger
 
+
 # init logging
 log_setup(override=True)
 
@@ -143,9 +146,9 @@ def ts2Epoch(dt, offset_hrs=0):
     int
         The epoch time in seconds
     """
-    p = '%Y-%m-%dT%H:%M:%S'
+    p = "%Y-%m-%dT%H:%M:%S"
     epoch = datetime(1970, 1, 1)
-    e = (datetime.strptime(dt, p) - timedelta(hours= offset_hrs) - epoch).total_seconds()
+    e = (datetime.strptime(dt, p) - timedelta(hours=offset_hrs) - epoch).total_seconds()
     return int(e)
 
 
@@ -283,6 +286,7 @@ def get_module_version(name="unhcr_module"):
         err = str(e)
     return v_number, err
 
+
 def is_version_greater_or_equal(ver):
     # Remove the "v_" prefix from version2 if it exists
     """
@@ -295,8 +299,8 @@ def is_version_greater_or_equal(ver):
         ver (str): The version string to compare against the module version.
 
     Returns:
-        bool: True if the provided version is greater than or equal to the module 
-        version, False otherwise. If an error occurs while retrieving the module 
+        bool: True if the provided version is greater than or equal to the module
+        version, False otherwise. If an error occurs while retrieving the module
         version, it logs the error and returns False.
     """
 
@@ -315,15 +319,15 @@ def is_version_greater_or_equal(ver):
     return parts1 >= parts2
 
 
-def extract_data(data_list,site=None):
+def extract_data(data_list, site=None):
     """
     Extracts and returns site, table, fn, and label from a list of dictionaries.
 
-    Iterates over each dictionary in the given data_list. If the site parameter is None, 
-    it assigns the values from the first dictionary's "site", "table", "fn", and "label" 
-    (if available) keys to the respective variables. If the site parameter matches the 
-    "site" key in any dictionary, it updates the table, fn, and label (if available) 
-    variables with the values from that dictionary. Prints the extracted values for each 
+    Iterates over each dictionary in the given data_list. If the site parameter is None,
+    it assigns the values from the first dictionary's "site", "table", "fn", and "label"
+    (if available) keys to the respective variables. If the site parameter matches the
+    "site" key in any dictionary, it updates the table, fn, and label (if available)
+    variables with the values from that dictionary. Prints the extracted values for each
     matching dictionary.
 
     Parameters
@@ -350,15 +354,60 @@ def extract_data(data_list,site=None):
             if "site" in key:
                 site = key["site"]
             else:
-                return None,None,None,None
+                return None, None, None, None
             table = key["table"]
             fn = key["fn"]
             if "label" in key:
                 label = key["label"]
-            return site,table,fn,label
+            return site, table, fn, label
         elif site == key["site"]:
             table = key["table"]
             fn = key["fn"]
             if "label" in key:
                 label = key["label"]
-            return site,table,fn,label
+            return site, table, fn, label
+
+
+def concat_csv_files(input_file, output_file, append=True):
+    """
+    Concatenates CSV files from a glob pattern into one file.
+    
+    Parameters
+    ----------
+    input_file : str
+        A glob pattern to match input CSV files.
+    output_file : str
+        The output file path to write the concatenated CSV data.
+    append : bool, optional
+        Whether to append the input CSV files if the output file already exists.
+        Defaults to True.
+    
+    Notes
+    -----
+    Headers will be written only if the output file does not exist.
+    """
+    csv_files = sorted(glob.glob(input_file))
+    file_exists = os.path.exists(output_file)
+    mode = "a" if append and file_exists else "w"
+
+    with open(output_file, "a", newline="") as out_file:
+        writer = csv.writer(out_file)
+
+        for file in csv_files:
+            with open(file, "r", newline="") as in_file:
+                reader = csv.reader(in_file)
+                headers = next(reader)  # Read the header row
+
+                if not file_exists:  # Write headers only if file doesn't exist
+                    writer.writerow(headers)
+                    file_exists = True  # After first write, we have headers
+
+                writer.writerows(reader)  # Append rows
+
+    print("CSV files merged and appended if existing!")
+    # Rename processed files
+    for file in csv_files:
+        # Extract the directory and filename separately
+        directory, filename = os.path.split(file)
+        new_name = os.path.join(directory, "processed_" + filename)
+        os.rename(file, new_name)
