@@ -27,5 +27,5 @@ if %errorlevel% equ 0 (
 )
 
 REM changed python path to make it work in Windows scheduler -- was running a different python
-venv\Scripts\python.exe sm_weather.py --log INFO
+venv\Scripts\python.exe update_all.py --log INFO
 deactivate

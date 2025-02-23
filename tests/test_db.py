@@ -1,15 +1,14 @@
 import pytest
 import requests
+from unhcr import constants as const
 from unhcr.db import (
     set_db_engine,
     get_db_max_date,  # mocked update_leonics_db, update_rows, sql_execute
     update_prospect,
     backfill_prospect,
     get_db_session,
-    prospect_get_start_ts,
 )
 import unhcr
-from unhcr import constants as const
 import pandas as pd
 from datetime import datetime
 from unittest.mock import patch, MagicMock
