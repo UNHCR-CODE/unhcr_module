@@ -226,9 +226,7 @@ def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
                         if d["name"] == "SoC":
                             info["batt_soc"] = str(d["value"])
                         if d["name"] == "Total Charging Energy":
-                            info["batt_chg_ttl_kwh"] = utils.str_to_float_or_zero(
-                                d["value"]
-                            )
+                            info["batt_chg_ttl_kwh"] = utils.str_to_float_or_zero(d["value"])
 
                         if d["name"] == "Gen Daily Run Time":
                             info["gen_run_hrs"] = str(d["value"])
@@ -237,9 +235,46 @@ def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
                         if d["name"] == "Generator Active Power":
                             info["gen_pwr_w"] = utils.str_to_float_or_zero(d["value"])
                         if d["name"] == "Daily Production Generator":
-                            info["gen_produce_kwh"] = utils.str_to_float_or_zero(
-                                d["value"]
-                            )
+                            info["gen_produce_kwh"] = utils.str_to_float_or_zero(d["value"])
+
+                        if d["name"] == "Total Solar Power":
+                            info["solar_ttl_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "Cumulative Production (Active)":
+                            info["prod_cumulative_kwh"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "Daily Production (Active)":
+                            info["prod_daily_kwh"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV1":
+                            info["pv1_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV2":
+                            info["pv2_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV3":
+                            info["pv3_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV4":
+                            info["pv4_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV5":
+                            info["pv5_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV6":
+                            info["pv6_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV7":
+                            info["pv7_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Voltage PV8":
+                            info["pv8_v"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV1":
+                            info["pv1_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV2":
+                            info["pv2_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV3":
+                            info["pv3_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV4":
+                            info["pv4_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV5":
+                            info["pv5_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV6":
+                            info["pv6_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV7":
+                            info["pv7_w"] = utils.str_to_float_or_zero(d["value"])
+                        if d["name"] == "DC Power PV8":
+                            info["pv8_w"] = utils.str_to_float_or_zero(d["value"])
                     if first:
                         data.append(
                             [

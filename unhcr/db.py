@@ -103,7 +103,7 @@ def set_db_engine(connection_string):
     )
 
 
-def set_db_engine_by_name(ename):
+def set_db_engine_by_name(ename, local=False):
     """
     Sets the database engine by name and configures connection strings accordingly.
 
@@ -122,6 +122,8 @@ def set_db_engine_by_name(ename):
     if ename == 'postgresql':
         const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','xxxxxx')
         const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','pppppp')
+        if const.is_running_on_azure() or local:
+            const.TAKUM_RAW_CONN_STR = const.TAKUM_RAW_CONN_STR.replace(const.AZURE_URL, 'localhost')
     else:
         const.TAKUM_RAW_CONN_STR =  os.getenv('AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
         const.LEONICS_RAW_TABLE = os.getenv('LEONICS_RAW_TABLE','qqqqq')
@@ -792,3 +794,40 @@ def update_takum_raw_db(token, start_ts):
         logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
 
     return start_ts
+
+
+local_defaultdb_engine = None
+azure_defaultdb_engine = None
+
+def set_local_defaultdb_engine():
+    global local_defaultdb_engine
+    if local_defaultdb_engine is None:
+        local_defaultdb_engine, _ = set_db_engine_by_name('postgresql', local=True)
+    return local_defaultdb_engine
+
+def set_azure_defaultdb_engine():
+    global azure_defaultdb_engine
+    if azure_defaultdb_engine is None:
+        azure_defaultdb_engine, _ = set_db_engine_by_name('postgresql', local=False)
+    return azure_defaultdb_engine
+
+set_local_defaultdb_engine()
+set_azure_defaultdb_engine()
+
+def get_sm_weather_max_epoch(device_id, engine):
+    """
+    Retrieves the latest timestamp from the database. If the database is empty or an error occurs,
+    returns None and the error.
+    Args:
+        device_id (int): The device ID to query the database for.
+        engine (sqlalchemy.engine.Engine): The connection engine to use.
+    Returns:
+        tuple: A tuple containing the latest timestamp as an integer, and None if the query was successful, or an error message if it was not.
+    """
+    sql = f"select max(org_epoch) FROM solarman.weather where device_id = {device_id}"
+    res, err = sql_execute(sql, engine)
+    if err is not None:
+        return None, err
+    val = res.fetchall()
+    epoch = val[0][0]
+    return epoch, None

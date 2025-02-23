@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # change to your repo root dir
-cd /mnt/e/_UNHCR/CODE/unhcr_module || exit 1
+cd ~/code/unhcr_module || exit 1
 
 # Activate the virtual environment directory
 VENV_DIR="venvl"
@@ -17,6 +17,7 @@ else
     source venvl/bin/activate
 fi
 
+pip install --upgrade pip
 python3 -c "import unhcr" 2>/dev/null
 if [ $? -eq 0 ]; then
     echo "Module 'unhcr' is installed."
@@ -26,7 +27,15 @@ else
 fi
 
 # Run the update_all.py script
-python3 update_all.py --log INFO
+python3 update_all.py --log INFO 
+EXIT_CODE=$?  # Store the exit code of Python
 
-# Deactivate the virtual environment
 deactivate
+
+# If Python script fails, log the exit code
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "$(date): update_all.py FAILED with exit code $EXIT_CODE" >> error_update_all.log
+fi
+
+# Exit with the same exit code as Python
+exit $EXIT_CODE

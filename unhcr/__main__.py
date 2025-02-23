@@ -21,13 +21,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-##########################
-# Hey there - I've reviewed your changes and they look great!
-
-# Here's what I looked at during the review
-# 🟢 General issues: all looks good
-# 🟢 Security: all looks good
-# 🟢 Testing: all looks good
-# 🟢 Complexity: all looks good
-# 🟢 Documentation: all looks good

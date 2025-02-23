@@ -10,7 +10,7 @@ from datetime import date
 import requests
 from unittest.mock import Mock
 
-from unhcr import api_leonics, constants as const
+from unhcr import constants as const, api_leonics
 
 # Arrange
 TEST_TOKEN = "test_token"
