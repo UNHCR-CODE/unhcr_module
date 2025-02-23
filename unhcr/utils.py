@@ -409,5 +409,5 @@ def concat_csv_files(input_file, output_file, append=True):
     for file in csv_files:
         # Extract the directory and filename separately
         directory, filename = os.path.split(file)
-        new_name = os.path.join(directory, "processed_" + filename)
+        new_name = os.path.join(directory, f"processed_{filename}")
         os.rename(file, new_name)

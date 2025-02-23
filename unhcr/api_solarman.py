@@ -208,6 +208,14 @@ WEATHER = {
         "OGOJA_GH": {"deviceSn": "002502295492-001", "deviceId": 240482343},
     }
 
+WEATHER_MAPPING = {
+    "Environment Temp": ("temp_c", utils.str_to_float_or_zero),
+    "Module Temp": ("panel_temp", utils.str_to_float_or_zero),
+    "Environment Humidity": ("humidity", utils.str_to_float_or_zero),
+    "Daily Rainfall": ("rainfall", utils.str_to_float_or_zero),
+    "Irradiance": ("irr", str),
+    "Daily Irradiance": ("daily_irr", str),
+}
 
 def get_weather_data(date_str, devices):
     """
@@ -280,20 +288,9 @@ def get_weather_data(date_str, devices):
                             e, UTC
                         )  # depriciated datetime.utcfromtimestamp(e).strftime('%Y-%m-%d %H:%M')
                         info["ts"] = dt
-
-                    if d["name"] == "Environment Temp":
-                        info["temp_c"] = utils.str_to_float_or_zero(d["value"])
-                    if d["name"] == "Module Temp":
-                        info["panel_temp"] = utils.str_to_float_or_zero(d["value"])
-                    if d["name"] == "Environment Humidity":
-                        info["humidity"] = utils.str_to_float_or_zero(d["value"])
-                    if d["name"] == "Daily Rainfall":
-                        info["rainfall"] = utils.str_to_float_or_zero(d["value"])
-
-                    if d["name"] == "Irradiance":
-                        info["irr"] = str(d["value"])
-                    if d["name"] == "Daily Irradiance":
-                        info["daily_irr"] = str(d["value"])
+                    elif d["name"] in WEATHER_MAPPING:
+                        field, converter = WEATHER_MAPPING[d["name"]]
+                        info[field] = converter(d["value"])
 
                 if first:
                     data.append(info)
@@ -305,7 +302,7 @@ def get_weather_data(date_str, devices):
         else:
             logging.error(f"get_weather_data ERROR: {response.status_code} {response.text}")
             continue
-    if len(data) == 0:
+    if not data:
         return None
     df = pd.DataFrame(data)
 

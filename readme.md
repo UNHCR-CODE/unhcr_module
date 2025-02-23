@@ -121,7 +121,7 @@ For demonstration purposes I am using Windows and installing under: **_UNHCR\COD
     SM_BIZ_ACCESS_TOKEN=
     SM_URL=
 
-6. Run the main integeration test code, Execute **run.bat**. Note thsi will actually update the Prospect and Aiven DBs. The output should be similar: (truncating the venv setup)
+6. Run the main integration test code, Execute **run.bat**. Note this will actually update the Prospect and Aiven DBs. The output should be similar: (truncating the venv setup)
 
 ### Output from run.bat
 

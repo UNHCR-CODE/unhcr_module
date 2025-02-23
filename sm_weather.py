@@ -46,7 +46,7 @@ for engine in engines:
             logging.error(err)
             continue
         epochs.append(epoch)
-    if len(epochs) == 0:
+    if not epochs:
         continue
     epoch = min(epochs)
     for site in api_solarman.SITE_ID:

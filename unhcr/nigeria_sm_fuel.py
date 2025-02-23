@@ -557,55 +557,6 @@ def gen_file_from_csv(fn, dtStart, data, append=None):
         lines = [line.strip() for line in file.readlines()]
     return [-1, fn, dtStart, lines]
 
-def extract_solar_csv_data(site, fn, from_dt=None):
-    # default processing date
-    dt = datetime.utcnow() - timedelta(days=1)
-    yr= dt.year
-    mnth = dt.month
-    day= dt.day
-    days= 1
-    append = False
-    if from_dt is not None:
-        from_dt = '2024-10-01'
-
-    if os.path.exists(fn):
-        print('File exists, delete it to get new data %s' % fn)
-        with open(fn, 'r') as file:
-            # Read the lines from the file and remove newline characters
-            solar = [line.strip() for line in file.readlines()]
-        x, fnnn, dtStart, lines = gen_file_from_csv(fn, from_dt, solar)
-    else:
-        with open(fn1, 'r', encoding='utf-8', errors='replace') as file:
-            df1 = pd.read_csv(file)
-        df = pd.read_csv(fn)
-        start = df.iloc[-1].to_dict()['ts']
-        start1 = df1.iloc[-1].to_dict()['start']
-        st_ts = datetime.strptime(start, "%Y-%m-%d %H:%M")
-        st_ts1 = datetime.strptime(start1, "%Y-%m-%dT%H:%M:%S:%f")
-        if st_ts > st_ts1:
-            append = True
-            filtered_df = df[pd.to_datetime(df['ts']) > st_ts1]
-            df_data = filtered_df.astype(str).apply(lambda row: ",".join(row), axis=1).tolist()
-            x, fnnn, dtStart, lines = gen_file_from_csv(fn1, '2024-10-01', df_data, append=append)
-            yr= st_ts1.year
-            mnth = st_ts1.month
-            day= st_ts1.day
-            days= math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
-        elif from_dt is not None:
-            st_ts1 = datetime.strptime(from_dt, "%Y-%m-%d")
-            yr= st_ts1.year
-            mnth = st_ts1.month
-            day= st_ts1.day
-            days= math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
-        else:
-            return None, None, None
-    with open(fn1, 'r', encoding='utf-8', errors='replace') as file:
-        df1 = pd.read_csv(file, usecols=['epoch', 'deltal1', 'deltal2'])
-
-    # Extract and filter epochs from data
-    data = solarman_api_historical(site=site, year=yr, month=mnth, day=day, days= days)
-    return df, df1, data
-
 
 def extract_csv_data(site, fn, fn1, from_dt=None):
     # default processing date
