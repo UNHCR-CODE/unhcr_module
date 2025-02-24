@@ -31,6 +31,7 @@ if [ -z "$1" ]; then
         pip install .
     fi
 else
+    pip install -r requirements.txt
     pip install .
 fi
 

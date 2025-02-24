@@ -28,6 +28,7 @@ IF "%1"=="" (
         venv\Scripts\pip install .
     )
 ) ELSE (
+    venv\Scripts\pip install -r requirements.txt
     venv\Scripts\pip install .
 )
 
