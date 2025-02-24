@@ -125,6 +125,9 @@ def execute(token, start_ts=None):
         else:
             db.update_prospect(table_name=const.LEONICS_RAW_TABLE) #AZURE
 
+        if const.is_running_on_azure():
+            return start_ts
+
         url = "http://localhost:3000"
         try:
             response = requests.get(url)
