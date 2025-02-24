@@ -316,7 +316,7 @@ def is_version_greater_or_equal(ver):
     parts2 = list(map(int, version.split(".")))
 
     # Compare each component: major, minor, patch
-    return parts1 >= parts2
+    return parts1 <= parts2
 
 
 def extract_data(data_list, site=None):

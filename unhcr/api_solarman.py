@@ -43,6 +43,7 @@ HISTORICAL_URL = const.SM_HISTORY_URL
 # Constants for the Solarman API TODO: update by calling API
 INVERTERS = [
     {
+        "site": "ABUJA",
         "ABUJA": [
             {"deviceSn": "2309184208", "deviceId": 240031597},
             {"deviceSn": "2309200109", "deviceId": 240030990},
@@ -51,39 +52,44 @@ INVERTERS = [
             {"deviceSn": "2306296090", "deviceId": 240030831},
             {"deviceSn": "2309182126", "deviceId": 240031338},
             {"deviceSn": "2309200154", "deviceId": 240030917},
-        ]
+        ],
+        "table": "solar_kwh_abuja",
+        "fn": "ABUJA_OFFICE_DG1_and_DG2_TANK.csv",
     },
     {
+        "site": "OGOJA_GH",
         "OGOJA_GH": [
             {"deviceSn": "2309182179", "deviceId": 240480864},
             {"deviceSn": "2309198004", "deviceId": 240481013},
             {"deviceSn": "2309188195", "deviceId": 240481631},
             {"deviceSn": "2309208178", "deviceId": 240481437},
             {"deviceSn": "2309200145", "deviceId": 240481716},
-        ]
+        ],
+        "table": "fuel_kwh_ogoja_gh",
+        "fn": "OGOJA_GH_DG1_and_DG2_TANK.csv",
     },
     {
+        "site": "OGOJA",
         "OGOJA": [
             {"deviceSn": "2309194019", "deviceId": 240321506},  # not in current API
-            {
-                "deviceSn": "2408202575",
-                "deviceId": 240897791,
-            },
+            {"deviceSn": "2408202575", "deviceId": 240897791},
             {"deviceSn": "2405052283", "deviceId": 240844835},
             {"deviceSn": "2309188295", "deviceId": 240295039},
             {"deviceSn": "2309188310", "deviceId": 240294993},
             {"deviceSn": "2309188199", "deviceId": 240321874},
-        ]
+        ],
+        "table": "fuel_kwh_ogoja_office",
+        "fn": "OGOJA_OFFICE_DG1_and_DG2_TANK.csv",
     },
     {
+        "site": "LAGOS",
         "LAGOS": [
-            {
-                "deviceSn": "2401110046",
-                "deviceId": 240033551,
-            },
+            {"deviceSn": "2401110046", "deviceId": 240033551},
             {"deviceSn": "2306296095", "deviceId": 240033630},
             {"deviceSn": "2306290070", "deviceId": 240033712},
-        ]
+        ],
+        "table": "fuel_kwh_lagos_office",
+        "fn": "LAGOS_OFFICE_DG1_and_DG2_TANK.csv",
     },
 ]
 

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# */30 * * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash sm_weather.sh" > /dev/null || (/bin/bash sm_weather.sh > /dev/null && echo $(( $(cat run_count_sm_weather.log 2>/dev/null || echo 0) + 1 )) > run_count_sm_weather.log)
+
+
 # change to your repo root dir
 cd ~/code/unhcr_module || exit 1
 
@@ -17,12 +20,17 @@ else
     source venvl/bin/activate
 fi
 
-pip install --upgrade pip
-python3 -c "import unhcr" 2>/dev/null
-if [ $? -eq 0 ]; then
-    echo "Module 'unhcr' is installed."
+#pip install --upgrade pip
+
+if [ -z "$1" ]; then
+    python3 -c "import unhcr" 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "Module 'unhcr' is installed."
+    else
+        echo "Module 'unhcr' is not installed."
+        pip install .
+    fi
 else
-    echo "Module 'unhcr' is not installed."
     pip install .
 fi
 

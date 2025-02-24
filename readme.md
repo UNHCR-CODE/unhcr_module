@@ -1,6 +1,6 @@
 # UNHCR Data Integration Module
 
-2025-02-16  v_0.4.6
+2025-02-16  v_0.4.7
 
 This module facilitates the integration of data from the Leonics API into UNHCR's systems, specifically a MySQL database, and the Prospect system.  It handles authentication with the Leonics API, data retrieval, filtering, and updates to both target systems.
 

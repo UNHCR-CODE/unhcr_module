@@ -572,7 +572,7 @@ def extract_csv_data(site, fn, fn1, from_dt=None):
         with open(fn, 'r') as file:
             # Read the lines from the file and remove newline characters
             liters = [line.strip() for line in file.readlines()]
-        x, fnnn, dtStart, lines = gen_file_from_csv(fn1, '2024-10-01', liters)
+            x, fnnn, dtStart, lines = gen_file_from_csv(fn1, '2024-10-01', liters)
     else:
         with open(fn1, 'r', encoding='utf-8', errors='replace') as file:
             df1 = pd.read_csv(file)
@@ -604,6 +604,52 @@ def extract_csv_data(site, fn, fn1, from_dt=None):
     # Extract and filter epochs from data
     data = solarman_api_historical(site=site, year=yr, month=mnth, day=day, days= days)
     return df, df1, data
+
+
+def extract_csv_data_new(site, fn, from_dt=None):
+    # default processing date
+    dt = datetime.utcnow() - timedelta(days=1)
+    yr= dt.year
+    mnth = dt.month
+    day= dt.day
+    days= 1
+    append = False
+
+    if not os.path.exists(fn):
+        logging.warning(f'File not found {fn}')
+        return None, None, None
+    
+    with open(fn, 'r', encoding='utf-8', errors='replace') as file:
+        # Read the lines from the file and remove newline characters
+        ############liters = [line.strip() for line in file.readlines()]
+    ################x, fnnn, dtStart, lines = gen_file_from_csv(fn1, '2024-10-01', liters)
+
+        df = pd.read_csv(file)
+        start = df.iloc[-1].to_dict()['ts']
+        st_ts = datetime.strptime(start, "%Y-%m-%d %H:%M")
+        st_ts1 = datetime.strptime(from_dt, "%Y-%m-%d %H:%M")
+        if st_ts > st_ts1:
+            append = True
+            filtered_df = df[pd.to_datetime(df['ts']) > st_ts1]
+            df_data = filtered_df.astype(str).apply(lambda row: ",".join(row), axis=1).tolist()
+            x, fnnn, dtStart, lines = gen_file_from_csv(fn1, '2024-10-01', df_data, append=append)
+            yr= st_ts1.year
+            mnth = st_ts1.month
+            day= st_ts1.day
+            days= math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
+        elif from_dt is not None:
+            st_ts1 = datetime.strptime(from_dt, "%Y-%m-%d %H:%M")
+            yr= st_ts1.year
+            mnth = st_ts1.month
+            day= st_ts1.day
+            days= math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
+        else:
+            return None, None, None
+  
+
+    # Extract and filter epochs from data
+    data = solarman_api_historical(site=site, year=yr, month=mnth, day=day, days= days)
+    return df, data
 
 def concat_csv_files(dpath,fn, label):
     """

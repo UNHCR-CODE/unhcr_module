@@ -831,3 +831,26 @@ def get_sm_weather_max_epoch(device_id, engine):
     val = res.fetchall()
     epoch = val[0][0]
     return epoch, None
+
+
+def get_fuel_max_ts(site, engine):
+    """
+    Retrieves the latest start timestamp for a given site from the fuel database.
+    
+    Args:
+        site (str): The name of the site to query the database for.
+        engine (sqlalchemy.engine.Engine): The connection engine to use.
+        
+    Returns:
+        tuple: A tuple containing the latest start timestamp as a datetime object,
+        and None if the query was successful, or an error message if it was not.
+    """
+
+    sql = f"SELECT max(st_ts) FROM fuel.fuel_kwh_{site.lower()}"
+    res, err = sql_execute(sql, engine)
+    if err is not None:
+        return None, err
+    val = res.fetchall()
+    ts = val[0][0]
+    return ts, None
+
