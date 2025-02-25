@@ -68,7 +68,7 @@ for engine in engines:
                 logging.error(f"sm_weather update_weather_db (next site) ERROR: {err}")
                 break
 
-            logging.info(f"sm_weather SITE: {site} Date: {date_str} Rows: {len(df)}")
+            logging.info(f"sm_weather SITE: {site} Date: {date_str} Rows: {res}")
             date_obj = date_obj + timedelta(days=1)
             date_str = date_obj.strftime("%Y-%m-%d")
 

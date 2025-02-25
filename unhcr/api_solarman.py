@@ -10,6 +10,7 @@
     get_device_info: Retrieves detailed information about a specific device from the Solarman API.
     get_site_info: Retrieves detailed information about a specific site from the Solarman API.
 """
+
 import bisect
 from datetime import datetime, UTC
 import json
@@ -53,8 +54,9 @@ INVERTERS = [
             {"deviceSn": "2309182126", "deviceId": 240031338},
             {"deviceSn": "2309200154", "deviceId": 240030917},
         ],
-        "table": "solar_kwh_abuja",
+        "table": "fuel_kwh_abuja",
         "fn": "ABUJA_OFFICE_DG1_and_DG2_TANK.csv",
+        "label": "BIOHENRY - UNHCR ABUJA OFFICE DG1 and DG2",
     },
     {
         "site": "OGOJA_GH",
@@ -67,6 +69,7 @@ INVERTERS = [
         ],
         "table": "fuel_kwh_ogoja_gh",
         "fn": "OGOJA_GH_DG1_and_DG2_TANK.csv",
+        "label": "BIOHENRY - UNHCR OGOJA GUEST HOUSE DG1 AND DG2",
     },
     {
         "site": "OGOJA",
@@ -78,8 +81,9 @@ INVERTERS = [
             {"deviceSn": "2309188310", "deviceId": 240294993},
             {"deviceSn": "2309188199", "deviceId": 240321874},
         ],
-        "table": "fuel_kwh_ogoja_office",
+        "table": "fuel_kwh_ogoja",
         "fn": "OGOJA_OFFICE_DG1_and_DG2_TANK.csv",
+        "label": "BIOHENRY – UNHCR OGOJA OFFICE DG1 and DG2",
     },
     {
         "site": "LAGOS",
@@ -90,6 +94,7 @@ INVERTERS = [
         ],
         "table": "fuel_kwh_lagos_office",
         "fn": "LAGOS_OFFICE_DG1_and_DG2_TANK.csv",
+        "label": "BIOHENRY -UNHCR LAGOS OFFICE DG1 and DG2",
     },
 ]
 
@@ -208,11 +213,11 @@ SITE_LIST = [
 ]
 
 WEATHER = {
-        "ABUJA": {"deviceSn": "002502255400-001", "deviceId": 240093462},
-        "LAGOS": {"deviceSn": "002502325494-001", "deviceId": 240355934},
-        "OGOJA": {"deviceSn": "002502705488-001", "deviceId": 240464333},
-        "OGOJA_GH": {"deviceSn": "002502295492-001", "deviceId": 240482343},
-    }
+    "ABUJA": {"deviceSn": "002502255400-001", "deviceId": 240093462},
+    "LAGOS": {"deviceSn": "002502325494-001", "deviceId": 240355934},
+    "OGOJA": {"deviceSn": "002502705488-001", "deviceId": 240464333},
+    "OGOJA_GH": {"deviceSn": "002502295492-001", "deviceId": 240482343},
+}
 
 WEATHER_MAPPING = {
     "Environment Temp": ("temp_c", utils.str_to_float_or_zero),
@@ -222,6 +227,7 @@ WEATHER_MAPPING = {
     "Irradiance": ("irr", str),
     "Daily Irradiance": ("daily_irr", str),
 }
+
 
 def get_weather_data(date_str, devices):
     """
@@ -306,24 +312,27 @@ def get_weather_data(date_str, devices):
                     data.insert(index, info)
                     epoch_values = [item["epoch"] for item in data]
         else:
-            logging.error(f"get_weather_data ERROR: {response.status_code} {response.text}")
+            logging.error(
+                f"get_weather_data ERROR: {response.status_code} {response.text}"
+            )
             continue
     if not data:
         return None
     df = pd.DataFrame(data)
 
-    #df["ts"] = df["ts"].dt.tz_localize(None)
+    # df["ts"] = df["ts"].dt.tz_localize(None)
     # # If the datetime index has timezone information
     # if isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
     #     df.index = df.index.tz_localize(None)
     return df
+
 
 def update_weather_db(df, epoch, engine):
     """
     Updates the weather database with new data.
 
     This function processes a DataFrame of weather data, adjusts data types, and inserts
-    the data into the `solarman.weather` table. If any rows conflict on the primary key 
+    the data into the `solarman.weather` table. If any rows conflict on the primary key
     (device_id, ts), it updates the existing records with new values.
 
     Parameters:
@@ -348,10 +357,14 @@ def update_weather_db(df, epoch, engine):
 
         df = df[df["org_epoch"] >= epoch]
 
-        df.to_sql("temp_weather", engine, schema="solarman", if_exists="replace", index=False)
+        df.to_sql(
+            "temp_weather", engine, schema="solarman", if_exists="replace", index=False
+        )
 
         with engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text(
+                    """
                 INSERT INTO solarman.weather (device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr)
                 SELECT device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr FROM solarman.temp_weather
                 ON CONFLICT (device_id, ts) DO UPDATE 
@@ -363,7 +376,9 @@ def update_weather_db(df, epoch, engine):
                     rainfall = EXCLUDED.rainfall,
                     irr = EXCLUDED.irr,
                     daily_irr = EXCLUDED.daily_irr;
-            """))
+            """
+                )
+            )
             conn.commit()
             return len(df), None
     except Exception as e:

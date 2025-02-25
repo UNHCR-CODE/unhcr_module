@@ -226,7 +226,9 @@ def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
                         if d["name"] == "SoC":
                             info["batt_soc"] = str(d["value"])
                         if d["name"] == "Total Charging Energy":
-                            info["batt_chg_ttl_kwh"] = utils.str_to_float_or_zero(d["value"])
+                            info["batt_chg_ttl_kwh"] = utils.str_to_float_or_zero(
+                                d["value"]
+                            )
 
                         if d["name"] == "Gen Daily Run Time":
                             info["gen_run_hrs"] = str(d["value"])
@@ -235,14 +237,20 @@ def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
                         if d["name"] == "Generator Active Power":
                             info["gen_pwr_w"] = utils.str_to_float_or_zero(d["value"])
                         if d["name"] == "Daily Production Generator":
-                            info["gen_produce_kwh"] = utils.str_to_float_or_zero(d["value"])
+                            info["gen_produce_kwh"] = utils.str_to_float_or_zero(
+                                d["value"]
+                            )
 
                         if d["name"] == "Total Solar Power":
                             info["solar_ttl_w"] = utils.str_to_float_or_zero(d["value"])
                         if d["name"] == "Cumulative Production (Active)":
-                            info["prod_cumulative_kwh"] = utils.str_to_float_or_zero(d["value"])
+                            info["prod_cumulative_kwh"] = utils.str_to_float_or_zero(
+                                d["value"]
+                            )
                         if d["name"] == "Daily Production (Active)":
-                            info["prod_daily_kwh"] = utils.str_to_float_or_zero(d["value"])
+                            info["prod_daily_kwh"] = utils.str_to_float_or_zero(
+                                d["value"]
+                            )
                         if d["name"] == "DC Voltage PV1":
                             info["pv1_v"] = utils.str_to_float_or_zero(d["value"])
                         if d["name"] == "DC Voltage PV2":
@@ -340,7 +348,7 @@ def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
     return res
 
 
-def gen_file_from_csv(fn, dtStart, data, append=None):
+def gen_file_from_csv(dtStart, data, append=None):
     """
     Processes CSV data to generate a file with processed fuel and timestamp data.
 
@@ -369,11 +377,6 @@ def gen_file_from_csv(fn, dtStart, data, append=None):
     # ttl1=ttl2=0
     tzz = pytz.timezone(tz)
     xxx = -1
-    if os.path.exists(fn) and not append:
-        with open(fn, "r") as file:
-            # Read the lines from the file and remove newline characters
-            lines = [line.strip() for line in file.readlines()]
-        return [-1, fn, dtStart, lines]
 
     for val in data:
         xxx += 1
@@ -384,12 +387,13 @@ def gen_file_from_csv(fn, dtStart, data, append=None):
 
         val = val.replace('"', "")
         z = val.split(",")
+        z = z[1:]
         if key is None:
             key = z[0]
-        ll1 = decimal.Decimal(z[2])
-        ll2 = decimal.Decimal(z[3])
-        h1 = decimal.Decimal(z[4])
-        h2 = decimal.Decimal(z[5])
+        ll1 = decimal.Decimal(z[3])
+        ll2 = decimal.Decimal(z[4])
+        h1 = decimal.Decimal(z[5])
+        h2 = decimal.Decimal(z[6])
         d = z[1]
         dt = d[0:4] + "-" + d[5:7] + "-" + d[8:10] + "T" + d[11:16] + ":00"
         # 15 minute change
@@ -496,165 +500,107 @@ def gen_file_from_csv(fn, dtStart, data, append=None):
         return [0, fn, dtStart, liters]
     print(len(liters), "############", liters[0])
     print(len(liters), "############", liters[1:])
-    print("fn", fn)
 
-    if append:
-        with open(fn, mode="a", newline="") as file:
-            writer = csv.writer(file)
-            for x in liters:
-                data = [
-                    x["key"],
-                    x["start"],
-                    x["end"],
-                    x["epoch"],
-                    x["l1"],
-                    x["l2"],
-                    x["dl1"],
-                    x["dl2"],
-                    x["hr1"],
-                    x["hr2"],
-                    x["dhr1"],
-                    x["dhr2"],
-                ]
-                writer.writerow(data)
-    else:
-        with open(fn, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                [
-                    "key",
-                    "start",
-                    "end",
-                    "epoch",
-                    "tankl1",
-                    "tankl2",
-                    "deltal1",
-                    "deltal2",
-                    "hrs1",
-                    "hrs2",
-                    "deltahrs1",
-                    "deltahrs2",
-                ]
-            )
-            for x in liters:
-                data = [
-                    x["key"],
-                    x["start"],
-                    x["end"],
-                    x["epoch"],
-                    x["l1"],
-                    x["l2"],
-                    x["dl1"],
-                    x["dl2"],
-                    x["hr1"],
-                    x["hr2"],
-                    x["dhr1"],
-                    x["dhr2"],
-                ]
-                writer.writerow(data)
-    with open(fn, "r") as file:
-        # Read the lines from the file and remove newline characters
-        lines = [line.strip() for line in file.readlines()]
-    return [-1, fn, dtStart, lines]
+    return liters
 
 
 def extract_csv_data(site, fn, fn1, from_dt=None):
     # default processing date
     dt = datetime.utcnow() - timedelta(days=1)
-    yr= dt.year
+    yr = dt.year
     mnth = dt.month
-    day= dt.day
-    days= 1
+    day = dt.day
+    days = 1
     append = False
 
     if os.path.exists(fn) and not os.path.exists(fn1):
-        print('File exists, delete it to get new data %s' % fn)
-        with open(fn, 'r') as file:
+        print("File exists, delete it to get new data %s" % fn)
+        with open(fn, "r") as file:
             # Read the lines from the file and remove newline characters
             liters = [line.strip() for line in file.readlines()]
-            x, fnnn, dtStart, lines = gen_file_from_csv(fn1, '2024-10-01', liters)
+            x, fnnn, dtStart, lines = gen_file_from_csv(fn1, "2024-10-01", liters)
     else:
-        with open(fn1, 'r', encoding='utf-8', errors='replace') as file:
+        with open(fn1, "r", encoding="utf-8", errors="replace") as file:
             df1 = pd.read_csv(file)
         df = pd.read_csv(fn)
-        start = df.iloc[-1].to_dict()['ts']
-        start1 = df1.iloc[-1].to_dict()['start']
+        start = df.iloc[-1].to_dict()["ts"]
+        start1 = df1.iloc[-1].to_dict()["start"]
         st_ts = datetime.strptime(start, "%Y-%m-%d %H:%M")
         st_ts1 = datetime.strptime(start1, "%Y-%m-%dT%H:%M:%S:%f")
         if st_ts > st_ts1:
             append = True
-            filtered_df = df[pd.to_datetime(df['ts']) > st_ts1]
-            df_data = filtered_df.astype(str).apply(lambda row: ",".join(row), axis=1).tolist()
-            x, fnnn, dtStart, lines = gen_file_from_csv(fn1, '2024-10-01', df_data, append=append)
-            yr= st_ts1.year
+            filtered_df = df[pd.to_datetime(df["ts"]) > st_ts1]
+            df_data = (
+                filtered_df.astype(str)
+                .apply(lambda row: ",".join(row), axis=1)
+                .tolist()
+            )
+            x, fnnn, dtStart, lines = gen_file_from_csv(
+                fn1, "2024-10-01", df_data, append=append
+            )
+            yr = st_ts1.year
             mnth = st_ts1.month
-            day= st_ts1.day
-            days= math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
+            day = st_ts1.day
+            days = math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
         elif from_dt is not None:
             st_ts1 = datetime.strptime(from_dt, "%Y-%m-%d")
-            yr= st_ts1.year
+            yr = st_ts1.year
             mnth = st_ts1.month
-            day= st_ts1.day
-            days= math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
+            day = st_ts1.day
+            days = math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
         else:
             return None, None, None
-    with open(fn1, 'r', encoding='utf-8', errors='replace') as file:
-        df1 = pd.read_csv(file, usecols=['epoch', 'deltal1', 'deltal2'])
+    with open(fn1, "r", encoding="utf-8", errors="replace") as file:
+        df1 = pd.read_csv(file, usecols=["epoch", "deltal1", "deltal2"])
 
     # Extract and filter epochs from data
-    data = solarman_api_historical(site=site, year=yr, month=mnth, day=day, days= days)
+    data = solarman_api_historical(site=site, year=yr, month=mnth, day=day, days=days)
     return df, df1, data
 
 
-def extract_csv_data_new(site, fn, from_dt=None):
+def extract_csv_data_new(site, df, from_dt=None):
     # default processing date
     dt = datetime.utcnow() - timedelta(days=1)
-    yr= dt.year
+    yr = dt.year
     mnth = dt.month
-    day= dt.day
-    days= 1
+    day = dt.day
+    days = 1
     append = False
 
-    if not os.path.exists(fn):
-        logging.warning(f'File not found {fn}')
-        return None, None, None
-    
-    with open(fn, 'r', encoding='utf-8', errors='replace') as file:
-        # Read the lines from the file and remove newline characters
-        ############liters = [line.strip() for line in file.readlines()]
-    ################x, fnnn, dtStart, lines = gen_file_from_csv(fn1, '2024-10-01', liters)
-
-        df = pd.read_csv(file)
-        start = df.iloc[-1].to_dict()['ts']
-        st_ts = datetime.strptime(start, "%Y-%m-%d %H:%M")
+    st_ts = df["Time"].max()
+    print(f"Type of st_ts: {type(st_ts)}")
+    st_ts = datetime.strptime(st_ts, "%Y-%m-%dT%H:%M:%S")  # Convert to datetime
+    st_ts = st_ts.replace(second=0, microsecond=0)
+    st_ts1 = datetime.strptime(from_dt, "%Y-%m-%d %H:%M")
+    if st_ts > st_ts1:
+        append = True
+        filtered_df = df[pd.to_datetime(df["Time"]) > st_ts1]
+        df_data = (
+            filtered_df.astype(str).apply(lambda row: ",".join(row), axis=1).tolist()
+        )
+        liters = gen_file_from_csv("2024-10-01", df_data, append=append)
+        yr = st_ts1.year
+        mnth = st_ts1.month
+        day = st_ts1.day
+        days = math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
+    elif from_dt is not None:
         st_ts1 = datetime.strptime(from_dt, "%Y-%m-%d %H:%M")
-        if st_ts > st_ts1:
-            append = True
-            filtered_df = df[pd.to_datetime(df['ts']) > st_ts1]
-            df_data = filtered_df.astype(str).apply(lambda row: ",".join(row), axis=1).tolist()
-            x, fnnn, dtStart, lines = gen_file_from_csv(fn1, '2024-10-01', df_data, append=append)
-            yr= st_ts1.year
-            mnth = st_ts1.month
-            day= st_ts1.day
-            days= math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
-        elif from_dt is not None:
-            st_ts1 = datetime.strptime(from_dt, "%Y-%m-%d %H:%M")
-            yr= st_ts1.year
-            mnth = st_ts1.month
-            day= st_ts1.day
-            days= math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
-        else:
-            return None, None, None
-  
+        yr = st_ts1.year
+        mnth = st_ts1.month
+        day = st_ts1.day
+        days = math.ceil((st_ts - st_ts1).total_seconds() / (24 * 60 * 60))
+    else:
+        return None, None, None
 
     # Extract and filter epochs from data
-    data = solarman_api_historical(site=site, year=yr, month=mnth, day=day, days= days)
-    return df, data
+    data = solarman_api_historical(site=site, year=yr, month=mnth, day=day, days=days)
+    return liters, data
 
-def concat_csv_files(dpath,fn, label):
+
+def concat_csv_files(dpath, fn, label):
     """
     Concatenate multiple CSV files downloaded from Galooli Pro View into a single file.
-    
+
     Parameters
     ----------
     dpath : str
@@ -664,9 +610,9 @@ def concat_csv_files(dpath,fn, label):
     label : str
         The label that identifies the correct CSV files to concatenate
     """
-    
+
     files = glob.glob(
-            dpath + "Bulk Tank Events (downloaded from Galooli Pro View)*.csv"
+        dpath + "Bulk Tank Events (downloaded from Galooli Pro View)*.csv"
     )
     dataframes = []
     for file in files:

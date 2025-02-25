@@ -70,7 +70,11 @@ from unhcr import api_leonics
 
 if const.LOCAL:  # testing with local python files
     const, api_leonics, api_prospect, *rest = const.import_local_libs(
-        mods=[["constants", "const"],["api_leonics", "api_leonics"], ["api_prospect", "api_prospect"]]
+        mods=[
+            ["constants", "const"],
+            ["api_leonics", "api_leonics"],
+            ["api_prospect", "api_prospect"],
+        ]
     )
 
 default_engine = None
@@ -110,7 +114,7 @@ def set_db_engine_by_name(ename, local=False):
     This function checks if the current default engine's name matches the given engine
     name (`ename`). If not, it updates the connection strings for the `TAKUM_RAW_CONN_STR`
     and `LEONICS_RAW_TABLE` constants based on the specified engine name.
-    
+
     If `ename` is 'postgresql', it sets the connection strings to the Azure environment
     variables. Otherwise, it uses the Aiven connection strings.
 
@@ -119,14 +123,20 @@ def set_db_engine_by_name(ename, local=False):
     """
 
     ##if default_engine.engine.name != ename:
-    if ename == 'postgresql':
-        const.TAKUM_RAW_CONN_STR =  os.getenv('AZURE_TAKUM_LEONICS_API_RAW_CONN_STR','xxxxxx')
-        const.LEONICS_RAW_TABLE = os.getenv('AZURE_LEONICS_RAW_TABLE','pppppp')
+    if ename == "postgresql":
+        const.TAKUM_RAW_CONN_STR = os.getenv(
+            "AZURE_TAKUM_LEONICS_API_RAW_CONN_STR", "xxxxxx"
+        )
+        const.LEONICS_RAW_TABLE = os.getenv("AZURE_LEONICS_RAW_TABLE", "pppppp")
         if const.is_running_on_azure() or local:
-            const.TAKUM_RAW_CONN_STR = const.TAKUM_RAW_CONN_STR.replace(const.AZURE_URL, 'localhost')
+            const.TAKUM_RAW_CONN_STR = const.TAKUM_RAW_CONN_STR.replace(
+                const.AZURE_URL, "localhost"
+            )
     else:
-        const.TAKUM_RAW_CONN_STR =  os.getenv('AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR','zzzzz')
-        const.LEONICS_RAW_TABLE = os.getenv('LEONICS_RAW_TABLE','qqqqq')
+        const.TAKUM_RAW_CONN_STR = os.getenv(
+            "AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR", "zzzzz"
+        )
+        const.LEONICS_RAW_TABLE = os.getenv("LEONICS_RAW_TABLE", "qqqqq")
     return set_db_engine(const.TAKUM_RAW_CONN_STR), const.LEONICS_RAW_TABLE
 
 
@@ -354,12 +364,12 @@ def update_rows(max_dt, df, table_name, key="DateTimeServer"):
     sql_pred = " ON DUPLICATE KEY UPDATE "
 
     if key == "datetimeserver":
-        default_engine, _ = set_db_engine_by_name('postgresql')
+        default_engine, _ = set_db_engine_by_name("postgresql")
         sql_pred = " ON CONFLICT (datetimeserver) DO UPDATE SET "
         for col in df_filtered.columns:
             sql_pred += f"{col} = EXCLUDED.{col}, "
     else:
-        default_engine, _ = set_db_engine_by_name('mysql')
+        default_engine, _ = set_db_engine_by_name("mysql")
         for col in df_filtered.columns:
             sql_pred += f"{col} = VALUES({col}), "
     sql_pred = sql_pred[:-2] + ";"
@@ -573,27 +583,27 @@ def prospect_backfill_key(
     logging.info(f"Data has been saved to 'sys_pros'   LOCAL: {local}")
 
 
-def update_fuel_data(conn_str, merged_hourly_sums, table, site):
-        """
-        Updates the fuel data in the database.
+def update_fuel_data(engine, merged_hourly_sums, table, site):
+    """
+    Updates the fuel data in the database.
 
-        This function takes in the merged hourly sums DataFrame, connection string, table name, and site name.
-        It constructs the SQL query string by replacing 'TABLE' with the table name and adds the VALUES
-        clause based on the merged_hourly_sums DataFrame. The SQL query is then executed using the connection
-        string and the updated row count is printed. Finally, the merged_hourly_sums DataFrame is saved to a CSV
-        file named 'mhs_<site>.csv' and the function returns None, None, None.
+    This function takes in the merged hourly sums DataFrame, connection string, table name, and site name.
+    It constructs the SQL query string by replacing 'TABLE' with the table name and adds the VALUES
+    clause based on the merged_hourly_sums DataFrame. The SQL query is then executed using the connection
+    string and the updated row count is printed. Finally, the merged_hourly_sums DataFrame is saved to a CSV
+    file named 'mhs_<site>.csv' and the function returns None, None, None.
 
-        Args:
-            conn_str (str): The connection string to the database.
-            merged_hourly_sums (pd.DataFrame): The merged hourly sums DataFrame.
-            table (str): The name of the table to update.
-            site (str): The name of the site.
+    Args:
+        conn_str (str): The connection string to the database.
+        merged_hourly_sums (pd.DataFrame): The merged hourly sums DataFrame.
+        table (str): The name of the table to update.
+        site (str): The name of the site.
 
-        Returns:
-            None, None, None
-        """
-        sql = """
-        INSERT INTO public.TABLE(
+    Returns:
+        None, None, None
+    """
+    sql = """
+        INSERT INTO fuel.TABLE(
             st_ts,
             end_ts,
             gen_kwh,
@@ -611,34 +621,32 @@ def update_fuel_data(conn_str, merged_hourly_sums, table, site):
             delta2 = EXCLUDED.delta2,
             kwh_l_dg1 = EXCLUDED.kwh_l_dg1,
             kwh_l_dg2 = EXCLUDED.kwh_l_dg2;
-        """.replace('TABLE', table)
+        """.replace(
+        "TABLE", table
+    )
 
-        from sqlalchemy import create_engine
+    from sqlalchemy import create_engine
 
-        merged_hourly_sums_notnull = merged_hourly_sums.where(pd.notnull(merged_hourly_sums), 'null')
-        #date	hour	kwh	deltal1	deltal2	kWh/L1	kWh/L2
-        #  0     1       2    3        4      5       6
-        sql_vals = 'VALUES '
-        for v in merged_hourly_sums_notnull.values:
-            ts = datetime.combine(v[0], datetime.min.time()).replace(hour=int(v[1]))
-            ts_str = ts.isoformat()
-            end_str = (ts + timedelta(hours=1)).isoformat()
-            sql_vals += f" ('{ts_str}','{end_str}',{v[2]},{v[3]},{v[4]},{v[5]},{v[6]}),"
+    merged_hourly_sums_notnull = merged_hourly_sums.where(
+        pd.notnull(merged_hourly_sums), "null"
+    )
+    # date	hour	kwh	deltal1	deltal2	kWh/L1	kWh/L2
+    #  0     1       2    3        4      5       6
+    sql_vals = "VALUES "
+    for v in merged_hourly_sums_notnull.values:
+        ts = datetime.combine(v[0], datetime.min.time()).replace(hour=int(v[1]))
+        ts_str = ts.isoformat()
+        end_str = (ts + timedelta(hours=1)).isoformat()
+        sql_vals += f" ('{ts_str}','{end_str}',{v[2]},{v[3]},{v[4]},{v[5]},{v[6]}),"
 
-        sql = sql.replace('VALUES',sql_vals[:-1]).replace('\n',' ')
+    sql = sql.replace("VALUES", sql_vals[:-1]).replace("\n", " ")
+    print("!!!!!!!!!!!!!!/n", sql, "/n!!!!!!!!!!!!!!!!!")
+    res, err = sql_execute(sql, engine)
+    if res:
+        print("ROWS !!!!!!!!!!!!!!!!!!!", res.rowcount)
 
-        #xx
-        db_url = conn_str  # Replace with your DB credentials
-        engine = create_engine(db_url)
-        res, err = sql_execute(sql, engine)
-        if res:
-            print('ROWS !!!!!!!!!!!!!!!!!!!', res.rowcount)
-        else:
-            print('ROWS ??????????????', err)
-
-
-        merged_hourly_sums_notnull.to_csv(f'mhs_{site}.csv')
-        return None, None, None
+    merged_hourly_sums_notnull.to_csv(f"mhs_{site}.csv")
+    return res, err
 
 
 def update_bulk_fuel(conn_str, df, df1, table, spath, fn1):
@@ -725,7 +733,7 @@ def update_bulk_fuel(conn_str, df, df1, table, spath, fn1):
 def update_takum_raw_db(token, start_ts):
     def set_date_range(st_dt, num_days, backfill=False):
         st = (st_dt + timedelta(minutes=1)).date().isoformat()
-        st = st.replace('-', '')
+        st = st.replace("-", "")
         ed = datetime.now() + timedelta(days=num_days)
         if backfill:
             ed = st_dt + timedelta(days=num_days)
@@ -734,64 +742,66 @@ def update_takum_raw_db(token, start_ts):
             ed = st_dt + timedelta(days=10)
         ed = ed.date().isoformat()
         start_ts = ed
-        ed = ed.replace('-', '')
+        ed = ed.replace("-", "")
         return st, ed
 
     num_days = 2
     max_dt = start_ts
     if start_ts is None:
-        default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('postgresql')
+        default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name("postgresql")
         max_dt1, err = get_db_max_date(default_engine, const.LEONICS_RAW_TABLE)
         if err:
             logging.error(f"get_db_max_date Error occurred: {err}")
             exit(1)
-        assert(max_dt1 is not None)
-        default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('mysql')
+        assert max_dt1 is not None
+        default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name("mysql")
         max_dt, err = get_db_max_date(default_engine, const.LEONICS_RAW_TABLE)
         if err:
             logging.error(f"get_db_max_date1 Error occurred: {err}")
             exit(1)
-        assert(max_dt is not None)
+        assert max_dt is not None
 
         # backfill 1 week
-        #max_dt = max_dt - timedelta(days=7)
+        # max_dt = max_dt - timedelta(days=7)
     st, ed = set_date_range(max_dt, num_days)
-    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('mysql')
-    df_leonics, err = api_leonics.getData(start=st,end=ed,token=token)
+    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name("mysql")
+    df_leonics, err = api_leonics.getData(start=st, end=ed, token=token)
     if err:
         logging.error(f"api_leonics.getData Error occurred: {err}")
         exit(2)
     # Convert the 'datetime_column' to pandas datetime
-    df_leonics['DatetimeServer'] = pd.to_datetime(df_leonics['DatetimeServer'])
-    res, err = update_leonics_db(max_dt,df_leonics, const.LEONICS_RAW_TABLE)
+    df_leonics["DatetimeServer"] = pd.to_datetime(df_leonics["DatetimeServer"])
+    res, err = update_leonics_db(max_dt, df_leonics, const.LEONICS_RAW_TABLE)
     if err:
         logging.error(f"update_leonics_db Error occurred: {err}")
         exit(3)
     else:
-        logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
+        logging.info(f"ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}")
 
-    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('postgresql')
+    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name("postgresql")
 
     st, ed = set_date_range(max_dt1, num_days)
-    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name('postgresql')
-    df_azure, err = api_leonics.getData(start=st,end=ed,token=token)
+    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name("postgresql")
+    df_azure, err = api_leonics.getData(start=st, end=ed, token=token)
     if err:
         logging.error(f"api_leonics.getData Error occurred: {err}")
         exit(2)
     # Convert the 'datetime_column' to pandas datetime
-    df_azure['DatetimeServer'] = pd.to_datetime(df_azure['DatetimeServer'])
-    #df_azure['datetimeserver'] = df_leonics['DatetimeServer'].copy()
-    #df_azure = df_azure.drop(columns=['DatetimeServer'])
+    df_azure["DatetimeServer"] = pd.to_datetime(df_azure["DatetimeServer"])
+    # df_azure['datetimeserver'] = df_leonics['DatetimeServer'].copy()
+    # df_azure = df_azure.drop(columns=['DatetimeServer'])
     # we use all lowercase column names in AZURE
     df_azure.columns = df_azure.columns.str.lower()
-    res, err = update_leonics_db(max_dt1,df_azure, const.LEONICS_RAW_TABLE, 'datetimeserver')
-    assert(res is not None)
-    assert(err is None)
+    res, err = update_leonics_db(
+        max_dt1, df_azure, const.LEONICS_RAW_TABLE, "datetimeserver"
+    )
+    assert res is not None
+    assert err is None
     if err:
         logging.error(f"update_leonics_db Error occurred: {err}")
         exit(3)
     else:
-        logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
+        logging.info(f"ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}")
 
     return start_ts
 
@@ -802,17 +812,19 @@ azure_defaultdb_engine = None
 def set_local_defaultdb_engine():
     global local_defaultdb_engine
     if local_defaultdb_engine is None:
-        local_defaultdb_engine, _ = set_db_engine_by_name('postgresql', local=True)
+        local_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=True)
     return local_defaultdb_engine
+
 
 def set_azure_defaultdb_engine():
     global azure_defaultdb_engine
     if azure_defaultdb_engine is None:
-        azure_defaultdb_engine, _ = set_db_engine_by_name('postgresql', local=False)
+        azure_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=False)
     return azure_defaultdb_engine
 
 set_local_defaultdb_engine()
 set_azure_defaultdb_engine()
+
 
 def get_sm_weather_max_epoch(device_id, engine):
     """
@@ -836,11 +848,11 @@ def get_sm_weather_max_epoch(device_id, engine):
 def get_fuel_max_ts(site, engine):
     """
     Retrieves the latest start timestamp for a given site from the fuel database.
-    
+
     Args:
         site (str): The name of the site to query the database for.
         engine (sqlalchemy.engine.Engine): The connection engine to use.
-        
+
     Returns:
         tuple: A tuple containing the latest start timestamp as a datetime object,
         and None if the query was successful, or an error message if it was not.
@@ -853,4 +865,3 @@ def get_fuel_max_ts(site, engine):
     val = res.fetchall()
     ts = val[0][0]
     return ts, None
-
