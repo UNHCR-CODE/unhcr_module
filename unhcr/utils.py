@@ -52,6 +52,8 @@ import optparse
 import os
 import sys
 
+import requests
+
 
 def config_log_handler(handler, level, formatter, logger):
     """
@@ -243,7 +245,7 @@ def create_cmdline_parser(level="INFO"):
 
         return options
     except Exception as e:
-        print(f"ERROR: {e}")
+        logging.error(f"create_cmdline_parser ERROR: {e}")
         return None
 
 
@@ -404,10 +406,37 @@ def concat_csv_files(input_file, output_file, append=True):
 
                 writer.writerows(reader)  # Append rows
 
-    print("CSV files merged and appended if existing!")
+    logging.debug("CSV files merged and appended if existing!")
     # Rename processed files
     for file in csv_files:
         # Extract the directory and filename separately
         directory, filename = os.path.split(file)
         new_name = os.path.join(directory, f"processed_{filename}")
         os.rename(file, new_name)
+
+
+def docker_running(url="http://localhost:3000"):
+    """
+    Check if the docker container is running by sending a GET request to the server URL.
+
+    Parameters
+    ----------
+    url : str, optional
+        The URL of the server, by default "http://localhost:3000"
+
+    Returns
+    -------
+    bool
+        True if the server is running, False otherwise
+    """
+    
+    try:
+        response = requests.get(url)
+        if response.status_code > 205:
+            logging.info(f"Server at {url} responded with status code: {response.status_code}")
+            return False
+        else:
+            return True
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Server at {url} is not responding. ERROR: {e}")
+        return False

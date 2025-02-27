@@ -32,9 +32,7 @@ if not utils.is_version_greater_or_equal('0.4.6'):
     )
     exit(46)
 
-engines = [db.set_local_defaultdb_engine()]
-if not const.is_running_on_azure():
-    engines.append(db.set_azure_defaultdb_engine())
+engines = db.set_db_engines()
 
 for engine in engines:
     epochs = []

@@ -65,13 +65,15 @@ import pandas as pd
 from sqlalchemy import create_engine, exc, orm, text
 
 from unhcr import constants as const
+from unhcr import utils
 from unhcr import api_prospect
 from unhcr import api_leonics
 
 if const.LOCAL:  # testing with local python files
-    const, api_leonics, api_prospect, *rest = const.import_local_libs(
+    const, utils, api_leonics, api_prospect, *rest = const.import_local_libs(
         mods=[
             ["constants", "const"],
+            ["utils", "utils"],
             ["api_leonics", "api_leonics"],
             ["api_prospect", "api_prospect"],
         ]
@@ -309,7 +311,7 @@ def update_rows(max_dt, df, table_name, key="DateTimeServer"):
     df_filtered = df[df[key] > threshold]
     l = len(df_filtered)
     df_filtered = df_filtered.drop_duplicates(subset=key, keep="first")
-    print(l - len(df_filtered))
+    #print(l - len(df_filtered))
     if l == 0:
         return SimpleNamespace(rowcount=0), None
 
@@ -634,18 +636,15 @@ def update_fuel_data(engine, merged_hourly_sums, table, site):
     #  0     1       2    3        4      5       6
     sql_vals = "VALUES "
     for v in merged_hourly_sums_notnull.values:
-        ts = datetime.combine(v[0], datetime.min.time()).replace(hour=int(v[1]))
+        ts = datetime.combine(v[0], datetime.min.time()).replace(hour=v[1])
         ts_str = ts.isoformat()
         end_str = (ts + timedelta(hours=1)).isoformat()
         sql_vals += f" ('{ts_str}','{end_str}',{v[2]},{v[3]},{v[4]},{v[5]},{v[6]}),"
 
     sql = sql.replace("VALUES", sql_vals[:-1]).replace("\n", " ")
-    print("!!!!!!!!!!!!!!/n", sql, "/n!!!!!!!!!!!!!!!!!")
     res, err = sql_execute(sql, engine)
-    if res:
-        print("ROWS !!!!!!!!!!!!!!!!!!!", res.rowcount)
-
-    merged_hourly_sums_notnull.to_csv(f"mhs_{site}.csv")
+    # for debugging
+    # merged_hourly_sums_notnull.to_csv(f"mhs_{site}.csv")
     return res, err
 
 
@@ -678,7 +677,7 @@ def update_bulk_fuel(conn_str, df, df1, table, spath, fn1):
         if row[2] <= ts:
             continue
         found = True
-        print(f"Index: {row[0]}, Event: {row[3]}, Time: {row[2]}")
+        #print(f"Index: {row[0]}, Event: {row[3]}, Time: {row[2]}")
         lu = np.nan
         lb = np.nan
         val = row[4]
@@ -865,3 +864,46 @@ def get_fuel_max_ts(site, engine):
     val = res.fetchall()
     ts = val[0][0]
     return ts, None
+
+def get_gb_epoch(serial_num, engine, max=True):
+    """
+    Retrieves the latest or earliest timestamp from the GB database for a given serial number.
+
+    Args:
+        serial_num (str): The serial number to query the database for.
+        engine (sqlalchemy.engine.Engine): The connection engine to use.
+        max (bool): Whether to select the maximum (latest) timestamp or the minimum (earliest).
+
+    Returns:
+        tuple: A tuple containing the selected timestamp as an integer, and None if the query was successful, or an error message if it was not.
+    """
+    max_str = "max" if max else "min"
+    sql = f"select {max_str}(epoch_secs) FROM eyedro.gb_{serial_num}"
+    res, err = sql_execute(sql, engine)
+    if err is not None:
+        return None, err
+    val = res.fetchall()
+    epoch = val[0][0]
+    return epoch, None
+
+
+def set_db_engines():
+    """
+    Set the database engines based on the environment.
+
+    If running on Azure, a local database engine is used. Otherwise, an Azure
+    database engine is used. If running in a Docker container, a local database
+    engine is also used.
+
+    Returns:
+        list: A list of database engines.
+    """
+
+    engines = []
+    if const.is_running_on_azure():
+        engines = [set_local_defaultdb_engine()]
+    else:
+        engines = [set_azure_defaultdb_engine()]
+        if utils.docker_running():
+            engines.append(set_local_defaultdb_engine())
+    return engines

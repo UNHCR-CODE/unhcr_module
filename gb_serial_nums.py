@@ -803,8 +803,8 @@ print(df)
 
 
 # Output the cleaned data
-print(json.dumps(cleaned_device_data, indent=2))
-exit(777)
+###print(json.dumps(cleaned_device_data, indent=2))
+###exit(777)
 
 
 

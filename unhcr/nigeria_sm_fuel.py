@@ -169,8 +169,7 @@ def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
                     first = False
 
                 last_epoch = None
-                print("Device Serial Number:", device["deviceSn"])
-                print("Device ID:", device["deviceId"])
+                logging.info(f'Device Serial Number: {device["deviceSn"]} Device ID: {device["deviceId"]}')
 
                 payload = json.dumps(
                     {
@@ -189,12 +188,11 @@ def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
 
                 response = requests.request("POST", url, headers=headers, data=payload)
                 if response.status_code != 200:
-                    print("BAD API RESPONSE", response.status_code, response.text)
+                    logging.error(f"BAD API RESPONSE ERROR: {response.status_code}   {response.text}")
                     exit()
 
                 j = json.loads(response.text)
                 for item in j["paramDataList"]:
-                    # print(item["collectTime"])
                     e = round(int(item["collectTime"]) / 300) * 300
                     e += 60 * 60  # add 1 hour for Africa
                     if e == last_epoch:
@@ -416,7 +414,7 @@ def gen_file_from_csv(dtStart, data, append=None):
             lastTs = utc_datetime - t_delta_minute
 
         if len(liters) % 30 == 0:
-            print("x", len(liters))
+            logging.debug("x", len(liters))
         tdelta = utc_datetime - lastTs
         if l1 - ll1 < 0:
             l1 = ll1
@@ -497,9 +495,7 @@ def gen_file_from_csv(dtStart, data, append=None):
         l1 = ll1
         l2 = ll2
     if len(liters) == 0:
-        return [0, fn, dtStart, liters]
-    print(len(liters), "############", liters[0])
-    print(len(liters), "############", liters[1:])
+        logging.debug("gen_file_from_csv No data found")
 
     return liters
 
@@ -514,7 +510,7 @@ def extract_csv_data(site, fn, fn1, from_dt=None):
     append = False
 
     if os.path.exists(fn) and not os.path.exists(fn1):
-        print("File exists, delete it to get new data %s" % fn)
+        logging.debug("File exists, delete it to get new data %s" % fn)
         with open(fn, "r") as file:
             # Read the lines from the file and remove newline characters
             liters = [line.strip() for line in file.readlines()]
@@ -568,7 +564,7 @@ def extract_csv_data_new(site, df, from_dt=None):
     append = False
 
     st_ts = df["Time"].max()
-    print(f"Type of st_ts: {type(st_ts)}")
+    logging.debug(f"Type of st_ts: {type(st_ts)}")
     st_ts = datetime.strptime(st_ts, "%Y-%m-%dT%H:%M:%S")  # Convert to datetime
     st_ts = st_ts.replace(second=0, microsecond=0)
     st_ts1 = datetime.strptime(from_dt, "%Y-%m-%d %H:%M")
@@ -616,17 +612,17 @@ def concat_csv_files(dpath, fn, label):
     )
     dataframes = []
     for file in files:
-        print(file)
+        logging.debug(file)
         df = pd.read_csv(file)
         if not label in df.values[0][0]:
-            ######print('Wrong label',df.values[0][0],label)
+            logging.debug('Wrong label',df.values[0][0],label)
             continue
         if label not in df.iloc[-1, 0]:
             df = df.iloc[:-1]
         dataframes.append(df)
     # Concatenate all DataFrames into a single DataFrame
     if len(dataframes) == 0:
-        print("No data files found")
+        logging.debug("No data files found")
         return False
     concatenated_df = pd.concat(dataframes, ignore_index=True)
     concatenated_df["Time"] = pd.to_datetime(concatenated_df["Time"], dayfirst=True)

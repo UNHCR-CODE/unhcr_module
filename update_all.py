@@ -128,11 +128,9 @@ def execute(token, start_ts=None):
         if const.is_running_on_azure():
             return start_ts
 
-        url = "http://localhost:3000"
         try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                logging.info(f"Server at {url} is responding. Status code: {response.status_code}")
+            if utils.docker_running():
+                logging.info(f"Server at {url} is responding.")
                 db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name('postgresql')
                 res, err = db.update_prospect(start_ts=start_ts, local=True, table_name= const.LEONICS_RAW_TABLE)
                 assert(res is not None)
