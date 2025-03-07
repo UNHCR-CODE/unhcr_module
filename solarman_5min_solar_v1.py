@@ -237,16 +237,3 @@ for engine in engines:
         res, err = db.update_fuel_data(engine, merged_hourly_sums, table, site)
         if err:
             logging.error(err.message[:100])
-            
-            
-    """
-   E:\_UNHCR\CODE\unhcr_module\solarman_5min_solar_v1.py:138: SettingWithCopyWarning: 
-A value is trying to be set on a copy of a slice from a DataFrame.
-Try using .loc[row_indexer,col_indexer] = value instead
-
-See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-E:\_UNHCR\CODE\unhcr_module\solarman_5min_solar_v1.py:159: FutureWarning: The behavior of 'to_datetime' with 'unit' when parsing strings is deprecated. In a future version, strings will be parsed as datetime strings, matching the behavior without a 'unit'. To retain the old behavior, explicitly cast ints or floats to numeric type before calling to_datetime.
-  df_liters["datetime"] = pd.to_datetime(df_liters["epoch"], unit="s")
-E:\_UNHCR\CODE\unhcr_module\solarman_5min_solar_v1.py:230: FutureWarning: Downcasting behavior in `replace` is deprecated and will be removed in a future version. To retain the old behavior, explicitly call `result.infer_objects(copy=False)`. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
-
-    """

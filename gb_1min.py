@@ -58,7 +58,188 @@ if not utils.is_version_greater_or_equal('0.4.7'):
 2025-02-27 10:18:23,851 - ERROR - 2025-02-27T00:00:00+00:00 ZZZ 00980B93 ERRORS: [[1210, 'API Error. Contact Eyedro Admin.'], [899, 'DeviceSerial invalid, or device owner has not claimed device.']]
 """
 
-genset_gbs = ['00980864',	'0098086a',	'0098086c',	'0098086d',	'009807c4',	'009807d3',	'009807d8',	'00980827',	'00980828',	'00980829',	'0098082e',	'0098082f',	'0098082d',	'00980830',	'00980848',	'00980849',	'0098084c',	'0098084f',	'00980857',	'0098085c',	'0098085b',	'0098085d',	'00980aa1',	'00980890',	'0098087b',	'00980891',	'0098087c',	'009808c7',	'009808b5',	'009808c6',	'00980893',	'00980892',	'009808e8',	'009808dc',	'009808df',	'009808db',	'00980907',	'00980914',	'00980953',	'009808f8',	'009808f1',	'009809ad',	'00980954',	'009809b5',	'009809b7',	'009809c3',	'009809c4',	'009809e5',	'009809b8',	'009809ea',	'009809f3',	'009809f4',	'009809e6',	'009809e9',	'009809fd',	'00980a02',	'00980a03',	'00980a01',	'00980a06',	'00980a07',	'00980a14',	'00980a05',	'00980a17',	'00980a27',	'00980a20',	'00980a21',	'00980a24',	'00980a50',	'00980a40',	'00980a52',	'00980a74',	'00980aa0',	'00980a9a',	'00980aa2',	'00980a53',	'00980aa5',	'00980abb',	'00980aaf',	'00980aba',	'00980ac9',	'00980acb',	'00980b11',	'00980af4',	'00980b12',	'00980b1c',	'00980b1e',	'00980b2e',	'00980b2a',	'00980b29',	'00980b2f',	'00980b36',	'00980b37',	'00980b58',	'00980b35',	'00980b6b',	'00980b5e',	'00980b6e',	'00980b6c',	'00980b74',	'00980b76',	'00980b6f',	'00980b75',	'00980b80',	'00980b81',	'00980b77',	'00980b89',	'00980b8a',	'00980b8b',	'00980b87',	'00980b91',	'00980b96',	'00980b93',	'00980b90',	'00980b8c',	'00980da4',	'00980b97',	'00980da6',	'00980dbb',	'00980dd3',	'00980da7',	'00980dcb',	'00980dcd',	'00980dd6',	'00980de3',	'00980dd4',	'00980de8',	'00980e05',	'00980dfc',	'00980e09',	'00980e08',	'00980e10',	'00980e0e',	'00980e13',	'00980e1f',	'00980e22',	'00980e27',	'b120045e',	'00980e29',	'00980e28',	'b120045f',	'00980e2a',	'b1200464',	'b1200465',	'b1200631',	'b1200461',	'009809f5',	'00980a2a',	'00980a29',	'00980b13',	'00980de5',	'00980b6a',	'00980b98',	'00980b84',	'009808c8',	'00980ddb',	'009809cb',	'00980e1c',	'00980b33',	'0098097b',	'00980850',	'00980889',	'00980826',	'00980845',	'0098084e',	'00980a19',	'00980aa3',	'00980ac1',	'00980b1a',	'00980b34',	'00980b70',	'00980b7a',	'00980b86',	'00980da0',	'00980dd5',	'00980df1',	'00980e18',	'b1200462']
+genset_gbs_org = ['00980864',	'0098086a',	'0098086c',	'0098086d',	'009807c4',	'009807d3',	'009807d8',	'00980827',	'00980828',	'00980829',	'0098082e',	'0098082f',	'0098082d',	'00980830',	'00980848',	'00980849',	'0098084c',	'0098084f',	'00980857',	'0098085c',	'0098085b',	'0098085d',	'00980aa1',	'00980890',	'0098087b',	'00980891',	'0098087c',	'009808c7',	'009808b5',	'009808c6',	'00980893',	'00980892',	'009808e8',	'009808dc',	'009808df',	'009808db',	'00980907',	'00980914',	'00980953',	'009808f8',	'009808f1',	'009809ad',	'00980954',	'009809b5',	'009809b7',	'009809c3',	'009809c4',	'009809e5',	'009809b8',	'009809ea',	'009809f3',	'009809f4',	'009809e6',	'009809e9',	'009809fd',	'00980a02',	'00980a03',	'00980a01',	'00980a06',	'00980a07',	'00980a14',	'00980a05',	'00980a17',	'00980a27',	'00980a20',	'00980a21',	'00980a24',	'00980a50',	'00980a40',	'00980a52',	'00980a74',	'00980aa0',	'00980a9a',	'00980aa2',	'00980a53',	'00980aa5',	'00980abb',	'00980aaf',	'00980aba',	'00980ac9',	'00980acb',	'00980b11',	'00980af4',	'00980b12',	'00980b1c',	'00980b1e',	'00980b2e',	'00980b2a',	'00980b29',	'00980b2f',	'00980b36',	'00980b37',	'00980b58',	'00980b35',	'00980b6b',	'00980b5e',	'00980b6e',	'00980b6c',	'00980b74',	'00980b76',	'00980b6f',	'00980b75',	'00980b80',	'00980b81',	'00980b77',	'00980b89',	'00980b8a',	'00980b8b',	'00980b87',	'00980b91',	'00980b96',	'00980b93',	'00980b90',	'00980b8c',	'00980da4',	'00980b97',	'00980da6',	'00980dbb',	'00980dd3',	'00980da7',	'00980dcb',	'00980dcd',	'00980dd6',	'00980de3',	'00980dd4',	'00980de8',	'00980e05',	'00980dfc',	'00980e09',	'00980e08',	'00980e10',	'00980e0e',	'00980e13',	'00980e1f',	'00980e22',	'00980e27',	'b120045e',	'00980e29',	'00980e28',	'b120045f',	'00980e2a',	'b1200464',	'b1200465',	'b1200631',	'b1200461',	'009809f5',	'00980a2a',	'00980a29',	'00980b13',	'00980de5',	'00980b6a',	'00980b98',	'00980b84',	'009808c8',	'00980ddb',	'009809cb',	'00980e1c',	'00980b33',	'0098097b',	'00980850',	'00980889',	'00980826',	'00980845',	'0098084e',	'00980a19',	'00980aa3',	'00980ac1',	'00980b1a',	'00980b34',	'00980b70',	'00980b7a',	'00980b86',	'00980da0',	'00980dd5',	'00980df1',	'00980e18',	'b1200462']
+
+genset_gbs = [
+'009807c4',
+'009807d3',
+'009807d8',
+'00980826',
+'00980827',
+'00980828',
+'00980829',
+'0098082d',
+'0098082e',
+'0098082f',
+'00980830',
+'00980845',
+'00980848',
+'00980849',
+'0098084c',
+'0098084e',
+'0098084f',
+'00980850',
+'00980857',
+'0098085b',
+'0098085c',
+'0098085d',
+'00980864',
+'0098086a',
+'0098086c',
+'0098086d',
+'0098087b',
+'0098087c',
+'00980889',
+'00980890',
+'00980891',
+'00980892',
+'00980893',
+'009808c6',
+'009808c7',
+'009808c8',
+'009808b5',
+'009808db',
+'009808dc',
+'009808df',
+'009808e8',
+'009808f1',
+'009808f8',
+'00980907',
+'00980914',
+'00980953',
+'00980954',
+'0098097b',
+'009809ad',
+'009809b5',
+'009809b7',
+'009809b8',
+'009809c3',
+'009809c4',
+'009809cb',
+'009809e5',
+'009809e6',
+'009809e9',
+'009809ea',
+'009809f3',
+'009809f4',
+'009809f5',
+'009809fd',
+'00980a01',
+'00980a02',
+'00980a03',
+'00980a05',
+'00980a06',
+'00980a07',
+'00980a14',
+'00980a17',
+'00980a19',
+'00980a20',
+'00980a21',
+'00980a24',
+'00980a27',
+'00980a29',
+'00980a2a',
+'00980a40',
+'00980a50',
+'00980a52',
+'00980a53',
+'00980a74',
+'00980a9a',
+'00980aa0',
+'00980aa1',
+'00980aa2',
+'00980aa3',
+'00980aa5',
+'00980abb',
+'00980aba',
+'00980aaf',
+'00980ac1',
+'00980ac9',
+'00980acb',
+'00980af4',
+'00980b11',
+'00980b12',
+'00980b13',
+'00980b1a',
+'00980b1c',
+'00980b1e',
+'00980b29',
+'00980b2a',
+'00980b2e',
+'00980b2f',
+'00980b33',
+'00980b34',
+'00980b35',
+'00980b36',
+'00980b37',
+'00980b58',
+'00980b5e',
+'00980b6a',
+'00980b6b',
+'00980b6c',
+'00980b6d',
+'00980b6e',
+'00980b6f',
+'00980b70',
+'00980b74',
+'00980b75',
+'00980b76',
+'00980b77',
+'00980b7a',
+'00980b80',
+'00980b81',
+'00980b84',
+'00980b86',
+'00980b87',
+'00980b89',
+'00980b8a',
+'00980b8b',
+'00980b8c',
+'00980b90',
+'00980b91',
+'00980b93',
+'00980b96',
+'00980b97',
+'00980b98',
+'00980da0',
+'00980da4',
+'00980da6',
+'00980da7',
+'00980dbb',
+'00980dcb',
+'00980dcd',
+'00980dd3',
+'00980dd4',
+'00980dd5',
+'00980dd6',
+'00980de3',
+'00980de5',
+'00980de8',
+'00980df1',
+'00980dfc',
+'00980e05',
+'00980e08',
+'00980e09',
+'00980e0e',
+'00980e10',
+'00980e13',
+'00980e18',
+'00980e1c',
+'00980e1f',
+'00980e22',
+'00980e27',
+'00980e28',
+'00980e29',
+'00980e2a',
+'b120045e',
+'b120045f',
+'b1200461',
+'b1200462',
+'b1200464',
+'b1200465',
+'b1200631'
+]
+
 
 engines = db.set_db_engines()
 
@@ -126,13 +307,13 @@ def phase_imbalance(engine, gbs):
 # phase_imbalance(engines[1], genset_gbs)
 # pass
 
-def create_tables(serial, engine=engines[1]):
+def create_tables(serials, engine=engines[1]):
     conn = engine.raw_connection()  # Get raw psycopg2 connection
     try:
         with conn.cursor() as cur:
             for serial in serials:
                 sql = f"""
-        DROP TABLE IF EXISTS eyedro.gb_{serial} CASCADE;
+        --DROP TABLE IF EXISTS eyedro.gb_{serial} CASCADE;
         CREATE TABLE IF NOT EXISTS eyedro.gb_{serial} (
         epoch_secs BIGINT NOT NULL,
         ts timestamp not NULL,
@@ -153,22 +334,47 @@ def create_tables(serial, engine=engines[1]):
 
     SELECT create_hypertable('eyedro.gb_{serial}', 'ts', if_not_exists => TRUE, migrate_data => true);
 
-    CREATE MATERIALIZED VIEW eyedro.gb_{serial}_daily
+    DROP MATERIALIZED VIEW if exists eyedro.gb_{serial}_daily cascade;
+    CREATE MATERIALIZED VIEW if not exists eyedro.gb_{serial}_daily
     WITH (timescaledb.continuous) AS
     SELECT 
         time_bucket('1 day', ts) AS day,
-        AVG(a_p1) AS avg_a_p1,
-        AVG(a_p2) AS avg_a_p2,
-        AVG(a_p3) AS avg_a_p3,
-        AVG(v_p1) AS avg_v_p1,
-        AVG(v_p2) AS avg_v_p2,
-        AVG(v_p3) AS avg_v_p3,
-        AVG(pf_p1) AS avg_pf_p1,
-        AVG(pf_p2) AS avg_pf_p2,
-        AVG(pf_p3) AS avg_pf_p3,
-        SUM(wh_p1) AS sum_wh_p1,
-        SUM(wh_p2) AS sum_wh_p2,
-        SUM(wh_p3) AS sum_wh_p3
+    -- Aggregate power (average, min, max)
+    AVG(a_p1) AS avg_amps_p1, 
+    MIN(a_p1) AS min_amps_p1, 
+    MAX(a_p1) AS max_amps_p1,
+    AVG(a_p2) AS avg_amps_p2, 
+    MIN(a_p2) AS min_amps_p2, 
+    MAX(a_p2) AS max_amps_p2,
+    AVG(a_p3) AS avg_amps_p3, 
+    MIN(a_p3) AS min_amps_p3, 
+    MAX(a_p3) AS max_amps_p3,
+    -- Aggregate voltage (average, min, max)
+    AVG(v_p1) AS avg_voltage_p1, 
+    MIN(v_p1) AS min_voltage_p1, 
+    MAX(v_p1) AS max_voltage_p1,
+    AVG(v_p2) AS avg_voltage_p2, 
+    MIN(v_p2) AS min_voltage_p2, 
+    MAX(v_p2) AS max_voltage_p2,
+    AVG(v_p3) AS avg_voltage_p3, 
+    MIN(v_p3) AS min_voltage_p3, 
+    MAX(v_p3) AS max_voltage_p3,
+    -- Aggregate power factor (weighted average, min, max)
+    -- Otherwise, periods with low power consumption will affect the true weighted average.
+    SUM(pf_p1 * wh_p1) / NULLIF(SUM(wh_p1), 0) AS avg_pf_p1,
+    MIN(pf_p1) AS min_pf_p1, 
+    MAX(pf_p1) AS max_pf_p1,
+    SUM(pf_p2 * wh_p2) / NULLIF(SUM(wh_p2), 0) AS avg_pf_p2,
+    MIN(pf_p2) AS min_pf_p2, 
+    MAX(pf_p2) AS max_pf_p2,
+    SUM(pf_p3 * wh_p3) / NULLIF(SUM(wh_p3), 0) AS avg_pf_p3,
+    MIN(pf_p3) AS min_pf_p3, 
+    MAX(pf_p3) AS max_pf_p3,
+    -- Aggregate energy (Wh) with SUM (energy accumulates)
+    SUM(wh_p1) AS total_wh_p1, 
+    SUM(wh_p2) AS total_wh_p2, 
+    SUM(wh_p3) AS total_wh_p3
+
     FROM eyedro.gb_{serial}
     GROUP BY day
     WITH NO DATA;
@@ -179,6 +385,56 @@ def create_tables(serial, engine=engines[1]):
         end_offset => INTERVAL '1 day',
         schedule_interval => INTERVAL '1 day'
     );
+    
+    CREATE MATERIALIZED VIEW if not exists eyedro.gb_{serial}_hourly
+WITH (timescaledb.continuous) AS
+SELECT 
+    time_bucket('1h', ts) AS ts_hour,
+    -- Aggregate power (average, min, max)
+    AVG(a_p1) AS avg_amps_p1, 
+    MIN(a_p1) AS min_amps_p1, 
+    MAX(a_p1) AS max_amps_p1,
+    AVG(a_p2) AS avg_amps_p2, 
+    MIN(a_p2) AS min_amps_p2, 
+    MAX(a_p2) AS max_amps_p2,
+    AVG(a_p3) AS avg_amps_p3, 
+    MIN(a_p3) AS min_amps_p3, 
+    MAX(a_p3) AS max_amps_p3,
+    -- Aggregate voltage (average, min, max)
+    AVG(v_p1) AS avg_voltage_p1, 
+    MIN(v_p1) AS min_voltage_p1, 
+    MAX(v_p1) AS max_voltage_p1,
+    AVG(v_p2) AS avg_voltage_p2, 
+    MIN(v_p2) AS min_voltage_p2, 
+    MAX(v_p2) AS max_voltage_p2,
+    AVG(v_p3) AS avg_voltage_p3, 
+    MIN(v_p3) AS min_voltage_p3, 
+    MAX(v_p3) AS max_voltage_p3,
+    -- Aggregate power factor (weighted average, min, max)
+    -- Otherwise, periods with low power consumption will affect the true weighted average.
+    SUM(pf_p1 * wh_p1) / NULLIF(SUM(wh_p1), 0) AS avg_pf_p1,
+    MIN(pf_p1) AS min_pf_p1, 
+    MAX(pf_p1) AS max_pf_p1,
+    SUM(pf_p2 * wh_p2) / NULLIF(SUM(wh_p2), 0) AS avg_pf_p2,
+    MIN(pf_p2) AS min_pf_p2, 
+    MAX(pf_p2) AS max_pf_p2,
+    SUM(pf_p3 * wh_p3) / NULLIF(SUM(wh_p3), 0) AS avg_pf_p3,
+    MIN(pf_p3) AS min_pf_p3, 
+    MAX(pf_p3) AS max_pf_p3,
+    -- Aggregate energy (Wh) with SUM (energy accumulates)
+    SUM(wh_p1) AS total_wh_p1, 
+    SUM(wh_p2) AS total_wh_p2, 
+    SUM(wh_p3) AS total_wh_p3
+FROM eyedro.gb_{serial}
+GROUP BY 1
+WITH NO DATA;
+
+-- Apply the policy to refresh the last 7 days every 1 day
+SELECT add_continuous_aggregate_policy('eyedro.gb_{serial}_hourly',
+    start_offset => INTERVAL '7 days',
+    end_offset => INTERVAL '1 day',
+    schedule_interval => INTERVAL '1 day');
+
     """
                 cur.execute(sql)
                 conn.commit()  # ✅ Commit only if successful
@@ -192,8 +448,9 @@ def create_tables(serial, engine=engines[1]):
     finally:
         conn.close()  # ✅ Always close the connection
 
-
-
+genset_gbs = ['00980b6d']
+#create_tables(genset_gbs)
+#pass
 
 
 def meter_response(serial, epoch):
@@ -301,6 +558,8 @@ serials_all = ['009807C4',	'009807D3',	'009807D8',	'00980826',	'00980827',	'0098
 complete = []
 if not os.path.exists('complete.txt'):
     open('complete.txt', "w").close()
+if not os.path.exists('complete_app.txt'):
+    open('complete_app.txt', "w").close()
 
 with open("complete.txt", "r") as f:
     content = f.read().strip()
@@ -309,10 +568,12 @@ with open("complete.txt", "r") as f:
 if not complete: 
     complete = ['00980AA1','009807C4','00980892','00980AF4','00980953']
 
-serials = serials = list(set(serials_all) - set(complete))
+serials =  list(set(genset_gbs) - set(complete) - set(['00980864',	'0098086a',	'0098086c',	'0098086d',	'009807c4',	'009807d3',	'009807d8',	'00980827',	'00980828',	'00980829',	'0098082e',	'0098082f',	'0098082d',	'00980830',	'00980848',	'00980849',	'0098084c',	'0098084f',	'00980857',	'0098085c',	'0098085b',	'0098085d',	'00980aa1',	'00980890',	'0098087b',	'00980891',	'0098087c',	'009808c7',	'009808b5',	'009808c6',	'00980893',	'00980892',	'009808e8',	'009808dc',	'009808df',	'009808db',	'00980907',	'00980914',	'00980953',	'009808f8',	'009808f1']))
 
-
-for serial in sort(serials):
+xx = 0
+for serial in sort(genset_gbs):
+    serial = serial.upper()
+    xx += 1
     # Get midnight timestamp (00:00:00) for today in UTC
     midnight_today_utc = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
     epoch_midnight_today = int(midnight_today_utc.timestamp())
@@ -324,14 +585,14 @@ for serial in sort(serials):
     if not epoch:
         epoch = epoch_midnight_today
     no_data_cnt = 0
-    while epoch > 1735732800:
+    while epoch > 1704067199:   # Dec 31 2023
         dt = datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
         data = meter_response(serial, epoch)
         if data is None:
             no_data_cnt += 1
-            print(dt, "NO DATA", no_data_cnt)
-            epoch -= 86400
-            continue
+            logging.error(f"{dt} ZZZ {serial} ERROR: NO DATA: {no_data_cnt}")
+            complete.append(serial)
+            break
         if data['Errors']:
             logging.error(f"{dt} ZZZ {serial} ERRORS: {data['Errors']}")
             if any('API' in str(item) for item in data['Errors'][0]):
@@ -342,19 +603,18 @@ for serial in sort(serials):
                 # with open("complete.txt", "w") as f:
                 #     f.write(",".join(map(str, complete)))
                 break
-            elif len(data['Errors']) > 1 and any('Invalid DateStartSecUtc' in str(item) for item in data['Errors'][2]):
+            elif len(data['Errors']) > 2 and any('Invalid DateStartSecUtc' in str(item) for item in data['Errors'][2]):
                 logging.info('Invalid DateStartSecUtc NORMAL END OF DATA')
-                # complete.append(serial)
-                # with open("complete.txt", "w") as f:
-                #     f.write(",".join(map(str, complete)))
                 complete.append(serial)
+                with open("complete.txt", "w") as f:
+                    f.write(",".join(map(str, complete)))
                 break
             else:
                 logging.error(f"{dt} ZZZ {serial} ERRORS: uncaught error")
                 complete.append(serial)
                 break
 
-        res, err = update_gb_db(serial, data, engines[1])
+        res, err = update_gb_db(serial.lower(), data, engines[1])
         if err:
             logging.error(f"ZZZ {serial} gb_1min update_gb_db ERROR: {err}")
             break
@@ -362,6 +622,8 @@ for serial in sort(serials):
         logging.info(f"gb_1min GB: {xx} {serial} Date: {dt} Rows: {res}  {epoch}")
         # previous day
         epoch -= 86400
+with open("complete_app.txt", "w") as f:
+    f.write(",".join(map(str, complete)))
 pass
 
 """

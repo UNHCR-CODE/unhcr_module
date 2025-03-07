@@ -174,13 +174,12 @@ def sql_execute(sql, engine=default_engine, data=None):
         try:
             # Use SQLAlchemy's execute method
             result = session.execute(text(sql), params=data)
-
+            session.commit()
             # If it's a SELECT query, fetch results
             if sql.strip().upper().startswith("SELECT"):
-                return result, None
+                return result.fetchall(), None
 
             # For INSERT, UPDATE, DELETE return the result
-            session.commit()
             return result, None
 
         except exc.SQLAlchemyError as db_error:
@@ -217,8 +216,8 @@ def sql_execute(sql, engine=default_engine, data=None):
                 "error_message": str(e),
                 "sql": sql,
             }
-        finally:
-            session.close()
+        # finally:
+        #     session.close()
 
 
 default_engine = set_db_engine(const.TAKUM_RAW_CONN_STR)
@@ -233,7 +232,6 @@ def get_db_max_date(engine=default_engine, table_name="TAKUM_LEONICS_API_RAW"):
     try:
         dt, err = sql_execute(f"select max(DatetimeServer) FROM {table_name}", engine)
         assert err is None
-        dt = dt.fetchall()
         val = dt[0][0]
         return datetime.strptime(val, "%Y-%m-%d %H:%M"), None
     except Exception as e:
@@ -421,7 +419,6 @@ def prospect_get_start_ts(local=None, start_ts=None):
         sql = f"select custom->>'{server}', external_id from data_custom where external_id like '{postfix}' order by custom->>'{server}' desc limit 1"
         dt, err = sql_execute(sql, prospect_engine)
         assert err is None
-        dt = dt.fetchall()
         val = dt[0][0]
         return datetime.strptime(val, "%Y-%m-%d %H:%M")
 
@@ -450,16 +447,15 @@ def update_prospect(start_ts=None, local=None, table_name=const.LEONICS_RAW_TABL
     logging.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
     try:
         start_ts = prospect_get_start_ts(local, start_ts)
-        res, err = sql_execute(
+        rows, err = sql_execute(
             f"select * FROM {table_name} where DatetimeServer >= '{start_ts}' order by DatetimeServer  limit 50000;",
             default_engine,
         )
         assert err is None
-        # Fetch all results as a list of dictionaries
-        rows = res.fetchall()
 
         # Convert the result to a Pandas DataFrame
-        columns = res.keys()  # Get column names
+        columns = columns = list(rows[0]._fields) if rows else []
+  # Get column names
         df = pd.DataFrame(rows, columns=columns)
         postfix = "sys_"
         # if local:
@@ -547,14 +543,12 @@ def prospect_backfill_key(
 
     logging.info(f"\n\n{key}\n{url}\n{start_ts}")
 
-    res, err = sql_execute(
+    rows, err = sql_execute(
         f"select * FROM {table_name} where DatetimeServer > '{start_ts}' order by DatetimeServer limit 1450",
         default_engine,
         # {'ts':start_ts}
     )
     assert err is None
-    # Fetch all results as a list of dictionaries
-    rows = res.fetchall()
 
     # Convert the result to a Pandas DataFrame
     columns = res.keys()  # Get column names
@@ -636,7 +630,8 @@ def update_fuel_data(engine, merged_hourly_sums, table, site):
     #  0     1       2    3        4      5       6
     sql_vals = "VALUES "
     for v in merged_hourly_sums_notnull.values:
-        ts = datetime.combine(v[0], datetime.min.time()).replace(hour=v[1])
+        ts = datetime.combine(v[0], datetime.min.time()).replace(hour=int(v[1]))
+
         ts_str = ts.isoformat()
         end_str = (ts + timedelta(hours=1)).isoformat()
         sql_vals += f" ('{ts_str}','{end_str}',{v[2]},{v[3]},{v[4]},{v[5]},{v[6]}),"
@@ -836,10 +831,9 @@ def get_sm_weather_max_epoch(device_id, engine):
         tuple: A tuple containing the latest timestamp as an integer, and None if the query was successful, or an error message if it was not.
     """
     sql = f"select max(org_epoch) FROM solarman.weather where device_id = {device_id}"
-    res, err = sql_execute(sql, engine)
+    val, err = sql_execute(sql, engine)
     if err is not None:
         return None, err
-    val = res.fetchall()
     epoch = val[0][0]
     return epoch, None
 
@@ -858,10 +852,9 @@ def get_fuel_max_ts(site, engine):
     """
 
     sql = f"SELECT max(st_ts) FROM fuel.fuel_kwh_{site.lower()}"
-    res, err = sql_execute(sql, engine)
+    val, err = sql_execute(sql, engine)
     if err is not None:
         return None, err
-    val = res.fetchall()
     ts = val[0][0]
     return ts, None
 
@@ -882,8 +875,7 @@ def get_gb_epoch(serial_num, engine, max=True):
     res, err = sql_execute(sql, engine)
     if err is not None:
         return None, err
-    val = res.fetchall()
-    epoch = val[0][0]
+    epoch = res[0][0]
     return epoch, None
 
 

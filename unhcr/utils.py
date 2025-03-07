@@ -95,6 +95,8 @@ def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
     logging.Logger
         The configured logger
     """
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
     logger = logging.getLogger()
     if override:
         logger.handlers.clear()
@@ -120,7 +122,7 @@ def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
     console_handler = logging.StreamHandler()
     config_log_handler(console_handler, level, formatter, logger)
     # File handler
-    file_handler = logging.FileHandler(log_file)
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
     config_log_handler(file_handler, level, formatter, logger)
     # Set the overall logging level
     logger.setLevel(getattr(logging, level))

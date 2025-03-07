@@ -130,17 +130,17 @@ def execute(token, start_ts=None):
 
         try:
             if utils.docker_running():
-                logging.info(f"Server at {url} is responding.")
+                logging.info(f"Local Server is responding.")
                 db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name('postgresql')
                 res, err = db.update_prospect(start_ts=start_ts, local=True, table_name= const.LEONICS_RAW_TABLE)
                 assert(res is not None)
                 assert(err is None)
                 logging.info(f"LOCAL: TRUE {res.status_code}:  {res.text}")
             else:
-                logging.info(f"Server at {url} responded with status code: {response.status_code}")
+                logging.info(f"Server not responding")
                 start_ts = None
         except requests.ConnectionError:
-            logging.error(f"Server at {url} is not responding.")
+            logging.error(f"Server connection error.")
             start_ts = None
     return start_ts
 
