@@ -353,8 +353,18 @@ def update_rows(max_dt, df, table_name, key="DateTimeServer"):
         df_filtered.columns
     )  # Get the column names as comma-separated values
 
+    # values = ", ".join(
+    #     f"({', '.join(f'\'{val.strftime('%Y-%m-%d %H:%M')}\'' if isinstance(val, pd.Timestamp) else str(val) for val in df_filtered.loc[idx])})"
+    #     for idx in df_filtered.index
+    # )
+    
+    def format_value(val):
+        if isinstance(val, pd.Timestamp):
+            return f"'{val.strftime('%Y-%m-%d %H:%M')}'"
+        return str(val)
+
     values = ", ".join(
-        f"({', '.join(f'\'{val.strftime('%Y-%m-%d %H:%M')}\'' if isinstance(val, pd.Timestamp) else str(val) for val in df_filtered.loc[idx])})"
+        f"({', '.join(format_value(val) for val in df_filtered.loc[idx])})"
         for idx in df_filtered.index
     )
     values = values.replace("err", "NULL")
