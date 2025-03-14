@@ -55,7 +55,7 @@ WIP backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, s
 """
 
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import math
 import os
@@ -643,27 +643,34 @@ def update_fuel_data(engine, merged_hourly_sums, table, site):
     return res, err
 
 
-def update_bulk_fuel(conn_str, df, df1, table, spath, fn1):
+def update_bulk_fuel(engine, df, table):
     """
-    Updates the bulk fuel data in the database.
+    Updates the bulk fuel data in the specified database table.
 
-    This function takes in the merged daily sums DataFrame, connection string, table name, and site name.
-    It constructs the SQL query string by replacing 'TABLE' with the table name and adds the VALUES
-    clause based on the merged daily sums DataFrame. The SQL query is then executed using the connection
-    string and the updated row count is printed. Finally, the merged daily sums DataFrame is saved to a CSV
-    file named 'mhs_<site>.csv' and the function returns None, None, None.
+    This function processes a DataFrame containing bulk fuel data, checking each row 
+    against the latest timestamp in the database to determine if it should be 
+    inserted or updated. It constructs an SQL query to insert new data or update 
+    existing records based on the 'Unit Name', 'Time', and 'Event Name' columns. 
+    If a row's 'Value' field contains specific keywords, it extracts numerical 
+    values for 'liters_used' or 'liter_bought'. The function returns the result 
+    of the SQL execution.
 
     Args:
-        conn_str (str): The connection string to the database.
-        df (pd.DataFrame): The merged daily sums DataFrame.
-        df1 (pd.DataFrame): The DataFrame containing the last row of the database.
+        engine (sqlalchemy.engine.Engine): The connection engine to use for the database.
+        df (pd.DataFrame): The DataFrame containing bulk fuel data.
+        table (str): The name of the database table to update.
 
     Returns:
-        str, str: The SQL query string and the result of the query execution.
+        tuple: A tuple containing the result of the SQL execution and an error message 
+        (if any). Returns None and an error message if no new data is found to update.
     """
-    df1["Time"] = pd.to_datetime(df1["Time"], dayfirst=True)
-    df1 = df1.sort_values(by="Time")
-    ts = df1.iloc[-1].to_dict()["Time"]
+
+    res, err =sql_execute(f'select max("Time") from fuel.{table};', engine)
+    if res:
+        ts = datetime.strptime(res[0][0], "%Y-%m-%d %H:%M:%S")
+    else:
+        # all data will be saved
+        ts = datetime.now() + timedelta(days=1)
 
     sql_vals = "VALUES "
     # 'Unit Name', 'Time', 'Event Name', 'Value', 'liters_used', 'liter_bought'
@@ -672,7 +679,6 @@ def update_bulk_fuel(conn_str, df, df1, table, spath, fn1):
         if row[2] <= ts:
             continue
         found = True
-        #print(f"Index: {row[0]}, Event: {row[3]}, Time: {row[2]}")
         lu = np.nan
         lb = np.nan
         val = row[4]
@@ -688,10 +694,9 @@ def update_bulk_fuel(conn_str, df, df1, table, spath, fn1):
             "Time": row[2],
             "Event Name": row[3],
             "Value": val,
-            "liters_used": lu,  # Fill with appropriate value or leave None
-            "liter_bought": lb,  # Fill with appropriate value or leave None
+            "liters_used": lu,
+            "liter_bought": lb,
         }
-        df1.loc[len(df1)] = new_row
         if isinstance(lu, float) and math.isnan(lu):
             lu = None
         if isinstance(lb, float) and math.isnan(lb):
@@ -701,10 +706,8 @@ def update_bulk_fuel(conn_str, df, df1, table, spath, fn1):
     if not found:
         return None, "Nothing to update"
 
-    df1.to_excel(os.getcwd() + spath + fn1, index=False)
-
     sql = """
-    INSERT INTO public.TABLE ("Unit Name", "Time", "Event Name", "Value", liters_used, liter_bought)
+    INSERT INTO fuel.TABLE ("Unit Name", "Time", "Event Name", "Value", liters_used, liter_bought)
     VALUES
     ON CONFLICT ("Unit Name", "Time", "Event Name")
     DO UPDATE SET
@@ -719,7 +722,6 @@ def update_bulk_fuel(conn_str, df, df1, table, spath, fn1):
         sql.replace("VALUES", sql_vals[:-1]).replace("\n", " ").replace("None", "null")
     )
 
-    engine = create_engine(conn_str)
     return sql_execute(sql, engine)
 
 

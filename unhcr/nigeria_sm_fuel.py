@@ -630,4 +630,4 @@ def concat_csv_files(dpath, fn, label):
     concatenated_df.drop_duplicates(inplace=True)
     # Save the concatenated DataFrame to a new CSV file
     concatenated_df.to_csv(dpath + fn, index=False)
-    return True
+    return concatenated_df

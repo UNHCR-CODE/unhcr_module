@@ -5,32 +5,22 @@ import sys
 
 import pandas as pd
 from sqlalchemy import text
+from unhcr import app_init
 from unhcr import constants as const
 from unhcr import db
 from unhcr import utils
 from unhcr import api_solarman
 
-# local testing ===================================
-if const.LOCAL:  # testing with local python files
-    const, db, utils, api_solarman, *rest = const.import_local_libs(
-        mods=[
-            ["constants", "const"],
-            ["db", "db"],
-            ["utils", "utils"],
-            ["api_solarman", "api_solarman"],
-        ]
-    )
+mods=[
+    ["constants", "const"],
+    ["db", "db"],
+    ["utils", "utils"],
+    ["api_solarman", "api_solarman"],
+]
 
-utils.log_setup(level="INFO", log_file="unhcr.sm_weather.log", override=True)
-logging.info(
-    f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}"
-)
-
-if not utils.is_version_greater_or_equal('0.4.6'):
-    logging.error(
-        "This version of the script requires at least version 0.4.6 of the unhcr module."
-    )
-    exit(46)
+res = app_init.init(mods, "unhcr.sm_weather.log", '0.4.6', level="INFO", override=True)
+if const.LOCAL:
+    const, db, utils, api_solarman = res
 
 engines = db.set_db_engines()
 

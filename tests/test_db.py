@@ -166,7 +166,7 @@ def test_get_db_session(db_engine):
 def test_sql_execute_select(db_engine):
     result, error = unhcr.db.sql_execute("SELECT 1", db_engine)
     assert error is None
-    assert result.scalar() == 1
+    assert result[0][0] == 1
 
 
 def test_sql_execute_insert(db_engine):
@@ -250,7 +250,7 @@ def test_update_leonics_db_and_update_rows(
     # Check if rows were inserted
     res, err = unhcr.db.sql_execute(f"SELECT COUNT(*) FROM {table_name}", db_engine)
     if err is None:
-        assert res.scalar() == expected_count
+        assert res[0][0] == expected_count
     else:
         assert err["error_message"].startswith("(sqlite3.OperationalError)")
 

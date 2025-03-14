@@ -25,15 +25,14 @@ Initialization:
     The load_env and set_environ functions load the environment variables and populate the constants, respectively. 
     The env_cmdline_parser function allows specifying a different .env file via command-line arguments.
 """
-import optparse
-import os
-import sys
-import importlib
-import logging
 
 from dotenv import find_dotenv, load_dotenv
-
+import importlib
+import logging
+import optparse
+import os
 import requests
+import sys
 from unhcr import utils
 
 # Define constants

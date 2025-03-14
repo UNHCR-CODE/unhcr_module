@@ -43,16 +43,16 @@ Key Components
         matching dictionary.
 """
 
+import csv
 from datetime import datetime, timedelta
 from importlib.metadata import version
-import csv
 import glob
 import logging
 import optparse
 import os
+import requests
 import sys
 
-import requests
 
 
 def config_log_handler(handler, level, formatter, logger):
@@ -356,19 +356,19 @@ def extract_data(data_list, site=None):
     for key in data_list:
         if site is None:
             if "site" in key:
-                site = key["site"]
+                site = data_list[key]
             else:
                 return None, None, None, None
-            table = key["table"]
-            fn = key["fn"]
-            if "label" in key:
-                label = key["label"]
+            table = data_list["table"]
+            fn = data_list["fn"]
+            if "label" in data_list:
+                label = data_list["label"]
             return site, table, fn, label
-        elif site == key["site"]:
-            table = key["table"]
-            fn = key["fn"]
-            if "label" in key:
-                label = key["label"]
+        elif site == data_list["site"]:
+            table = data_list["table"]
+            fn = data_list["fn"]
+            if "label" in data_list:
+                label = data_list["label"]
             return site, table, fn, label
 
 
