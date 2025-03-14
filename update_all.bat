@@ -3,17 +3,17 @@ REM change to your repo root dir
 cd E:\_UNHCR\CODE\unhcr_module
 e:
 
-set VENV_DIR=venv
+set VENV_DIR=vfedot
 
 if not exist "%VENV_DIR%" (
     echo Creating virtual environment in %VENV_DIR%...
     python -m venv %VENV_DIR%
     echo Virtual environment created successfully.
-    call venv\Scripts\activate.bat
-    venv\Scripts\pip install -r requirements.txt
+    call %VENV_DIR%\Scripts\activate.bat
+    %VENV_DIR%\Scripts\pip install -r fedotreqs.txt
 ) else (
     echo Virtual environment "%VENV_DIR%" already exists.
-    call venv\Scripts\activate.bat
+    call %VENV_DIR%\Scripts\activate.bat
 )
 
 REM pip install --upgrade pip
@@ -25,13 +25,13 @@ IF "%1"=="" (
         echo Module 'unhcr' is installed.
     ) else (
         echo Module 'unhcr' is not installed.
-        venv\Scripts\pip install .
+        %VENV_DIR%\Scripts\pip install .
     )
 ) ELSE (
-    venv\Scripts\pip install -r requirements.txt
-    venv\Scripts\pip install .
+    %VENV_DIR%\Scripts\pip install -r fedotreqs.txt
+    %VENV_DIR%\Scripts\pip install .
 )
 
 REM changed python path to make it work in Windows scheduler -- was running a different python
-venv\Scripts\python.exe update_all.py --log INFO
+%VENV_DIR%\Scripts\python.exe app_update_all.py --log INFO
 deactivate
