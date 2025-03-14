@@ -1,35 +1,31 @@
 from datetime import datetime, timedelta, timezone
 import logging
-import os
-import sys
 
-import pandas as pd
-from sqlalchemy import text
 from unhcr import app_init
 from unhcr import constants as const
 from unhcr import db
-from unhcr import utils
 from unhcr import api_solarman
 
-mods=[
+mods = [
     ["constants", "const"],
     ["db", "db"],
-    ["utils", "utils"],
     ["api_solarman", "api_solarman"],
 ]
 
-res = app_init.init(mods, "unhcr.sm_weather.log", '0.4.6', level="INFO", override=True)
+res = app_init.init(mods, "unhcr.sm_weather.log", "0.4.6", level="INFO", override=True)
 if const.LOCAL:
-    const, db, utils, api_solarman = res
+    const, db, api_solarman = res
 
 engines = db.set_db_engines()
+if const.is_running_on_azure():
+    engines = [engines[1]]
 
 for engine in engines:
     epochs = []
     for site in api_solarman.SITE_ID:
         key = next(iter(site))
         device = api_solarman.WEATHER[key]
-        epoch, err = db.get_sm_weather_max_epoch(device['deviceId'], engine)
+        epoch, err = db.get_sm_weather_max_epoch(device["deviceId"], engine)
         if err:
             logging.error(err)
             continue
@@ -45,7 +41,7 @@ for engine in engines:
         date_str = date_obj.strftime("%Y-%m-%d")
 
         while date_obj <= datetime.now().date():
-            df = api_solarman.get_weather_data(date_str, devices = [device])
+            df = api_solarman.get_weather_data(date_str, devices=[device])
             if df is None:
                 print(date_str, "NO DATA")
                 date_obj = date_obj + timedelta(days=1)

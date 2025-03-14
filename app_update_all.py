@@ -1,48 +1,48 @@
 """
 Overview
-    This script full_test.py integrates data from the Leonics API into UNHCR's MySQL and Prospect databases. 
-    It authenticates with the Leonics API, retrieves data, and updates the databases based on conditional flags. 
-    The script includes some commented-out code suggesting past or future integration with an Oracle database and AWS S3. 
+    This script full_test.py integrates data from the Leonics API into UNHCR's MySQL and Prospect databases.
+    It authenticates with the Leonics API, retrieves data, and updates the databases based on conditional flags.
+    The script includes some commented-out code suggesting past or future integration with an Oracle database and AWS S3.
     It appears designed for testing the integration process.
 
 Key Components
-    Authentication (api_leonics.checkAuth()): 
-        Retrieves a token from the Leonics API, essential for subsequent database interactions. 
+    Authentication (api_leonics.checkAuth()):
+        Retrieves a token from the Leonics API, essential for subsequent database interactions.
         The script exits if authentication fails.
 
-    DB Update (db.update_leonics_db(...)): 
-        Updates the Leonics Raw database with data fetched from the Leonics API. 
+    DB Update (db.update_leonics_db(...)):
+        Updates the Leonics Raw database with data fetched from the Leonics API.
         Uses a timestamp to determine the range of data to fetch.
 
-    Prospect Update (db.update_prospect(...)): 
+    Prospect Update (db.update_prospect(...)):
         Updates the Prospect database. A local flag suggests different update paths for testing and production environments.
         Hardcoded timestamps are likely placeholders for testing.
 
-    Conditional Logic: Boolean flags (UPDATE_DB, PROSPECT, ORACLE) 
+    Conditional Logic: Boolean flags (UPDATE_DB, PROSPECT, ORACLE)
         control which databases are updated, enabling targeted testing.
 
-    Logging: 
+    Logging:
         Uses the logging module to record key events and errors, aiding in debugging and monitoring.
 
-    Configuration: 
-        Uses a constants module (const) to manage environment-specific settings, such as database credentials 
+    Configuration:
+        Uses a constants module (const) to manage environment-specific settings, such as database credentials
         and API endpoints. Supports both local and production environments.
 
-    Inactive Code: 
-        Contains commented-out code related to Oracle and S3 integration, indicating potential future development or 
+    Inactive Code:
+        Contains commented-out code related to Oracle and S3 integration, indicating potential future development or
         removed features. This code should be removed for clarity.
 
-    Versioning: 
-        Includes a function (utils.get_module_version) to retrieve the module's version, useful for tracking 
+    Versioning:
+        Includes a function (utils.get_module_version) to retrieve the module's version, useful for tracking
         changes and deployments.
 """
 
 import logging
-import os
 import requests
 
-
+from unhcr import app_init
 from unhcr import constants as const
+
 # OPTIONAL: set your own environment
 ##ef = const.load_env(r'E:\_UNHCR\CODE\unhcr_module\.env')
 ## print(ef)
@@ -51,19 +51,20 @@ from unhcr import utils
 from unhcr import db
 from unhcr import api_leonics
 
+mods = [
+    ["constants", "const"],
+    ["utils", "utils"],
+    ["db", "db"],
+    ["api_solarman", "api_solarman"],
+]
 
-if const.LOCAL: # testing with local python files
-    mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
-    utils, const, db, api_leonics, *rest = mods
+res = app_init.init(mods, "unhcr.update_all.log", "0.4.6", level="INFO", override=True)
+if const.LOCAL:
+    const, utils, db, api_solarman = res
 
-utils.log_setup(level="INFO", log_file="unhcr.update_all.log", override=True)
-logging.info(f"PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
-
-if not utils.is_version_greater_or_equal('0.4.6'):
-    logging.error(
-        "This version of the script requires at least version 0.4.6 of the unhcr module."
-    )
-    exit(46)
+engines = db.set_db_engines()
+if const.is_running_on_azure():
+    engines = [engines[1]]
 
 # just to test S3
 # TODO waiting for new creds
@@ -72,9 +73,6 @@ if not utils.is_version_greater_or_equal('0.4.6'):
 # s3.list_files_in_folder(s3.BUCKET_NAME, s3.FOLDER_NAME)
 # exit()
 
-logging.info(f"Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
-ver, err = utils.get_module_version()
-logging.info(f"Version: {ver}   Error: {err}")
 
 BACKFILL_DT = False
 start_ts = None
@@ -110,7 +108,7 @@ ORACLE = False
 
 def execute(token, start_ts=None):
     if UPDATE_DB or PROSPECT:
-        logging.debug('Retrieved Leonics token')
+        logging.debug("Retrieved Leonics token")
     if UPDATE_DB:
         start_ts = db.update_takum_raw_db(token, start_ts)
     if PROSPECT:
@@ -119,11 +117,13 @@ def execute(token, start_ts=None):
         # assert(res is not None)
         # assert(err is None)
         # logging.info(f"LOCAL: FALSE {res.status_code}:  {res.text}")
-        db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name('postgresql')
+        db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name(
+            "postgresql"
+        )
         if BACKFILL_DT:
-            db.update_prospect(start_ts=start_ts) #AZURE
+            db.update_prospect(start_ts=start_ts)  # AZURE
         else:
-            db.update_prospect(table_name=const.LEONICS_RAW_TABLE) #AZURE
+            db.update_prospect(table_name=const.LEONICS_RAW_TABLE)  # AZURE
 
         if const.is_running_on_azure():
             return start_ts
@@ -131,10 +131,14 @@ def execute(token, start_ts=None):
         try:
             if utils.docker_running():
                 logging.info(f"Local Server is responding.")
-                db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name('postgresql')
-                res, err = db.update_prospect(start_ts=start_ts, local=True, table_name= const.LEONICS_RAW_TABLE)
-                assert(res is not None)
-                assert(err is None)
+                db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name(
+                    "postgresql"
+                )
+                res, err = db.update_prospect(
+                    start_ts=start_ts, local=True, table_name=const.LEONICS_RAW_TABLE
+                )
+                assert res is not None
+                assert err is None
                 logging.info(f"LOCAL: TRUE {res.status_code}:  {res.text}")
             else:
                 logging.info(f"Server not responding")
@@ -144,8 +148,9 @@ def execute(token, start_ts=None):
             start_ts = None
     return start_ts
 
+
 token = api_leonics.checkAuth()
-assert(token is not None)
+assert token is not None
 
 execute(token)
 exit(0)
