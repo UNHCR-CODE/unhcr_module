@@ -10,7 +10,7 @@ if not exist "%VENV_DIR%" (
     python -m venv %VENV_DIR%
     echo Virtual environment created successfully.
     call %VENV_DIR%\Scripts\activate.bat
-    %VENV_DIR%\Scripts\pip install -r requirements.txt
+    %VENV_DIR%\Scripts\pip install -r fedotreqs.txt
 ) else (
     echo Virtual environment "%VENV_DIR%" already exists.
     call %VENV_DIR%\Scripts\activate.bat
@@ -28,9 +28,9 @@ IF "%1"=="" (
         %VENV_DIR%\Scripts\pip install .
     )
 ) ELSE (
-    %VENV_DIR%\Scripts\pip install -r requirements.txt
+    %VENV_DIR%\Scripts\pip install -r fedotreqs.txt
     %VENV_DIR%\Scripts\pip install .
-)
+)   
 
 REM changed python path to make it work in Windows scheduler -- was running a different python
 %VENV_DIR%\Scripts\python.exe app_sm_weather.py --log INFO
