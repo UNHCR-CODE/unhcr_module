@@ -63,8 +63,6 @@ if const.LOCAL:
     const, utils, db, api_solarman = res
 
 engines = db.set_db_engines()
-if const.is_running_on_azure():
-    engines = [engines[1]]
 
 # just to test S3
 # TODO waiting for new creds
