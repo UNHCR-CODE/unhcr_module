@@ -72,7 +72,7 @@ def getAuthToken(dt=None):
     headers = {"Content-Type": "application/json"}
     return err_handler.request(
         lambda: requests.post(
-            f"{const.LEONICS_BASE_URL}/auth222",
+            f"{const.LEONICS_BASE_URL}/auth",
             json=payload,
             headers=headers,
             verify=const.VERIFY,
