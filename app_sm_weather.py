@@ -17,8 +17,6 @@ if const.LOCAL:
     const, db, api_solarman = res
 
 engines = db.set_db_engines()
-if const.is_running_on_azure():
-    engines = [engines[1]]
 
 for engine in engines:
     epochs = []
