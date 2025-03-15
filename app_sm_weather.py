@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import logging
 
-from unhcr import app_init
+from unhcr import app_utils
 from unhcr import constants as const
 from unhcr import db
 from unhcr import api_solarman
@@ -12,7 +12,7 @@ mods = [
     ["api_solarman", "api_solarman"],
 ]
 
-res = app_init.init(mods, "unhcr.sm_weather.log", "0.4.6", level="INFO", override=True)
+res = app_utils.init(mods, "unhcr.sm_weather.log", "0.4.6", level="INFO", override=True)
 if const.LOCAL:
     const, db, api_solarman = res
 

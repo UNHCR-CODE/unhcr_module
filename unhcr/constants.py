@@ -75,6 +75,13 @@ SECRET_KEY = None
 BUCKET_NAME = None
 FOLDER_NAME = None
 
+# Eyedro API
+GB_API_V1_API_BASE_URL=None
+GB_API_V1_GET_DATA=None
+GB_API_V1_EMPTY_KEY=None
+GB_API_V1_GET_DEVICE_LIST=None
+GB_API_V1_USER_KEY=None
+
 # Prospect API
 BASE_URL = None
 API_IN_KEY = None
@@ -171,6 +178,16 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         S3 bucket name for Eyedro.
     FOLDER_NAME : str
         S3 folder name for Eyedro.
+    GB_API_V1_API_BASE_URL : str
+        Base URL for GB API v1.
+    GB_API_V1_GET_DATA : str
+        Endpoint for getting data from GB API v1.
+    GB_API_V1_EMPTY_KEY : str
+        Empty key for GB API v1.
+    GB_API_V1_GET_DEVICE_LIST : str
+        Endpoint for getting device list from GB API v1.
+    GB_API_V1_USER_KEY : str
+        User key for GB API v1.
     BASE_URL : str
         Base URL for Prospect API.
     API_IN_KEY : str
@@ -228,6 +245,12 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     global SECRET_KEY
     global BUCKET_NAME
     global FOLDER_NAME
+    
+    global GB_API_V1_API_BASE_URL
+    global GB_API_V1_GET_DATA
+    global GB_API_V1_EMPTY_KEY
+    global GB_API_V1_GET_DEVICE_LIST
+    global GB_API_V1_USER_KEY
 
     global BASE_URL
     global API_IN_KEY
@@ -316,6 +339,13 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     SECRET_KEY = os.getenv("GB_AWS_SECRET_KEY", "GB_AWS_SECRET_KEY missing")
     BUCKET_NAME = os.getenv("GB_AWS_BUCKET_NAME", "GB_AWS_BUCKET_NAME missing")
     FOLDER_NAME = os.getenv("GB_AWS_FOLDER_NAME", "GB_AWS_FOLDER_NAME missing")
+    
+    # Eyedro API
+    GB_API_V1_API_BASE_URL = os.getenv("GB_API_V1_API_BASE_URL", "GB_API_V1_API_BASE_URL missing")
+    GB_API_V1_GET_DATA = os.getenv("GB_API_V1_GET_DATA", "GB_API_V1_GET_DATA missing")
+    GB_API_V1_EMPTY_KEY = os.getenv("GB_API_V1_EMPTY_KEY", "GB_API_V1_EMPTY_KEY missing")
+    GB_API_V1_GET_DEVICE_LIST = os.getenv("GB_API_V1_GET_DEVICE_LIST", "GB_API_V1_GET_DEVICE_LIST missing")
+    GB_API_V1_USER_KEY = os.getenv("GB_API_V1_USER_KEY", "GB_API_V1_USER_KEY missing")
 
     # Prospect API
     BASE_URL = os.getenv("PROS_BASE_URL", "PROS_BASE_URL missing")
@@ -469,6 +499,8 @@ if res is None:
     exit(999)
 
 MODULES = [
+    ["err_handler", "err_handler"],
+    ["app_utils", "app_utils"],
     ["utils", "utils"],
     ["constants", "const"],
     ["db", "db"],
@@ -502,17 +534,21 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
     loaded_modules = []
     for mod in mods:
         module_name, global_name = mod
+        logging.info(module_name, global_name)
         if module_name in sys.modules:
             # Use the already loaded module
             loaded_modules.append(sys.modules[module_name])
+            logging.info("already loaded")
             continue
         if module_name in loaded_modules:
             # Use the already loaded module
+            logging.info("already loaded 111111")
             continue
 
         # Construct the full path to the module file
         module_path = os.path.join(mpath, f"{module_name}.py")
         if not os.path.exists(module_path):
+            logging.info("module not found")
             print(f"Module file not found: {module_path}")
             continue
 
@@ -523,6 +559,7 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
             spec.loader.exec_module(loaded_mod)
             loaded_modules.append(loaded_mod)
         except Exception as e:
+            logging.info(f"Failed to load module {module_name}: {e}")
             print(f"Failed to load module {module_name}: {e}")
 
     return tuple(loaded_modules)

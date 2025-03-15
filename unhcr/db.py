@@ -233,6 +233,8 @@ def get_db_max_date(engine=default_engine, table_name="TAKUM_LEONICS_API_RAW"):
         dt, err = sql_execute(f"select max(DatetimeServer) FROM {table_name}", engine)
         assert err is None
         val = dt[0][0]
+        if len(val) > 18: 
+            val = dt[0][0][:-3]
         return datetime.strptime(val, "%Y-%m-%d %H:%M"), None
     except Exception as e:
         logging.error(f"Can not get DB max timsestanp   {e}")

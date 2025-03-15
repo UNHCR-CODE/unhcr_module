@@ -1,25 +1,25 @@
 """
 Overview
-    This Python file (api_leonics.py) acts as an API client for interacting with the Leonics system. Its primary functions are handling 
-    authentication, retrieving data within a specified timeframe, and submitting data to a prospect API endpoint. 
+    This Python file (api_leonics.py) acts as an API client for interacting with the Leonics system. Its primary functions are handling
+    authentication, retrieving data within a specified timeframe, and submitting data to a prospect API endpoint.
     The client retrieves an authentication token, validates it, uses it to fetch data, and then sends this data to another system.
 
 Key Components
-    getAuthToken(dt=None): 
-        Retrieves an authentication token from the Leonics system. It takes an optional date parameter (dt) for specifying the current date. 
-        If no date is provided, it defaults to the current date. The function constructs the authentication payload, including system credentials 
+    getAuthToken(dt=None):
+        Retrieves an authentication token from the Leonics system. It takes an optional date parameter (dt) for specifying the current date.
+        If no date is provided, it defaults to the current date. The function constructs the authentication payload, including system credentials
         and the provided date, and sends a POST request to the /auth endpoint.
 
-    checkAuth(dt=None, x=0): 
-        Checks the validity of the authentication token. It attempts to retrieve a token using getAuthToken(). 
-        If successful, it verifies the token against the /check_auth endpoint. 
-        It handles potential date-related issues by recursively calling itself with the next day's date if the token is invalid due to a date mismatch. 
+    checkAuth(dt=None, x=0):
+        Checks the validity of the authentication token. It attempts to retrieve a token using getAuthToken().
+        If successful, it verifies the token against the /check_auth endpoint.
+        It handles potential date-related issues by recursively calling itself with the next day's date if the token is invalid due to a date mismatch.
         Includes a retry mechanism (up to 3 times) to handle potential transient errors.
 
-    getData(start, end, token=None): 
-        Retrieves data from the Leonics system within a specified time range using a valid authentication token. 
-        It constructs the data request URL with start and end times and sends a GET request to the /data endpoint. 
-        The retrieved data is parsed into a Pandas DataFrame and preprocessed to combine date and time columns. 
+    getData(start, end, token=None):
+        Retrieves data from the Leonics system within a specified time range using a valid authentication token.
+        It constructs the data request URL with start and end times and sends a GET request to the /data endpoint.
+        The retrieved data is parsed into a Pandas DataFrame and preprocessed to combine date and time columns.
         It also includes code to send the retrieved data to a prospect API endpoint.
 """
 
@@ -35,9 +35,11 @@ import urllib3
 urllib3.disable_warnings(InsecureRequestWarning)
 
 from unhcr import constants as const
+from unhcr import err_handler
 
+mods = [["constants", "const"], ["err_handler", "err_handler"]]
 if const.LOCAL:  # testing with local python files
-    const, *rest = const.import_local_libs(mods=[["constants", "const"]])
+    const, err_handler, *rest = const.import_local_libs(mods=mods)
 
 
 def getAuthToken(dt=None):
@@ -68,13 +70,14 @@ def getAuthToken(dt=None):
         "Key": const.LEONICS_KEY,
     }  # sorcery: skip
     headers = {"Content-Type": "application/json"}
-    return requests.post(
-        f"{const.LEONICS_BASE_URL}/auth",
-        json=payload,
-        headers=headers,
-        verify=const.VERIFY,
+    return err_handler.request(
+        lambda: requests.post(
+            f"{const.LEONICS_BASE_URL}/auth222",
+            json=payload,
+            headers=headers,
+            verify=const.VERIFY,
+        )
     )
-
 
 def checkAuth(dt=None, x=0):
     # TODO check 2 times as date maybe one day off due to tz
@@ -98,8 +101,8 @@ def checkAuth(dt=None, x=0):
     """
     if x > 2:
         return None
-    res = getAuthToken(dt)
-    if res.status_code != 200:
+    res, err = getAuthToken(dt)
+    if err or res.status_code != 200:
         return None
 
     # TODO if format changes this will break

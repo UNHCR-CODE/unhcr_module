@@ -4,8 +4,7 @@ import sys
 from unhcr import constants as const
 from unhcr import utils
 
-
-def init(mods, log_file, version, mpath=const.MOD_PATH, level="INFO", override=False):
+def app_init(mods, log_file, version, mpath=const.MOD_PATH, level="INFO", override=False):
     """
     Initialize the application by setting up logging, checking the module version,
     and optionally importing local libraries for testing.
@@ -49,5 +48,5 @@ def init(mods, log_file, version, mpath=const.MOD_PATH, level="INFO", override=F
         if const.LOCAL:  # testing with local python files
             return const.import_local_libs(mpath=mpath, mods=mods)
     except Exception as e:
-        logging.error(f"app_init ERROR: {e}")
+        logging.error(f"app_utils ERROR: {e}")
     return None
