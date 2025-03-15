@@ -58,7 +58,7 @@ mods = [
     ["api_solarman", "api_solarman"],
 ]
 
-res = app_utils.init(mods, "unhcr.update_all.log", "0.4.6", level="INFO", override=True)
+res = app_utils.app_init(mods, "unhcr.update_all.log", "0.4.6", level="INFO", override=True)
 if const.LOCAL:
     const, utils, db, api_solarman = res
 

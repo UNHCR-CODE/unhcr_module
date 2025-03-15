@@ -13,7 +13,7 @@ mods = [
     ["app_utils", "app_utils"],
 ]
 
-res = app_utils.init(mods, "unhcr.gb_serial_nums.log", "0.4.7", level="INFO", override=True)
+res = app_utils.app_init(mods, "unhcr.gb_serial_nums.log", "0.4.7", level="INFO", override=True)
 if const.LOCAL:
     const, utils, db, app_utils = res
 
