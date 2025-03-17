@@ -45,13 +45,13 @@ import unhcr.constants as const
 ## print(ef)
 # OPTIONAL: set your own environment
 
-import unhcr.api_solarman as api_solarman
-import unhcr.db as db
-import unhcr.nigeria_sm_fuel as sm_fuel
-import unhcr.utils as utils
+from unhcr import api_solarman
+from unhcr import db
+from unhcr import nigeria_sm_fuel as sm_fuel
+from unhcr import utils
 
 if const.LOCAL:  # testing with local python files
-    const, api_solarman, db, sm_fuel, utils, *rest = const.import_local_libs(
+    const, api_solarman, db, sm_fuel, utils = const.import_local_libs(
         # mpath=const.MOD_PATH,
         mods=[
             ["constants", "const"],
@@ -71,7 +71,7 @@ if not utils.is_version_greater_or_equal("0.4.7"):
     logging.error(
         "This version of the script requires at least version 0.4.7 of the unhcr module."
     )
-    exit(46)
+    exit(47)
 
 engines = db.set_db_engines()
 
@@ -85,6 +85,7 @@ from deepdiff import DeepDiff
 diff = DeepDiff(sm_fuel.INVERTERS, api_solarman.INVERTERS, ignore_order=True)
 print(diff.pretty())
 
+engines= [engines[0]]
 for engine in engines:
     for office in api_solarman.INVERTERS:
         site = office["site"]
@@ -102,9 +103,9 @@ for engine in engines:
             continue
         from_dt = ts.strftime("%Y-%m-%d %H:%M")
 
-        # Path to the directory containing CSV files (change as needed)
-        csv_dir = "E:/_UNHCR/CODE/NIGERIA_FUEL_BIOHENRY/data/galooli/solarman"
-        download_dir = "C:/Users/steve/Downloads"
+        # Path to the directory containing downloaded Galooli CSV files (change as needed)
+        download_dir = "D:/steve/Downloads"
+        
 
         # Read all CSV files in the directory
         all_files = glob.glob(f"{download_dir}/Detailed Fuel*.csv")
@@ -156,7 +157,7 @@ for engine in engines:
         threshold = pd.to_datetime(ts)
 
         df_liters = pd.DataFrame(liters)
-        df_liters["datetime"] = pd.to_datetime(df_liters["epoch"], unit="s")
+        df_liters["datetime"] = pd.to_datetime(df_liters["epoch"], unit="s", utc=True)
         df_liters["date"] = df_liters["datetime"].dt.date
         df_liters["hour"] = df_liters["datetime"].dt.hour
         # Filter rows where datetime_column is less than or equal to the threshold
@@ -226,8 +227,9 @@ for engine in engines:
             axis=1,
         )
 
+        merged_hourly_sums.index = merged_hourly_sums.index.astype(int)
         merged_hourly_sums.iloc[:, 1:] = (
-            merged_hourly_sums.iloc[:, 1:].replace(0, np.nan).round(3)
+            merged_hourly_sums.iloc[:, 1:] = merged_hourly_sums.iloc[:, 1:].replace(0, np.nan).round(3)
         )
         # fix NAN hour back to zero
         merged_hourly_sums["hour"] = merged_hourly_sums["hour"].fillna(0)

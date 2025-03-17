@@ -7,6 +7,7 @@ from unhcr import db
 from unhcr import api_solarman
 
 mods = [
+    ["app_utils", "app_utils"],
     ["constants", "const"],
     ["db", "db"],
     ["api_solarman", "api_solarman"],
@@ -14,7 +15,7 @@ mods = [
 
 res = app_utils.app_init(mods, "unhcr.sm_weather.log", "0.4.6", level="INFO", override=True)
 if const.LOCAL:
-    const, db, api_solarman = res
+    app_utils, const, db, api_solarman = res
 
 engines = db.set_db_engines()
 

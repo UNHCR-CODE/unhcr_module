@@ -39,7 +39,7 @@ from unhcr import err_handler
 
 mods = [["constants", "const"], ["err_handler", "err_handler"]]
 if const.LOCAL:  # testing with local python files
-    const, err_handler, *rest = const.import_local_libs(mods=mods)
+    const, err_handler = const.import_local_libs(mods=mods)
 
 
 def getAuthToken(dt=None):

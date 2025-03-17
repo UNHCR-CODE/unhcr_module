@@ -24,7 +24,7 @@ from unhcr import utils
 
 # local testing ===================================
 if const.LOCAL:  # testing with local python files
-    const, utils, db, api_leonics, *rest = const.import_local_libs(
+    const, utils, db, api_leonics = const.import_local_libs(
         mods=[
             ["constants", "const"],
             ["utils", "utils"],

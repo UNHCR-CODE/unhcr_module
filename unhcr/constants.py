@@ -534,21 +534,17 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
     loaded_modules = []
     for mod in mods:
         module_name, global_name = mod
-        logging.info(module_name, global_name)
         if module_name in sys.modules:
             # Use the already loaded module
             loaded_modules.append(sys.modules[module_name])
-            logging.info("already loaded")
             continue
         if module_name in loaded_modules:
             # Use the already loaded module
-            logging.info("already loaded 111111")
             continue
 
         # Construct the full path to the module file
         module_path = os.path.join(mpath, f"{module_name}.py")
         if not os.path.exists(module_path):
-            logging.info("module not found")
             print(f"Module file not found: {module_path}")
             continue
 

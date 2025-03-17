@@ -42,10 +42,8 @@ if not utils.is_version_greater_or_equal('0.4.7'):
 #!!! this is from E:\_UNHCR\CODE\DATA\gaps\eyedro_data_gaps.xlsx -- Azure gb tables with data gaps, that are not gensets
 gbs_not_genset = ['gb_00980789', 'gb_0098082b', 'gb_00980858', 'gb_00980885', 'gb_0098088c', 'gb_0098088d', 'gb_00980890', 'gb_00980892', 'gb_00980898', 'gb_0098089a', 'gb_0098089c', 'gb_0098089e', 'gb_0098089f', 'gb_009808b0', 'gb_009808b1', 'gb_009808b6', 'gb_009808b9', 'gb_009808bb', 'gb_009808be', 'gb_009808bf', 'gb_009808f1', 'gb_0098090a', 'gb_0098090c', 'gb_00980912', 'gb_00980929', 'gb_00980958', 'gb_009809e9', 'gb_009809ea', 'gb_00980a21', 'gb_00980a2c', 'gb_00980a3e', 'gb_00980a4f', 'gb_00980a74', 'gb_00980aa1', 'gb_00980af4', 'gb_00980b2a', 'gb_00980b6e', 'gb_00980b81', 'gb_00980b89', 'gb_00980da0', 'gb_00980da2', 'gb_00980dfe', 'gb_00980e0d', 'gb_00980af5', 'gb_00980b11', 'gb_00980b35', 'gb_00980b6e', 'gb_00980da0', 'gb_00980da6', 'gb_00980db4', 'gb_00980dc4', 'gb_00980dc6', 'gb_00980dd7', 'gb_00980ddd', 'gb_00980df4', 'gb_00980dfe', 'gb_00980e0d', 'gb_00980e22']
 
-# done = ['gb_00980789', 'gb_0098082b']
-# gbs_not_genset = set(gbs_not_genset) - set(done)
-
 engines = db.set_db_engines()
+
 
 def print_gap_metrics(actual, ridge_predicted, composite_predicted, gap_number):
     """
@@ -84,6 +82,7 @@ def print_gap_metrics(actual, ridge_predicted, composite_predicted, gap_number):
         else:
             composite = median_ae_metric + rmse_metric + mae_metric
     return metrics, ridge, composite
+
 
 def plot_gap_result(subset, gap_indices, gap_number):
     """
@@ -177,7 +176,7 @@ def get_simple_pipeline(window_size):
     return Pipeline(node_ridge)
 
 
-def add_chart_to_excel(file_name, metrics, ridge, comp):
+def add_chart_to_excel(file_name, metrics, ridge, comp, gap_size, window_size, ChartType=LineChart):
     # Load workbook and select sheet (after saving data)
     wb = load_workbook(file_name)
     ws = wb["Data"]
@@ -186,10 +185,15 @@ def add_chart_to_excel(file_name, metrics, ridge, comp):
     for met in metrics:
         ws[f'W{row}'] = met
         row += 1
-    row += 1
+    row += 2
     ws[f'W{row}'] = f'Ridge: {ridge}'
     row += 1
     ws[f'W{row}'] = f'Composite: {comp}'
+    row += 2
+    ws[f'W{row}'] = f'Gap size: {gap_size}'
+    row += 1
+    ws[f'W{row}'] = f'Window size: {window_size}'
+    row += 1
 
     # Set the style for date formatting and make it a str
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=1):
@@ -197,7 +201,7 @@ def add_chart_to_excel(file_name, metrics, ridge, comp):
             cell.value = cell.value.strftime("%Y-%m-%d %H:%M")
 
     # Create Line Chart
-    chart1 = LineChart()
+    chart1 = ChartType()
     chart1.type = "line"
     chart1.style = 10
     chart1.title = "Gap filling"
@@ -268,7 +272,7 @@ def add_chart_to_excel(file_name, metrics, ridge, comp):
     chart1.x_axis.title = None
 
     # Create Line Chart for 2cnd y axis
-    chart2 = LineChart()
+    chart2 = ChartType()
     chart2.type = "line"
     chart2.style = 10
     chart2.title = "Gap filling"
@@ -348,7 +352,7 @@ def add_chart_to_excel(file_name, metrics, ridge, comp):
     
     
     
-    chart3 = LineChart()
+    chart3 = ChartType()
     chart3.type = "line"
     chart3.style = 10
     chart3.title = "Compare Gap Filling"
@@ -513,28 +517,38 @@ def run_gapfilling_by_segments(file_path, plot_individual_gaps=True, min_gap_siz
     print(f"Identified {len(gap_groups)} separate gaps to process.")
     
     
+    metricx = []
+    df_xcel = pd.DataFrame()
+    ttl_comp = 0
+    ttl_ridge = 0
     # Process each gap separately to minimize memory usage
     for i, gap_group in enumerate(gap_groups):
         gap_size = len(gap_group)
-        if gap_size > 1440*7:
-            print(f"Skipping gap {i+1} of {len(gap_groups)} (size: {gap_size} minutes): too long (> 60 day)")
+        if gap_size >= 1440:  # 1 day
+            print(f"Skipping gap {i+1} of {len(gap_groups)} (size: {gap_size} minutes): too long (>= 1 day)")
             continue
         
-        print(f"Processing gap {i+1} of {len(gap_groups)} (size: {gap_size} minutes)...")
-        window_size = 300 #gap_size * 3 if gap_size * 3 < 5000 else 5000
-        before_after = 1440 #gap_size * 1.5 if gap_size * 1.5 < 1440 else 1440
-        # Determine the maximum window size used in any model
-        # This ensures we have enough data before and after the gap for accurate prediction
-        max_window_size = window_size  # Maximum window size used in any model
-        buffer_size = max_window_size * 2  # Extra buffer for safety
+        #####window_size = 300 #gap_size * 3 if gap_size * 3 < 5000 else 5000
+          # Dynamically adjust window size based on gap size
+        window_size = min(gap_size * 3, 200) if gap_size > 60 else gap_size
+        before_after = 240
+        metricx.append(f" GAP {i+1} of {len(gap_groups)} (size: {gap_size} minutes)    {gap_size}")
+        print(f"{table} Processing gap {i+1} of {len(gap_groups)} (size: {gap_size} minutes)... {window_size}")
+        # Maximum window size used in any model
+        max_window_size = window_size
+        buffer_size = max_window_size * 5  # Extra buffer for safety
 
         # Calculate the start and end indices with buffer for window size
-        # Ensure we don't go out of bounds
         start_idx = max(0, gap_group[0] - buffer_size)
         end_idx = min(len(dataframe) - 1, gap_group[-1] + buffer_size)
-        
-        # Extract only the subset of data around the gap
-        subset = dataframe.iloc[start_idx:end_idx+1].copy()
+
+        # Extract the subset of data around the gap
+        subset = dataframe[start_idx:end_idx]
+     
+        # Replace Infs with NaNs
+        subset.replace([np.inf, -np.inf], np.nan, inplace=True)  # Convert Inf to NaN
+        subset.fillna(subset.median(), inplace=True)  # Fill NaNs after replacing Infs
+
         
         # Apply gap filling algorithms to just this subset
         gap_array = subset['with_gap'].values
@@ -550,17 +564,33 @@ def run_gapfilling_by_segments(file_path, plot_individual_gaps=True, min_gap_siz
         gc.collect()
         
         #!!!! only use ridge for now
-        #subset['composite'] = ridge_gapfiller.forward_inverse_filling(gap_array)
         print(f"  Applying composite model to gap {i+1}...")
-        # Composite pipeline - more complex model
+        #Composite pipeline - more complex model
         composite_pipeline = get_composite_pipeline(window_size)
         composite_gapfiller = ModelGapFiller(gap_value=-100.0, pipeline=composite_pipeline)
-        subset['composite'] = composite_gapfiller.forward_filling(gap_array)
-        
-        # Clean up to free memory
+        subset['composite'] = composite_gapfiller.forward_inverse_filling(gap_array) ####.forward_filling(gap_array)  #!!! .forward_inverse_filling(gap_array)
+        #Clean up to free memory
         del composite_pipeline, composite_gapfiller
         gc.collect()
-        #!!!! only use ridge for now
+        #!!!! only use composite for now
+        
+        # Calculate the max value of the 'wh' column
+        max_wh = subset['wh'].max()
+
+        # Apply random clipping between 90% and 100% of the max value of 'wh' for each row
+        np.random.seed(42)  # For reproducibility
+        random_percentages = np.random.uniform(0.9, 1.0, size=len(subset))  # Random percentages between 90% and 100%
+
+        # Apply the clipping using .iloc on the index
+        subset['composite'] = [
+            min(row.composite, random_percentages[i] * max_wh)
+            for i, row in enumerate(subset.itertuples())
+        ]
+        
+        subset['ridge'] = [
+            min(row.ridge, random_percentages[i] * max_wh)
+            for i, row in enumerate(subset.itertuples())
+        ]
         
         # Identify the gap positions within the subset
         subset_gap_mask = subset['with_gap'] == -100.0
@@ -586,13 +616,11 @@ def run_gapfilling_by_segments(file_path, plot_individual_gaps=True, min_gap_siz
             random_values = np.random.uniform(min_value, max_value, size=negative_composite_mask.sum())
             subset.loc[negative_composite_mask, 'composite'] = random_values
         
-        
-        
-        
-        
-        
-        
-        
+        if df_xcel.empty:
+            df_xcel = subset.copy()
+        else:
+            df_xcel = pd.concat([df_xcel, subset], ignore_index=True)
+        df_xcel.at[df_xcel.index[-1], "with_gap"] = -200.0 
         # Copy filled values back to main dataframe
         # We only copy the actual gap values that were filled, not the entire subset
         dataframe.loc[original_positions, 'ridge'] = subset.iloc[subset_gap_indices]['ridge'].values
@@ -605,7 +633,9 @@ def run_gapfilling_by_segments(file_path, plot_individual_gaps=True, min_gap_siz
             composite_predicted = subset.iloc[subset_gap_indices]['composite'].values
             
             metrics, ridge, comp = print_gap_metrics(actual, ridge_predicted, composite_predicted, i+1)
-            
+            metricx.append(f"diff: {ridge - comp} ridge: {ridge} composite: {comp} metrics: {metrics}")
+            ttl_ridge += ridge
+            ttl_comp += comp
             # Plot this gap individually if it's large enough
             if plot_individual_gaps and gap_size >= min_gap_size:
                 # We only plot context around the gap, not the entire subset
@@ -636,30 +666,38 @@ def run_gapfilling_by_segments(file_path, plot_individual_gaps=True, min_gap_siz
                 plot_start = int(max(0, subset_gap_indices[0] - context_size))
                 plot_end = int(min(len(subset) - 1, subset_gap_indices[-1] + context_size))
                 
-                plot_subset = subset.iloc[plot_start:plot_end+1].copy()
-                total_ridge = plot_subset.loc[plot_subset['with_gap'] == -100, 'ridge'].sum()
-                print(total_ridge)
-                file_name = f'{data_dir}\\{table}_subset_zero_gaps.xlsx'
-                if total_ridge > 0:
-                    file_name = f'{data_dir}\\{table}_subset_gaps.xlsx'
-                if ridge - comp < 0:
-                    file_name = file_name.replace(".xlsx","_ridge.xlsx")
-                else:
-                    file_name = file_name.replace(".xlsx","_comp.xlsx")
+                # plot_subset = subset.iloc[plot_start:plot_end+1].copy()
+                # total_ridge = plot_subset.loc[plot_subset['with_gap'] == -100, 'ridge'].sum()
+                # print(total_ridge)
+                # file_name = f'{data_dir}\\{table}_subset_zero_gaps_{i}.xlsx'
+                # if total_ridge > 0:
+                #     file_name = f'{data_dir}\\{table}_subset_gaps_{i}.xlsx'
+                # if ridge - comp < 0:
+                #     file_name = file_name.replace(".xlsx",f"_ridge_{i}.xlsx")
+                # else:
+                #     file_name = file_name.replace(".xlsx",f"_comp_{i}.xlsx")
                                                  
                 
-                plot_subset['ridge_comp_diff'] = plot_subset['ridge'] - plot_subset['composite']
-                plot_subset.to_excel(file_name, index=False, sheet_name="Data")
-                add_chart_to_excel(file_name, metrics, ridge, comp)
-                
-        
+                # plot_subset['ridge_comp_diff'] = plot_subset['ridge'] - plot_subset['composite']
+                # plot_subset.to_excel(file_name, index=False, sheet_name="Data")
+                # add_chart_to_excel(file_name, metrics, ridge, comp, gap_size, window_size)
+
         # Clean up subset to free memory
         del subset, subset_gap_indices, original_positions
         gc.collect()
-        
-        print(f"  Completed gap {i+1}.")
+
+        print(f" {table} Completed gap {i+1}.")
     
     print("All gaps have been filled successfully.")
+    file_name = f'{data_dir}\\{table}_all_gaps.xlsx'
+    if ttl_ridge - ttl_comp < 0:
+        file_name = file_name.replace(".xlsx",f"_ridge.xlsx")
+    else:
+        file_name = file_name.replace(".xlsx",f"_comp.xlsx")
+    if not df_xcel.empty:
+        df_xcel['ridge_comp_diff'] = df_xcel['ridge'] - df_xcel['composite']
+        df_xcel.to_excel(file_name, index=False, sheet_name="Data")
+        add_chart_to_excel(file_name, metricx, ttl_ridge, ttl_comp, gap_size, window_size, ChartType=LineChart)
     return dataframe
 
 
@@ -698,9 +736,12 @@ if __name__ == '__main__':
     gc.collect()
     data_dir = r'E:\_UNHCR\CODE\DATA\gaps'
     print("Starting memory-efficient gap filling process...")
-    for table in gbs_not_genset:
+    for table in ['gb_0098082b']: #gbs_not_genset:
         df = hyper_gaps(table,data_dir)
-    
+
+        if df.empty:
+            print(f"No data found for table {table}.")
+            continue
         file_path = f'{table}_subset_gaps.csv'
         
         # Run the gap filling with our memory-efficient approach

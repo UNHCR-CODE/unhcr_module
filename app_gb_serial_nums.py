@@ -1,21 +1,29 @@
 import csv
-import json
+from datetime import datetime
+from fuzzywuzzy import fuzz
+from fuzzywuzzy import process
 import logging
+import openpyxl
+from openpyxl.styles import Font
 import pandas as pd
 import requests
 from unhcr import app_utils
+from unhcr import err_handler
 import unhcr.constants as const
+from unhcr import db
 
 mods = [
-    ["constants", "const"],
-    ["utils", "utils"],
-    ["db", "db"],
     ["app_utils", "app_utils"],
+    ["err_handler", "err_handler"],
+    ["constants", "const"],
+    ["db", "db"],
 ]
 
-res = app_utils.app_init(mods, "unhcr.gb_serial_nums.log", "0.4.7", level="INFO", override=True)
+res = app_utils.app_init(
+    mods, "unhcr.gb_serial_nums.log", "0.4.7", level="INFO", override=True
+)
 if const.LOCAL:
-    const, utils, db, app_utils = res
+    app_utils, err_handler, const, db = res
 
 engines = db.set_db_engines()
 
@@ -24,87 +32,412 @@ if const.is_running_on_azure():
     gaps_csv = "~/code/DATA/gaps/gaps.csv"
     gtb_gaps_excel = "~/code/DATA/gaps/gtb_gaps.xlsx"
     all_api_gbs_csv = "~/code/DATA/all_api_gbs.csv"
+    unifier_gb_csv = "~/code/DATA/unifier_gb.csv"
+    gb_merged_excel = "~/code/DATA/gaps/merged.xlsx"
 else:
     istvan_csv = r"E:\_UNHCR\CODE\DATA\gaps\new_top_20_2025-03-11_trimmed.csv"
     gaps_csv = r"E:\_UNHCR\CODE\DATA\gaps\gaps.csv"
     gtb_gaps_excel = r"E:\_UNHCR\CODE\DATA\gaps\gtb_gaps.xlsx"
     all_api_gbs_csv = r"E:\_UNHCR\CODE\DATA\all_api_gbs.csv"
+    unifier_gb_csv = r"E:\_UNHCR\CODE\DATA\unifier_gb.csv"
+    gb_merged_excel = r"E:\_UNHCR\CODE\DATA\gaps\gb_merged_.xlsx"
+
+#!!!!!!!!!!!!!
+
+import pandas as pd
+import sqlalchemy
+import os
+from sqlalchemy import create_engine, inspect
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+import logging
+import traceback
+import sys
+
+
+def excel_to_postgres(
+    excel_file_path,
+    engine,
+    schema="public",
+    if_exists="replace",
+    chunk_size=1000,
+    table_prefix="gb_",
+    table_suffix="",
+):
+    """
+    Load all sheets from an Excel file into PostgreSQL database tables.
+
+    Parameters:
+    -----------
+    excel_file_path : str
+        Path to the Excel file
+    schema : str, optional
+        Schema name to use, if None uses the default schema
+    if_exists : str, optional
+        How to behave if table exists. Options: 'fail', 'replace', 'append'
+    chunk_size : int, optional
+        Number of rows to insert at once
+    table_prefix : str, optional
+        Prefix to add to all table names
+    table_suffix : str, optional
+        Suffix to add to all table names
+
+    Returns:
+    --------
+    list
+        List of table names created
+
+    Raises:
+    -------
+    ValueError
+        If input parameters are invalid
+    FileNotFoundError
+        If Excel file not found
+    ConnectionError
+        If cannot connect to the database
+    PermissionError
+        If database or schema creation fails due to permissions
+    RuntimeError
+        For processing errors
+    IOError
+        For file reading errors
+    """
+    created_tables = []
+
+    # Input validation
+    if not os.path.exists(excel_file_path):
+        raise FileNotFoundError(f"Excel file not found: {excel_file_path}")
+
+    if if_exists not in ["fail", "replace", "append"]:
+        raise ValueError(
+            f"Invalid if_exists value: {if_exists}. Must be 'fail', 'replace', or 'append'"
+        )
+
+    if not isinstance(chunk_size, int) or chunk_size <= 0:
+        raise ValueError(
+            f"Invalid chunk_size: {chunk_size}. Must be a positive integer"
+        )
+
+    # Check if database exists, if not create it
+    try:
+        with engine.connect() as conn:
+            logging.info(f"Connected to database: {engine.url}")
+        # Read all sheets from the Excel file
+        try:
+            excel_file = pd.ExcelFile(excel_file_path)
+            sheet_names = excel_file.sheet_names
+            logging.info(f"Found {len(sheet_names)} sheets in {excel_file_path}")
+        except FileNotFoundError:
+            raise
+        except pd.errors.EmptyDataError:
+            raise ValueError(f"Excel file is empty: {excel_file_path}")
+        except Exception as e:
+            raise IOError(f"Failed to read Excel file {excel_file_path}: {str(e)}")
+
+        for sheet_name in sheet_names:
+            try:
+                # Read the sheet into a DataFrame
+                logging.info(f"Reading sheet: {sheet_name}")
+                try:
+                    df = pd.read_excel(excel_file, sheet_name=sheet_name)
+                except pd.errors.EmptyDataError:
+                    logging.warning(f"Sheet '{sheet_name}' is empty, skipping")
+                    continue
+                except Exception as e:
+                    raise IOError(f"Failed to read sheet '{sheet_name}': {str(e)}")
+
+                # Skip if empty
+                if df.empty:
+                    logging.warning(f"Sheet '{sheet_name}' has no data, skipping")
+                    continue
+
+                # Clean up column names for SQL compatibility
+                original_columns = df.columns.tolist()
+                df.columns = [
+                    col.strip().lower().replace(" ", "_").replace("-", "_")
+                    for col in df.columns
+                ]
+
+                # Log column name changes
+                column_changes = {
+                    original: new
+                    for original, new in zip(original_columns, df.columns)
+                    if original != new
+                }
+                if column_changes:
+                    logging.info(
+                        f"Column names changed for SQL compatibility: {column_changes}"
+                    )
+
+                # Create table name from sheet name
+                table_name = f"{table_prefix}{sheet_name.strip().lower().replace(' ', '_').replace('-', '_')}{table_suffix}"
+
+                # Create the full table name with schema if provided
+                full_table_name = f"{schema}.{table_name}" if schema else table_name
+
+                try:
+                    # Write the DataFrame to PostgreSQL in chunks
+                    logging.info(f"Writing {len(df)} rows to table {full_table_name}")
+                    df.to_sql(
+                        name=table_name,
+                        schema=schema,
+                        con=engine,
+                        if_exists=if_exists,
+                        index=False,
+                        chunksize=chunk_size,
+                    )
+
+                    created_tables.append(full_table_name)
+                    logging.info(
+                        f"Successfully loaded sheet '{sheet_name}' to table '{full_table_name}'"
+                    )
+                except sqlalchemy.exc.OperationalError as e:
+                    if "permission denied" in str(e).lower():
+                        raise PermissionError(
+                            f"Permission denied when creating table {full_table_name}: {str(e)}"
+                        )
+                    else:
+                        raise RuntimeError(
+                            f"Failed to create table {full_table_name}: {str(e)}"
+                        )
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to create/load table {full_table_name}: {str(e)}"
+                    )
+            except (
+                FileNotFoundError,
+                IOError,
+                ValueError,
+                ConnectionError,
+                PermissionError,
+            ):
+                raise
+            except Exception as e:
+                raise RuntimeError(f"Failed to process sheet {sheet_name}: {str(e)}")
+
+        if not created_tables:
+            logging.warning("No tables were created from the Excel file")
+
+        return created_tables
+
+    except Exception as e:
+        logging.error(f"Error: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise
+
+
+def mainline(engine, file_path):
+    """Example usage of the excel_to_postgres function"""
+    try:
+        tables = excel_to_postgres(
+            excel_file_path=file_path,
+            engine=engine,
+            schema="public",  # Use 'public' or your preferred schema
+            if_exists="replace",  # 'fail', 'replace', or 'append'
+            table_prefix="gb_",  # Optional prefix for tables
+            chunk_size=5000,  # Adjust based on data size and memory constraints
+        )
+
+        logging.info(f"Successfully created {len(tables)} tables:")
+        for table in tables:
+            logging.info(f"- {table}")
+
+    except FileNotFoundError as e:
+        logging.error(f"File not found: {str(e)}")
+        sys.exit(1)
+    except ValueError as e:
+        logging.error(f"Invalid input: {str(e)}")
+        sys.exit(2)
+    except ConnectionError as e:
+        logging.error(f"Connection error: {str(e)}")
+        sys.exit(3)
+    except PermissionError as e:
+        logging.error(f"Permission error: {str(e)}")
+        sys.exit(4)
+    except IOError as e:
+        logging.error(f"I/O error: {str(e)}")
+        sys.exit(5)
+    except RuntimeError as e:
+        logging.error(f"Runtime error: {str(e)}")
+        sys.exit(6)
+    except Exception as e:
+        logging.error(f"Unexpected error: {str(e)}")
+        logging.error(traceback.format_exc())
+        sys.exit(9)
+
+merged_excel_path = gb_merged_excel.replace(
+    "_.xlsx", f"_{datetime.now().date().isoformat()}.xlsx"
+)
+mainline(engines[1], merged_excel_path)
+pass
+#!!!!!!!!!!!!!!!!!!
+
+
+def freeze_row1(file_path, insert_cols=[]):
+    # Open the workbook with openpyxl (not pandas)
+    wb = openpyxl.load_workbook(file_path)
+
+    # Iterate through all sheets
+    for sheet_name in wb.sheetnames:
+        sheet = wb[sheet_name]
+        sheet.freeze_panes = "A2"  # Freeze the first row
+        if "merged" in sheet_name:
+            for col in insert_cols:
+                c = col[0]
+                v = col[1]
+                sheet.insert_cols(c)
+                for row in range(1, sheet.max_row + 1):
+                    sheet.cell(row=row, column=c).value = v
+                    cell = sheet.cell(row=row, column=c)
+                    cell.font = Font(bold=True)
+        elif "api_unifier" in sheet_name:
+            sheet.insert_cols(0)
+            sheet.insert_cols(20)
+            for row in range(1, sheet.max_row + 1):
+                sheet.cell(row=row, column=1).value = "unifier"
+                sheet.cell(row=row, column=20).value = "api_matched"
+                cell = sheet.cell(row=row, column=1)
+                cell.font = Font(bold=True)
+                cell = sheet.cell(row=row, column=20)
+                cell.font = Font(bold=True)
+
+    # Save the modified workbook
+    wb.save(file_path)
+
+
+def get_duplicate_elements(lst):
+    seen_count = {}
+    duplicates = {}
+
+    for sublist in lst:
+        # Trim each string in the sublist and convert to tuple
+        trimmed_sublist = tuple(s.strip() if isinstance(s, str) else s for s in sublist)
+
+        if trimmed_sublist in seen_count:
+            seen_count[trimmed_sublist] += 1
+            # Add to duplicates with current count if this is the first duplicate instance
+            if trimmed_sublist not in duplicates:
+                duplicates[trimmed_sublist] = seen_count[trimmed_sublist]
+            else:
+                duplicates[trimmed_sublist] = seen_count[trimmed_sublist]
+        else:
+            seen_count[trimmed_sublist] = 1
+
+    # Convert dictionary keys back to lists for result
+    result = []
+    for trimmed_tuple, count in duplicates.items():
+        result.append([list(trimmed_tuple), count])
+
+    return result
+
 
 def get_gb_user_info_data(csv_file):
-    url = const.GB_API_V1_API_BASE_URL + const.GB_API_V1_GET_DEVICE_LIST + const.GB_API_V1_USER_KEY
+    url = (
+        const.GB_API_V1_API_BASE_URL
+        + const.GB_API_V1_GET_DEVICE_LIST
+        + const.GB_API_V1_USER_KEY
+    )
     payload = {}
     headers = {}
 
-    try:
-        response = requests.request("GET", url, headers=headers, data=payload)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        user_info_data = response.json()
-    except requests.exceptions.ConnectionError as e:
-        logging.error(f"Network error: {e}")
-        return None, app_utils.NetworkError(f"Network error: {e}")
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"Invalid response: {e}")
-        return None, app_utils.InvalidResponseError(f"Invalid response: {e}")
-    except requests.exceptions.RequestException as e:
-        logging.error(f"API request error: {e}")
-        return None, app_utils.APIRequestError(f"API request error: {e}")
-    except ValueError as e:
-        logging.error(f"Invalid response: {e}")
-        return None, app_utils.InvalidResponseError(f"Invalid response: {e}")
-    except json.JSONDecodeError as e:
-        logging.error(f"Error decoding JSON: {e}")
-        return None, app_utils.JSONDecodeError(f"Error decoding JSON: {e}")
-    
-    # Extract top-level DeviceSerialList
-    top_level = user_info_data.get('UserInfo', {}).get('DeviceSerialList', [])
+    response, err = err_handler.request(
+        lambda: requests.request("GET", url, headers=headers, data=payload)
+    )
+    if err:
+        return None, err
+    user_info_data, err = err_handler.parse_json(lambda: response.json())
+    if err:
+        return None, err
+    return user_info_data, None
+
+
+def parse_user_info_as_list(user_info_data):
+    top_level = user_info_data.get("UserInfo", {}).get("DeviceSerialList", [])
 
     top_level_serials = []
     for sn in top_level:
         top_level_serials.append(str(sn)[:3] + "-" + str(sn)[3:])
 
-
     # Extract DeviceSerials and SiteLabels from DisplayGroupList
     device_data = []
-    for site in user_info_data.get('UserInfo', {}).get('SiteList', []):
-        site_label = site.get('SiteLabel')
-        for group in site.get('DisplayGroupList', []):
-            for device in group.get('DeviceList', []):
-                sn = device.get('DeviceSerial')
+    for site in user_info_data.get("UserInfo", {}).get("SiteList", []):
+        site_label = site.get("SiteLabel")
+        for group in site.get("DisplayGroupList", []):
+            for device in group.get("DeviceList", []):
+                sn = device.get("DeviceSerial")
                 sn = str(sn)[:3] + "-" + str(sn)[3:]
-                device_data.append((site_label, sn))
+                last_com = device.get("LastCommSecUtc")
+                state = device.get("State")
+                device_data.append((site_label, sn, last_com, state))
 
     # Combine top-level serials with device data
-    all_serials = [(None, serial) for serial in top_level_serials] + device_data
+    return [(None, serial) for serial in top_level_serials] + device_data
 
-    # Remove duplicates if any
-    all_serials = list(set(all_serials))
 
-    # Write to CSV file
-    with open(csv_file, 'w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['site_label', 'device_serial'])
-        writer.writerows(all_serials)
-
+def get_user_info_as_list():
+    # Extract top-level DeviceSerialList
+    user_info_data, err = get_gb_user_info_data(all_api_gbs_csv)
+    if err or len(user_info_data["Errors"]) != 0:
+        err_str = f"app_gb_serial_nums: Failed to get user info data ERROR: {err}  {user_info_data['Errors']}"
+        logging.error(err_str)
+        return None, err_str
+    all_serials, err = err_handler.parse_json(
+        lambda: parse_user_info_as_list(user_info_data)
+    )
+    if err:
+        err_str = f"app_gb_serial_nums: Failed to parse user info data ERROR: {err}"
+        logging.error(err_str)
+        return None, err_str
     return all_serials, None
 
-# #!!!!! gen all_api_gbs csv with eyedro label & serial
-all_serials, err = get_gb_user_info_data(all_api_gbs_csv)
-    # Print the result
+
+merged_excel_path = gb_merged_excel.replace(
+    "_.xlsx", f"_{datetime.now().date().isoformat()}.xlsx"
+)
+
+all_serials, err = get_user_info_as_list()
+if err:
+    logging.error(err)
+    exit(1)
+
+# Remove duplicates if any
+all_serials = list(set(all_serials))
+
+# # Write to CSV file
+with open(all_api_gbs_csv, "w", newline="") as file:
+    writer = csv.writer(file)
+    writer.writerow(["site_label", "gb_serial", "last_com", "state"])
+    writer.writerows(all_serials)
+
+# Print the result
 x = 1
 for item in all_serials:
-    print(f" {x}  device_serial: {item[1]}  site_label: {item[0] if item[0] else 'N/A'}")
+    print(
+        f" {x}  device_serial: {item[1]}  site_label: {item[0] if item[0] else 'N/A'}"
+    )
     x += 1
 # #!!!!! gen all_api_gbs csv with eyedro label & serial
 
 df_serial = pd.read_csv(all_api_gbs_csv)
-df_serial['site_label'] = df_serial['site_label'].fillna('N/A')
+df_serial["site_label"] = df_serial["site_label"].fillna("N/A")
 
 df_gaps = pd.read_csv(gaps_csv)
-df_gaps['gb_serial'] = df_gaps['gb_serial'].str[:3] + '-' + df_gaps['gb_serial'].str[3:]
+df_gaps["gb_serial"] = df_gaps["gb_serial"].str[:3] + "-" + df_gaps["gb_serial"].str[3:]
 
-df_serials = pd.merge(df_gaps, df_serial, left_on='gb_serial', right_on='device_serial', how='left')
+with pd.ExcelWriter(merged_excel_path, engine="openpyxl") as writer:
+    df_serial.to_excel(writer, sheet_name="api_no_dups", index=False)
+
+with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
+    df_gaps.to_excel(writer, sheet_name="gb_gaps", index=False)
+
+
+merged_df = pd.merge(df_serial, df_gaps, on="gb_serial", how="right")
+with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
+    merged_df.to_excel(writer, sheet_name="merged_api_gaps", index=False)
 
 df_top20 = pd.read_csv(istvan_csv, encoding="ISO-8859-1")
+with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
+    df_top20.to_excel(writer, sheet_name="top20", index=False)
 
 # # Merge with all rows from df2 and matching rows from df1
 # merged_df = pd.merge(df_serials, df_top20, left_on='device_serial', right_on='Meter Serial No.', how='left')
@@ -113,22 +446,24 @@ df_top20 = pd.read_csv(istvan_csv, encoding="ISO-8859-1")
 # merged_df = merged_df.fillna('')
 
 matching_rows = []
-# Loop through each row in df_serials
-for idx, row in df_serials.iterrows():
-    device_serial = row['device_serial']
+# Loop through each row in merged_df
+for idx, row in merged_df.iterrows():
+    device_serial = row["gb_serial"]
     # Find all matching rows in df_top20
-    matches = df_top20[df_top20['Meter Serial No.'] == device_serial]
-    
+    matches = df_top20[df_top20["Meter Serial No."] == device_serial]
+
     if not matches.empty:
         if len(matches) == 1:
             # Pick the first match (you can modify this to pick based on any condition)
             selected_match = matches.iloc[0]
         else:
-            matches['Date Installed'] = matches['Date Installed'].fillna(pd.Timestamp('1900-01-01'))
-            
+            matches["Date Installed"] = matches["Date Installed"].fillna(
+                pd.Timestamp("1900-01-01")
+            )
+
             # Sort matches by 'Date Installed' to get the most recent first
-            sorted_matches = matches.sort_values(by='Date Installed', ascending=False)
-            
+            sorted_matches = matches.sort_values(by="Date Installed", ascending=False)
+
             # Pick the most recent match (first row after sorting)
             selected_match = sorted_matches.iloc[0]
     else:
@@ -143,833 +478,28 @@ for idx, row in df_serials.iterrows():
 matching_df = pd.DataFrame(matching_rows)
 matching_df.to_excel(gtb_gaps_excel, index=False)
 
+with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
+    matching_df.to_excel(writer, sheet_name="gtb_merged_top20", index=False)
+
 pass
 
-#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-# Load the JSON data
-with open(r"D:\steve\Downloads\gb_userdata_response.json", 'r') as file:
-    user_info_data = json.load(file)
-
-# Extract top-level DeviceSerialList
-top_level = user_info_data.get('UserInfo', {}).get('DeviceSerialList', [])
-
-top_level_serials = []
-for sn in top_level:
-    top_level_serials.append(str(sn)[:3] + "-" + str(sn)[3:])
-
-
-# Extract DeviceSerials and SiteLabels from DisplayGroupList
-device_data = []
-for site in user_info_data.get('UserInfo', {}).get('SiteList', []):
-    site_label = site.get('SiteLabel')
-    for group in site.get('DisplayGroupList', []):
-        for device in group.get('DeviceList', []):
-            sn = device.get('DeviceSerial')
-            sn = str(sn)[:3] + "-" + str(sn)[3:]
-            device_data.append((site_label, sn))
-
-# Combine top-level serials with device data
-all_serials = [(None, serial) for serial in top_level_serials] + device_data
-
-# Remove duplicates if any
-all_serials = list(set(all_serials))
-
-# Print the result
-x = 1
-for item in all_serials:
-    print(f" {x}  SiteLabel: {item[0] if item[0] else 'N/A'}, DeviceSerial: {item[1]}")
-    x += 1
-
-
-# Write to CSV file
-gb_ds_csv = r"D:\steve\Downloads\gb_device_serials.csv"
-with open(gb_ds_csv, 'w', newline='') as file:
-    writer = csv.writer(file)
-    writer.writerow(['SiteLabel', 'DeviceSerial'])
-    writer.writerows(all_serials)
-
-
-import json
-import pandas as pd
-
-
-import requests
-
-url = "https://api.eyedro.com/Unhcr/DeviceData?DeviceSerial=0098084D&DateStartSecUtc=1739471000&DateNumSteps=1440&UserKey=UNkQm84Wyt61agj9jZShDFtS6fN8k7jAkxER2cSU"
-
-payload = {}
-headers = {
-  'Cookie': 'AWSALB=rB0Fb18ZGBqCsyx3d6B8X6YFUZiiJBU9TUgelsqNmyY47JwM7Cihmp27MNpxNER/HkQaYjQH2jY5xxf/zKG7Nn5k+hn2GxXasqJ9/RS/WBiF1xQ55t0XQaua7QI0; AWSALBCORS=rB0Fb18ZGBqCsyx3d6B8X6YFUZiiJBU9TUgelsqNmyY47JwM7Cihmp27MNpxNER/HkQaYjQH2jY5xxf/zKG7Nn5k+hn2GxXasqJ9/RS/WBiF1xQ55t0XQaua7QI0'
-}
-
-response = requests.request("GET", url, headers=headers, data=payload)
-
-print(response.text)
-
-user_info_data = json.loads(response.text)
-
-
-# data = {
-#     "DateMsUtc": 1739471830171,
-#     "Errors": [],
-#     "LastCommSecUtc": 1739471822,
-#     "DeviceData": {
-#         "A": [
-#             [
-#                 [
-#                     1739471040,
-#                     5.9
-#                 ],
-#                 [
-#                     1739471100,
-#                     5.9
-#                 ],
-#                 [
-#                     1739471160,
-#                     5.9
-#                 ],
-#                 [
-#                     1739471220,
-#                     5.9
-#                 ],
-#                 [
-#                     1739471280,
-#                     5.9
-#                 ],
-#                 [
-#                     1739471340,
-#                     5.9
-#                 ],
-#                 [
-#                     1739471400,
-#                     5.9
-#                 ],
-#                 [
-#                     1739471460,
-#                     5.9
-#                 ],
-#                 [
-#                     1739471520,
-#                     5.9
-#                 ],
-#                 [
-#                     1739471580,
-#                     5.9
-#                 ],
-#                 [
-#                     1739471640,
-#                     5.586
-#                 ],
-#                 [
-#                     1739471700,
-#                     5.544
-#                 ],
-#                 [
-#                     1739471760,
-#                     5.788
-#                 ]
-#             ],
-#             [
-#                 [
-#                     1739471040,
-#                     7.285
-#                 ],
-#                 [
-#                     1739471100,
-#                     7.285
-#                 ],
-#                 [
-#                     1739471160,
-#                     7.285
-#                 ],
-#                 [
-#                     1739471220,
-#                     7.285
-#                 ],
-#                 [
-#                     1739471280,
-#                     7.285
-#                 ],
-#                 [
-#                     1739471340,
-#                     7.285
-#                 ],
-#                 [
-#                     1739471400,
-#                     11.051
-#                 ],
-#                 [
-#                     1739471460,
-#                     12.218
-#                 ],
-#                 [
-#                     1739471520,
-#                     12.218
-#                 ],
-#                 [
-#                     1739471580,
-#                     8.778
-#                 ],
-#                 [
-#                     1739471640,
-#                     7.303
-#                 ],
-#                 [
-#                     1739471700,
-#                     7.303
-#                 ],
-#                 [
-#                     1739471760,
-#                     4.31
-#                 ]
-#             ],
-#             [
-#                 [
-#                     1739471040,
-#                     7.685
-#                 ],
-#                 [
-#                     1739471100,
-#                     6.98
-#                 ],
-#                 [
-#                     1739471160,
-#                     7.298
-#                 ],
-#                 [
-#                     1739471220,
-#                     7.773
-#                 ],
-#                 [
-#                     1739471280,
-#                     7.541
-#                 ],
-#                 [
-#                     1739471340,
-#                     7.276
-#                 ],
-#                 [
-#                     1739471400,
-#                     7.263
-#                 ],
-#                 [
-#                     1739471460,
-#                     6.942
-#                 ],
-#                 [
-#                     1739471520,
-#                     7.2
-#                 ],
-#                 [
-#                     1739471580,
-#                     7.575
-#                 ],
-#                 [
-#                     1739471640,
-#                     7.404
-#                 ],
-#                 [
-#                     1739471700,
-#                     6.961
-#                 ],
-#                 [
-#                     1739471760,
-#                     5.218
-#                 ]
-#             ]
-#         ],
-#         "V": [
-#             [
-#                 [
-#                     1739471040,
-#                     None
-#                 ],
-#                 [
-#                     1739471100,
-#                     None
-#                 ],
-#                 [
-#                     1739471160,
-#                     None
-#                 ],
-#                 [
-#                     1739471220,
-#                     None
-#                 ],
-#                 [
-#                     1739471280,
-#                     None
-#                 ],
-#                 [
-#                     1739471340,
-#                     None
-#                 ],
-#                 [
-#                     1739471400,
-#                     None
-#                 ],
-#                 [
-#                     1739471460,
-#                     None
-#                 ],
-#                 [
-#                     1739471520,
-#                     None
-#                 ],
-#                 [
-#                     1739471580,
-#                     None
-#                 ],
-#                 [
-#                     1739471640,
-#                     None
-#                 ],
-#                 [
-#                     1739471700,
-#                     None
-#                 ],
-#                 [
-#                     1739471760,
-#                     None
-#                 ]
-#             ],
-#             [
-#                 [
-#                     1739471040,
-#                     None
-#                 ],
-#                 [
-#                     1739471100,
-#                     None
-#                 ],
-#                 [
-#                     1739471160,
-#                     None
-#                 ],
-#                 [
-#                     1739471220,
-#                     None
-#                 ],
-#                 [
-#                     1739471280,
-#                     None
-#                 ],
-#                 [
-#                     1739471340,
-#                     None
-#                 ],
-#                 [
-#                     1739471400,
-#                     None
-#                 ],
-#                 [
-#                     1739471460,
-#                     None
-#                 ],
-#                 [
-#                     1739471520,
-#                     None
-#                 ],
-#                 [
-#                     1739471580,
-#                     None
-#                 ],
-#                 [
-#                     1739471640,
-#                     None
-#                 ],
-#                 [
-#                     1739471700,
-#                     None
-#                 ],
-#                 [
-#                     1739471760,
-#                     None
-#                 ]
-#             ],
-#             [
-#                 [
-#                     1739471040,
-#                     None
-#                 ],
-#                 [
-#                     1739471100,
-#                     None
-#                 ],
-#                 [
-#                     1739471160,
-#                     None
-#                 ],
-#                 [
-#                     1739471220,
-#                     None
-#                 ],
-#                 [
-#                     1739471280,
-#                     None
-#                 ],
-#                 [
-#                     1739471340,
-#                     None
-#                 ],
-#                 [
-#                     1739471400,
-#                     None
-#                 ],
-#                 [
-#                     1739471460,
-#                     None
-#                 ],
-#                 [
-#                     1739471520,
-#                     None
-#                 ],
-#                 [
-#                     1739471580,
-#                     None
-#                 ],
-#                 [
-#                     1739471640,
-#                     None
-#                 ],
-#                 [
-#                     1739471700,
-#                     None
-#                 ],
-#                 [
-#                     1739471760,
-#                     None
-#                 ]
-#             ]
-#         ],
-#         "PF": [
-#             [
-#                 [
-#                     1739471040,
-#                     None
-#                 ],
-#                 [
-#                     1739471100,
-#                     None
-#                 ],
-#                 [
-#                     1739471160,
-#                     None
-#                 ],
-#                 [
-#                     1739471220,
-#                     None
-#                 ],
-#                 [
-#                     1739471280,
-#                     None
-#                 ],
-#                 [
-#                     1739471340,
-#                     None
-#                 ],
-#                 [
-#                     1739471400,
-#                     None
-#                 ],
-#                 [
-#                     1739471460,
-#                     None
-#                 ],
-#                 [
-#                     1739471520,
-#                     None
-#                 ],
-#                 [
-#                     1739471580,
-#                     None
-#                 ],
-#                 [
-#                     1739471640,
-#                     None
-#                 ],
-#                 [
-#                     1739471700,
-#                     None
-#                 ],
-#                 [
-#                     1739471760,
-#                     None
-#                 ]
-#             ],
-#             [
-#                 [
-#                     1739471040,
-#                     None
-#                 ],
-#                 [
-#                     1739471100,
-#                     None
-#                 ],
-#                 [
-#                     1739471160,
-#                     None
-#                 ],
-#                 [
-#                     1739471220,
-#                     None
-#                 ],
-#                 [
-#                     1739471280,
-#                     None
-#                 ],
-#                 [
-#                     1739471340,
-#                     None
-#                 ],
-#                 [
-#                     1739471400,
-#                     None
-#                 ],
-#                 [
-#                     1739471460,
-#                     None
-#                 ],
-#                 [
-#                     1739471520,
-#                     None
-#                 ],
-#                 [
-#                     1739471580,
-#                     None
-#                 ],
-#                 [
-#                     1739471640,
-#                     None
-#                 ],
-#                 [
-#                     1739471700,
-#                     None
-#                 ],
-#                 [
-#                     1739471760,
-#                     None
-#                 ]
-#             ],
-#             [
-#                 [
-#                     1739471040,
-#                     None
-#                 ],
-#                 [
-#                     1739471100,
-#                     None
-#                 ],
-#                 [
-#                     1739471160,
-#                     None
-#                 ],
-#                 [
-#                     1739471220,
-#                     None
-#                 ],
-#                 [
-#                     1739471280,
-#                     None
-#                 ],
-#                 [
-#                     1739471340,
-#                     None
-#                 ],
-#                 [
-#                     1739471400,
-#                     None
-#                 ],
-#                 [
-#                     1739471460,
-#                     None
-#                 ],
-#                 [
-#                     1739471520,
-#                     None
-#                 ],
-#                 [
-#                     1739471580,
-#                     None
-#                 ],
-#                 [
-#                     1739471640,
-#                     None
-#                 ],
-#                 [
-#                     1739471700,
-#                     None
-#                 ],
-#                 [
-#                     1739471760,
-#                     None
-#                 ]
-#             ]
-#         ],
-#         "Wh": [
-#             [
-#                 [
-#                     1739471040,
-#                     21.633
-#                 ],
-#                 [
-#                     1739471100,
-#                     21.633
-#                 ],
-#                 [
-#                     1739471160,
-#                     21.633
-#                 ],
-#                 [
-#                     1739471220,
-#                     21.633
-#                 ],
-#                 [
-#                     1739471280,
-#                     21.633
-#                 ],
-#                 [
-#                     1739471340,
-#                     21.633
-#                 ],
-#                 [
-#                     1739471400,
-#                     21.633
-#                 ],
-#                 [
-#                     1739471460,
-#                     21.633
-#                 ],
-#                 [
-#                     1739471520,
-#                     21.633
-#                 ],
-#                 [
-#                     1739471580,
-#                     21.633
-#                 ],
-#                 [
-#                     1739471640,
-#                     20.485
-#                 ],
-#                 [
-#                     1739471700,
-#                     20.333
-#                 ],
-#                 [
-#                     1739471760,
-#                     21.226
-#                 ]
-#             ],
-#             [
-#                 [
-#                     1739471040,
-#                     26.717
-#                 ],
-#                 [
-#                     1739471100,
-#                     26.717
-#                 ],
-#                 [
-#                     1739471160,
-#                     26.717
-#                 ],
-#                 [
-#                     1739471220,
-#                     26.717
-#                 ],
-#                 [
-#                     1739471280,
-#                     26.717
-#                 ],
-#                 [
-#                     1739471340,
-#                     26.717
-#                 ],
-#                 [
-#                     1739471400,
-#                     40.522
-#                 ],
-#                 [
-#                     1739471460,
-#                     44.8
-#                 ],
-#                 [
-#                     1739471520,
-#                     44.8
-#                 ],
-#                 [
-#                     1739471580,
-#                     32.188
-#                 ],
-#                 [
-#                     1739471640,
-#                     26.783
-#                 ],
-#                 [
-#                     1739471700,
-#                     26.783
-#                 ],
-#                 [
-#                     1739471760,
-#                     15.807
-#                 ]
-#             ],
-#             [
-#                 [
-#                     1739471040,
-#                     28.173
-#                 ],
-#                 [
-#                     1739471100,
-#                     25.587
-#                 ],
-#                 [
-#                     1739471160,
-#                     26.756
-#                 ],
-#                 [
-#                     1739471220,
-#                     28.497
-#                 ],
-#                 [
-#                     1739471280,
-#                     27.645
-#                 ],
-#                 [
-#                     1739471340,
-#                     26.679
-#                 ],
-#                 [
-#                     1739471400,
-#                     26.63
-#                 ],
-#                 [
-#                     1739471460,
-#                     25.45
-#                 ],
-#                 [
-#                     1739471520,
-#                     26.4
-#                 ],
-#                 [
-#                     1739471580,
-#                     27.777
-#                 ],
-#                 [
-#                     1739471640,
-#                     27.147
-#                 ],
-#                 [
-#                     1739471700,
-#                     25.518
-#                 ],
-#                 [
-#                     1739471760,
-#                     19.126
-#                 ]
-#             ]
-#         ]
-#     }
-# }
-
-# Function to extract data ignoring nulls
-def extract_data_ignore_nulls(device_data):
-    # Iterate through each inner list and filter out entries where the second element is None
-    return [[timestamp, data_point] for timestamp, data_point in device_data if data_point is not None]
-
-# Iterate over the data, applying the extraction for each list in the "DeviceData"
-cleaned_device_data = {
-    key: [extract_data_ignore_nulls(value) for value in device_data_list] 
-    for key, device_data_list in user_info_data["DeviceData"].items()
-}
-
-import pandas as pd
-
-# Function to flatten cleaned_device_data into DataFrame format
-import pandas as pd
-
-# Function to convert device data to a DataFrame with the epoch as index
-def convert_to_df_with_epoch_as_index(cleaned_device_data):
-    # Initialize a dictionary to hold all columns (for each reading)
-    epoch_data = {}
-
-    # Determine the maximum length of device data lists (assuming all device types have the same number of entries)
-    max_length = max(len(device_data) for device_data in cleaned_device_data.values())
-
-    # Loop through each device type (A, V, PF, Wh) and process each index
-    for idx in range(len(cleaned_device_data["A"][0])):
-        for i in range(max_length):
-            # Process each device type (A, V, PF, Wh) for each index (0, 1, 2, ...)
-            for key, device_data_list in cleaned_device_data.items():
-                if i < len(device_data_list):  # Ensure there's data at this index
-                    if len(device_data_list[i]) == 0:  # Skip empty lists
-                        continue
-
-                    epoch, reading = device_data_list[i][idx]
-
-                    # Create the column name based on the device type and index
-                    column_name = f"p{i + 1}_{key}"
-
-                    if 'epoch' not in epoch_data:
-                        epoch_data['epoch'] = []
-                    if epoch not in epoch_data['epoch']:
-                        epoch_data['epoch'].append(epoch)
-                    # Append the reading value to the respective column
-                    if column_name not in epoch_data:
-                        epoch_data[column_name] = []
-                    epoch_data[column_name].append(reading)
-
-    # Handle the case where there is no data
-    if not epoch_data:
-        print("No valid device data found.")
-        return pd.DataFrame()  # Return an empty DataFrame if no data was processed
-
-    # # Assuming that all device data lists have the same epoch values at the same indices, use the first one
-    # epoch = cleaned_device_data["A"][0][idx] if "A" in cleaned_device_data else None
-
-    # # Create a DataFrame from the epoch_data dictionary
-    df = pd.DataFrame(epoch_data)
-
-    # Use the first epoch value to set the index
-    # if epoch is not None:
-    #     df['Epoch'] = epoch[0]
-    #    df.set_index('Epoch', inplace=True)
-
-    return df
-
-# Convert cleaned_device_data to DataFrame
-df = convert_to_df_with_epoch_as_index(cleaned_device_data)
-df.columns = df.columns.str.lower()
-df = df[sorted(df.columns)]
-
-# Display the DataFrame
-print(df)
-
-
-# Output the cleaned data
-print(json.dumps(cleaned_device_data, indent=2))
-exit(777)
-
-
-
-
-from fuzzywuzzy import fuzz
-from fuzzywuzzy import process
 
 # Load the Excel file
-file_path = r'D:\Downloads\device_serials.xlsx'  # Update with your path
-xls = pd.ExcelFile(file_path)
+###file_path = r"D:\Downloads\device_serials.xlsx"  # Update with your path
+##xls = pd.ExcelFile(gtb_gaps_excel)
 
-# Read the correct sheets
-df1 = pd.read_excel(xls, sheet_name='device_serials')
-df2 = pd.read_excel(xls, sheet_name='serials')
+df1 = pd.read_csv(unifier_gb_csv)
+with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
+    df1.to_excel(writer, sheet_name="gb_unifier", index=False)
+
+df2 = pd.read_csv(all_api_gbs_csv)
 
 # Drop NaN values
-device_serials = df1['Serial Number'].dropna()
-site_sns = df2['DeviceSerial'].dropna()
+device_serials = df1["Serial Number"].dropna()
+site_sns = df2["gb_serial"].dropna()
 
 # Perform fuzzy matching
 matches = []
@@ -978,30 +508,34 @@ for serial in device_serials:
     matches.append((serial, best_match[0], best_match[1]))
 
 # Convert matches to DataFrame
-matches_df = pd.DataFrame(matches, columns=['DeviceSerial', 'MatchedSerial', 'Score'])
+matches_df = pd.DataFrame(matches, columns=["DeviceSerial", "MatchedSerial", "Score"])
 
 # Merge df1 and matches_df
-merged_df = df1.merge(matches_df, left_on='Serial Number', right_on='DeviceSerial')
+merged_df = df1.merge(matches_df, left_on="Serial Number", right_on="DeviceSerial")
 
 # Merge with df2 to get more details from serials sheet
-final_output = merged_df.merge(df2, left_on='MatchedSerial', right_on='DeviceSerial', how='left')
+df_final_output = merged_df.merge(
+    df2, left_on="MatchedSerial", right_on="gb_serial", how="left"
+)
 
 # Filter matches with a high score
-final_output = final_output[final_output['Score'] > 99]
+df_final_output = df_final_output[df_final_output["Score"] > 99]
+with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
+    df_final_output.to_excel(writer, sheet_name="api_unifier_matched", index=False)
 
 # Remove duplicate rows based on all columns
-no_dups_output = final_output.drop_duplicates()
+df_no_dups_output = df_final_output.drop_duplicates()
+with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
+    df_no_dups_output.to_excel(writer, sheet_name="api_unifier_no_dups", index=False)
+freeze_row1(merged_excel_path, [[11, "top20"], [5, "gaps"], [1, "api_no_dups"]])
+
 
 # Save the results to an Excel file with two sheets
-output_path = 'fuzzy_matches.xlsx'
-with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
-    final_output.to_excel(writer, sheet_name='fuzzy', index=False)
-    no_dups_output.to_excel(writer, sheet_name='no-dups', index=False)
+output_path = "fuzzy_matches.xlsx"
+with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
+    df_final_output.to_excel(writer, sheet_name="fuzzy", index=False)
+    df_no_dups_output.to_excel(writer, sheet_name="no-dups", index=False)
 
 print(f"Matches saved to {output_path}")
 
-"""
-{
-    1739471066416,
-    1739471056,
-"""
+pass

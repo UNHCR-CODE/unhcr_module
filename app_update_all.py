@@ -52,6 +52,7 @@ from unhcr import db
 from unhcr import api_leonics
 
 mods = [
+    ["app_utils", "app_utils"],
     ["constants", "const"],
     ["utils", "utils"],
     ["db", "db"],
@@ -60,7 +61,7 @@ mods = [
 
 res = app_utils.app_init(mods, "unhcr.update_all.log", "0.4.6", level="INFO", override=True)
 if const.LOCAL:
-    const, utils, db, api_solarman = res
+    app_utils, const, utils, db, api_solarman = res
 
 engines = db.set_db_engines()
 

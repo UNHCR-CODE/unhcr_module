@@ -70,7 +70,7 @@ from unhcr import api_prospect
 from unhcr import api_leonics
 
 if const.LOCAL:  # testing with local python files
-    const, utils, api_leonics, api_prospect, *rest = const.import_local_libs(
+    const, utils, api_leonics, api_prospect = const.import_local_libs(
         mods=[
             ["constants", "const"],
             ["utils", "utils"],

@@ -44,7 +44,7 @@ from unhcr import constants as const
 from unhcr import utils
 
 if const.LOCAL:  # testing with local python files
-    const, utils, *rest = const.import_local_libs(
+    const, utils = const.import_local_libs(
         mods=[["constants", "const"], ["utils", "utils"]]
     )
 
