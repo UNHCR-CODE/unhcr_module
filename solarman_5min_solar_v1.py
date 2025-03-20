@@ -105,7 +105,7 @@ for engine in engines:
 
         # Path to the directory containing downloaded Galooli CSV files (change as needed)
         download_dir = "D:/steve/Downloads"
-        
+
 
         # Read all CSV files in the directory
         all_files = glob.glob(f"{download_dir}/Detailed Fuel*.csv")
@@ -134,7 +134,7 @@ for engine in engines:
 
             # Sort by 'Time' column
             combined_df = combined_df.sort_values(by="Time")
-            df_filtered = combined_df[combined_df["Time"] > from_dt]
+            df_filtered = combined_df[combined_df["Time"] > from_dt].copy()
             # Save the combined sorted CSV
             df_filtered["Time"] = df_filtered["Time"].dt.strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -154,10 +154,10 @@ for engine in engines:
             site, df_filtered, from_dt=from_dt
         )
         # remove data older than ts
-        threshold = pd.to_datetime(ts)
+        threshold = pd.Timestamp("2025-03-10 13:00:00", tz="UTC") 
 
         df_liters = pd.DataFrame(liters)
-        df_liters["datetime"] = pd.to_datetime(df_liters["epoch"], unit="s", utc=True)
+        df_liters["datetime"] = pd.to_datetime(pd.to_numeric(df_liters["epoch"]), unit="s", utc=True)
         df_liters["date"] = df_liters["datetime"].dt.date
         df_liters["hour"] = df_liters["datetime"].dt.hour
         # Filter rows where datetime_column is less than or equal to the threshold
@@ -167,7 +167,7 @@ for engine in engines:
 
         # Process the provided data into DataFrame
         df_sm_data = pd.DataFrame(sm_data, columns=["epoch", "value", "cnt"])
-        df_sm_data["datetime"] = pd.to_datetime(df_sm_data["epoch"], unit="s")
+        df_sm_data["datetime"] = pd.to_datetime(pd.to_numeric(df_sm_data["epoch"]), unit="s", utc=True)
         df_sm_data["date"] = df_sm_data["datetime"].dt.date
         df_sm_data["hour"] = df_sm_data["datetime"].dt.hour
         # Filter rows where datetime_column is less than or equal to the threshold
@@ -227,10 +227,14 @@ for engine in engines:
             axis=1,
         )
 
-        merged_hourly_sums.index = merged_hourly_sums.index.astype(int)
         merged_hourly_sums.iloc[:, 1:] = (
-            merged_hourly_sums.iloc[:, 1:] = merged_hourly_sums.iloc[:, 1:].replace(0, np.nan).round(3)
+            merged_hourly_sums.iloc[:, 1:].replace(0, np.nan).round(3).astype("float64")
         )
+
+        # merged_hourly_sums.index = merged_hourly_sums.index.astype(int)
+        # merged_hourly_sums.iloc[:, 1:] = (
+        #     merged_hourly_sums.iloc[:, 1:] = merged_hourly_sums.iloc[:, 1:].replace(0, np.nan).round(3)
+        # )
         # fix NAN hour back to zero
         merged_hourly_sums["hour"] = merged_hourly_sums["hour"].fillna(0)
 

@@ -42,7 +42,6 @@ LOCAL = None
 AZURE_URL = None
 MOD_PATH = None
 
-
 # Leonics API
 LEONICS_BASE_URL = None
 LEONICS_USER_CODE = None
@@ -274,6 +273,8 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     LOCAL = os.getenv("LOCAL", "LOCAL missing") == "1" and not PROD
     AZURE_URL = os.getenv("AZURE_URL", "AZURE_URL missing")
     # change in .env file to your path to use local modules
+    if is_running_on_azure():
+        MOD_PATH = os.getenv("MOD_PATH_AZURE", "MOD_PATH_AZURE missing")
     if is_wsl():
         MOD_PATH = os.getenv("MOD_PATH_WSL", "MOD_PATH_WSL missing")
     else:
@@ -543,7 +544,7 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
             continue
 
         # Construct the full path to the module file
-        module_path = os.path.join(mpath, f"{module_name}.py")
+        module_path = os.path.join(os.path.expanduser(mpath), f"{module_name}.py")
         if not os.path.exists(module_path):
             print(f"Module file not found: {module_path}")
             continue
@@ -559,3 +560,21 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
             print(f"Failed to load module {module_name}: {e}")
 
     return tuple(loaded_modules)
+
+if is_running_on_azure() or is_wsl():
+    TOP20_CSV = os.path.expanduser("~/code/DATA/gaps/new_top_20.csv")
+    GAPS_CSV = os.path.expanduser("~/code/DATA/gaps/gaps.csv")
+    GTB_GAPS_EXCEL = os.path.expanduser("~/code/DATA/gaps/gtb_gaps.xlsx")
+    ALL_API_GBS_CSV = os.path.expanduser("~/code/DATA/all_api_gbs.csv")
+    UNIFIER_GB_CSV = os.path.expanduser("~/code/DATA/unifier_gb.csv")
+    GB_MERGED_EXCEL = os.path.expanduser("~/code/DATA/gaps/merged.xlsx")
+    GB_GAPS_DATA_DIR = os.path.expanduser('~code\DATA\gaps\gap_csv')
+else:
+    TOP20_CSV = r"E:\_UNHCR\CODE\DATA\gaps\new_top_20.csv"
+    GAPS_CSV = r"E:\_UNHCR\CODE\DATA\gaps\gaps.csv"
+    GTB_GAPS_EXCEL = r"E:\_UNHCR\CODE\DATA\gaps\gtb_gaps.xlsx"
+    ALL_API_GBS_CSV = r"E:\_UNHCR\CODE\DATA\all_api_gbs.csv"
+    UNIFIER_GB_CSV = r"E:\_UNHCR\CODE\DATA\unifier_gb.csv"
+    GB_MERGED_EXCEL = r"E:\_UNHCR\CODE\DATA\gaps\gb_merged_.xlsx"
+    GB_GAPS_DATA_DIR = r'E:\_UNHCR\CODE\DATA\gaps\gap_csv'
+GB_GAPS_TABLE = "eyedro.gb_gaps"

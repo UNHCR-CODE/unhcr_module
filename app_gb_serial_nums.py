@@ -1,16 +1,21 @@
 import csv
 from datetime import datetime
-from fuzzywuzzy import fuzz
-from fuzzywuzzy import process
 import logging
 import openpyxl
 from openpyxl.styles import Font
+import os
 import pandas as pd
+from rapidfuzz import fuzz
+from rapidfuzz import process
 import requests
+import sqlalchemy
+import sys
+import traceback
 from unhcr import app_utils
 from unhcr import err_handler
 import unhcr.constants as const
 from unhcr import db
+
 
 mods = [
     ["app_utils", "app_utils"],
@@ -27,32 +32,142 @@ if const.LOCAL:
 
 engines = db.set_db_engines()
 
-if const.is_running_on_azure():
-    istvan_csv = "~/code/DATA/gaps/new_top_20_2025-03-11_trimmed.csv"
-    gaps_csv = "~/code/DATA/gaps/gaps.csv"
-    gtb_gaps_excel = "~/code/DATA/gaps/gtb_gaps.xlsx"
-    all_api_gbs_csv = "~/code/DATA/all_api_gbs.csv"
-    unifier_gb_csv = "~/code/DATA/unifier_gb.csv"
-    gb_merged_excel = "~/code/DATA/gaps/merged.xlsx"
-else:
-    istvan_csv = r"E:\_UNHCR\CODE\DATA\gaps\new_top_20_2025-03-11_trimmed.csv"
-    gaps_csv = r"E:\_UNHCR\CODE\DATA\gaps\gaps.csv"
-    gtb_gaps_excel = r"E:\_UNHCR\CODE\DATA\gaps\gtb_gaps.xlsx"
-    all_api_gbs_csv = r"E:\_UNHCR\CODE\DATA\all_api_gbs.csv"
-    unifier_gb_csv = r"E:\_UNHCR\CODE\DATA\unifier_gb.csv"
-    gb_merged_excel = r"E:\_UNHCR\CODE\DATA\gaps\gb_merged_.xlsx"
 
-#!!!!!!!!!!!!!
+# top20_master_path = r"E:\UNHCR\OneDrive - UNHCR\Green Data Team\07 Greenbox Management\Green Box - TOP 20 Countries\New Top 20.xlsx"
+# # Create output directory if it doesn't exist
+# os.makedirs(os.path.dirname(top20_csv), exist_ok=True)
 
-import pandas as pd
-import sqlalchemy
-import os
-from sqlalchemy import create_engine, inspect
-import psycopg2
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-import logging
-import traceback
-import sys
+# # Read the Excel file without filtering
+# df_top20 = pd.read_excel(top20_master_path, header=3,sheet_name="GENERAL")
+
+# # Save to CSV
+# df.to_csv(top20_csv, index=False)
+# pass
+
+def freeze_row1(file_path, insert_cols=[]):
+    # Open the workbook with openpyxl (not pandas)
+    wb = openpyxl.load_workbook(file_path)
+
+    # Iterate through all sheets
+    for sheet_name in wb.sheetnames:
+        sheet = wb[sheet_name]
+        sheet.freeze_panes = "A2"  # Freeze the first row
+        if "merged" in sheet_name:
+            for col in insert_cols:
+                c = col[0]
+                v = col[1]
+                sheet.insert_cols(c)
+                for row in range(1, sheet.max_row + 1):
+                    sheet.cell(row=row, column=c).value = v
+                    cell = sheet.cell(row=row, column=c)
+                    cell.font = Font(bold=True)
+        elif "api_unifier" in sheet_name:
+            sheet.insert_cols(0)
+            sheet.insert_cols(20)
+            for row in range(1, sheet.max_row + 1):
+                sheet.cell(row=row, column=1).value = "unifier"
+                sheet.cell(row=row, column=20).value = "api_matched"
+                cell = sheet.cell(row=row, column=1)
+                cell.font = Font(bold=True)
+                cell = sheet.cell(row=row, column=20)
+                cell.font = Font(bold=True)
+
+    # Save the modified workbook
+    wb.save(file_path)
+
+
+def get_duplicate_elements(lst):
+    seen_count = {}
+    duplicates = {}
+
+    for sublist in lst:
+        # Trim each string in the sublist and convert to tuple
+        trimmed_sublist = tuple(s.strip() if isinstance(s, str) else s for s in sublist)
+
+        if trimmed_sublist in seen_count:
+            seen_count[trimmed_sublist] += 1
+            # Add to duplicates with current count if this is the first duplicate instance
+            if trimmed_sublist not in duplicates:
+                duplicates[trimmed_sublist] = seen_count[trimmed_sublist]
+            else:
+                duplicates[trimmed_sublist] = seen_count[trimmed_sublist]
+        else:
+            seen_count[trimmed_sublist] = 1
+
+    # Convert dictionary keys back to lists for result
+    result = []
+    for trimmed_tuple, count in duplicates.items():
+        result.append([list(trimmed_tuple), count])
+
+    return result
+
+
+def get_gb_user_info_data():
+    url = (
+        const.GB_API_V1_API_BASE_URL
+        + const.GB_API_V1_GET_DEVICE_LIST
+        + const.GB_API_V1_USER_KEY
+    )
+    payload = {}
+    headers = {}
+
+    response, err = err_handler.request(
+        lambda: requests.request("GET", url, headers=headers, data=payload)
+    )
+    if err:
+        return None, err
+    user_info_data, err = err_handler.parse_json(lambda: response.json())
+    if err:
+        return None, err
+    return user_info_data, None
+
+
+def parse_user_info_as_list(user_info_data):
+    top_level = user_info_data.get("UserInfo", {}).get("DeviceSerialList", [])
+
+    top_level_serials = []
+    for sn in top_level:
+        top_level_serials.append(str(sn)[:3] + "-" + str(sn)[3:])
+
+    # Extract DeviceSerials and SiteLabels from DisplayGroupList
+    device_data = []
+    for site in user_info_data.get("UserInfo", {}).get("SiteList", []):
+        site_label = site.get("SiteLabel")
+        for group in site.get("DisplayGroupList", []):
+            for device in group.get("DeviceList", []):
+                sn = device.get("DeviceSerial")
+                sn = str(sn)[:3] + "-" + str(sn)[3:]
+                last_com = device.get("LastCommSecUtc")
+                state = device.get("State")
+                device_data.append((site_label, sn, last_com, state))
+
+    # Combine top-level serials with device data
+    return [(None, serial) for serial in top_level_serials] + device_data
+
+
+def get_user_info_as_list():
+    # Extract top-level DeviceSerialList
+    """
+    Gets the user info data from the API, parses it into a list of tuples of
+    (site_label, device_serial), and returns the list or an error string.
+
+    Returns:
+        list of tuples: (site_label, device_serial) or
+        str: error string
+    """
+    user_info_data, err = get_gb_user_info_data()
+    if err or len(user_info_data["Errors"]) != 0:
+        err_str = f"app_gb_serial_nums: Failed to get user info data ERROR: {err}  {user_info_data['Errors']}"
+        logging.error(err_str)
+        return None, err_str
+    all_serials, err = err_handler.parse_json(
+        lambda: parse_user_info_as_list(user_info_data)
+    )
+    if err:
+        err_str = f"app_gb_serial_nums: Failed to parse user info data ERROR: {err}"
+        logging.error(err_str)
+        return None, err_str
+    return all_serials, None
 
 
 def excel_to_postgres(
@@ -60,7 +175,7 @@ def excel_to_postgres(
     engine,
     schema="public",
     if_exists="replace",
-    chunk_size=1000,
+    chunks_size=1000,
     table_prefix="gb_",
     table_suffix="",
 ):
@@ -113,9 +228,9 @@ def excel_to_postgres(
             f"Invalid if_exists value: {if_exists}. Must be 'fail', 'replace', or 'append'"
         )
 
-    if not isinstance(chunk_size, int) or chunk_size <= 0:
+    if not isinstance(chunks_size, int) or chunks_size <= 0:
         raise ValueError(
-            f"Invalid chunk_size: {chunk_size}. Must be a positive integer"
+            f"Invalid chunk_size: {chunks_size}. Must be a positive integer"
         )
 
     # Check if database exists, if not create it
@@ -184,7 +299,7 @@ def excel_to_postgres(
                         con=engine,
                         if_exists=if_exists,
                         index=False,
-                        chunksize=chunk_size,
+                        chunksize=chunks_size,
                     )
 
                     created_tables.append(full_table_name)
@@ -226,7 +341,7 @@ def excel_to_postgres(
         raise
 
 
-def mainline(engine, file_path):
+def save_to_postgres(engine, file_path, prefix='gb_'):
     """Example usage of the excel_to_postgres function"""
     try:
         tables = excel_to_postgres(
@@ -234,8 +349,8 @@ def mainline(engine, file_path):
             engine=engine,
             schema="public",  # Use 'public' or your preferred schema
             if_exists="replace",  # 'fail', 'replace', or 'append'
-            table_prefix="gb_",  # Optional prefix for tables
-            chunk_size=5000,  # Adjust based on data size and memory constraints
+            table_prefix=prefix,  # Optional prefix for tables
+            chunks_size=5000,  # Adjust based on data size and memory constraints
         )
 
         logging.info(f"Successfully created {len(tables)} tables:")
@@ -265,163 +380,73 @@ def mainline(engine, file_path):
         logging.error(traceback.format_exc())
         sys.exit(9)
 
-merged_excel_path = gb_merged_excel.replace(
-    "_.xlsx", f"_{datetime.now().date().isoformat()}.xlsx"
-)
-mainline(engines[1], merged_excel_path)
-pass
-#!!!!!!!!!!!!!!!!!!
+#!!!!! save greening the blue 2024 spreadsheet & merged spreadsheet
+# cur_date = datetime.now().date().isoformat()
+# gtb_excel_path = r'E:\UNHCR\OneDrive - UNHCR\Energy Team\Concept development\AZURE DATA\Greening the Blue\20240319_2024_GB_Data_v5.xlsx'
+# save_to_postgres(engines[1], gtb_excel_path, prefix = '')
+# save_to_postgres(engines[0], gtb_excel_path, prefix = '')
 
+# merged_excel_path = const.GB_MERGED_EXCEL.replace(
+#     "_.xlsx", f"_2025-03-17.xlsx"
+#     #"_.xlsx", f"_{datetime.now().date().isoformat()}.xlsx"
+# )
+# save_to_postgres(engines[1], merged_excel_path, prefix = 'gb_')
+# save_to_postgres(engines[0], merged_excel_path, prefix = 'gb_')
 
-def freeze_row1(file_path, insert_cols=[]):
-    # Open the workbook with openpyxl (not pandas)
-    wb = openpyxl.load_workbook(file_path)
+# pass
 
-    # Iterate through all sheets
-    for sheet_name in wb.sheetnames:
-        sheet = wb[sheet_name]
-        sheet.freeze_panes = "A2"  # Freeze the first row
-        if "merged" in sheet_name:
-            for col in insert_cols:
-                c = col[0]
-                v = col[1]
-                sheet.insert_cols(c)
-                for row in range(1, sheet.max_row + 1):
-                    sheet.cell(row=row, column=c).value = v
-                    cell = sheet.cell(row=row, column=c)
-                    cell.font = Font(bold=True)
-        elif "api_unifier" in sheet_name:
-            sheet.insert_cols(0)
-            sheet.insert_cols(20)
-            for row in range(1, sheet.max_row + 1):
-                sheet.cell(row=row, column=1).value = "unifier"
-                sheet.cell(row=row, column=20).value = "api_matched"
-                cell = sheet.cell(row=row, column=1)
-                cell.font = Font(bold=True)
-                cell = sheet.cell(row=row, column=20)
-                cell.font = Font(bold=True)
+#!!!!!!!!!!!!!!!!!!!
+r""" 
+Prior to running this script:
+1. Download unifier report from https://eu1.unifier.oraclecloud.com/unhcr/bp/route/home/i-unifier?__uref=uuu986636683
+    Got to "Unifier Properties"
+    Select Reports, User Defined
+    Select "smh_GB_Meters-report-v1" owner Steve Hermes
+    Run as csv  (downloads as "Report.csv")
+    Copy download to "CODE\DATA\gb_unifier_2024-03-18.csv" (rename and add current date (use your local root dir))
+    
+2. Run gapfilling script "CODE\unhcr_module\app_time_series_gapfilling_gb_v3.py"
 
-    # Save the modified workbook
-    wb.save(file_path)
+3.
 
+4.
+"""
 
-def get_duplicate_elements(lst):
-    seen_count = {}
-    duplicates = {}
+#!!!!!!!!!!!!!!!!!!!
 
-    for sublist in lst:
-        # Trim each string in the sublist and convert to tuple
-        trimmed_sublist = tuple(s.strip() if isinstance(s, str) else s for s in sublist)
-
-        if trimmed_sublist in seen_count:
-            seen_count[trimmed_sublist] += 1
-            # Add to duplicates with current count if this is the first duplicate instance
-            if trimmed_sublist not in duplicates:
-                duplicates[trimmed_sublist] = seen_count[trimmed_sublist]
-            else:
-                duplicates[trimmed_sublist] = seen_count[trimmed_sublist]
-        else:
-            seen_count[trimmed_sublist] = 1
-
-    # Convert dictionary keys back to lists for result
-    result = []
-    for trimmed_tuple, count in duplicates.items():
-        result.append([list(trimmed_tuple), count])
-
-    return result
-
-
-def get_gb_user_info_data(csv_file):
-    url = (
-        const.GB_API_V1_API_BASE_URL
-        + const.GB_API_V1_GET_DEVICE_LIST
-        + const.GB_API_V1_USER_KEY
-    )
-    payload = {}
-    headers = {}
-
-    response, err = err_handler.request(
-        lambda: requests.request("GET", url, headers=headers, data=payload)
-    )
-    if err:
-        return None, err
-    user_info_data, err = err_handler.parse_json(lambda: response.json())
-    if err:
-        return None, err
-    return user_info_data, None
-
-
-def parse_user_info_as_list(user_info_data):
-    top_level = user_info_data.get("UserInfo", {}).get("DeviceSerialList", [])
-
-    top_level_serials = []
-    for sn in top_level:
-        top_level_serials.append(str(sn)[:3] + "-" + str(sn)[3:])
-
-    # Extract DeviceSerials and SiteLabels from DisplayGroupList
-    device_data = []
-    for site in user_info_data.get("UserInfo", {}).get("SiteList", []):
-        site_label = site.get("SiteLabel")
-        for group in site.get("DisplayGroupList", []):
-            for device in group.get("DeviceList", []):
-                sn = device.get("DeviceSerial")
-                sn = str(sn)[:3] + "-" + str(sn)[3:]
-                last_com = device.get("LastCommSecUtc")
-                state = device.get("State")
-                device_data.append((site_label, sn, last_com, state))
-
-    # Combine top-level serials with device data
-    return [(None, serial) for serial in top_level_serials] + device_data
-
-
-def get_user_info_as_list():
-    # Extract top-level DeviceSerialList
-    user_info_data, err = get_gb_user_info_data(all_api_gbs_csv)
-    if err or len(user_info_data["Errors"]) != 0:
-        err_str = f"app_gb_serial_nums: Failed to get user info data ERROR: {err}  {user_info_data['Errors']}"
-        logging.error(err_str)
-        return None, err_str
-    all_serials, err = err_handler.parse_json(
-        lambda: parse_user_info_as_list(user_info_data)
-    )
-    if err:
-        err_str = f"app_gb_serial_nums: Failed to parse user info data ERROR: {err}"
-        logging.error(err_str)
-        return None, err_str
-    return all_serials, None
-
-
-merged_excel_path = gb_merged_excel.replace(
-    "_.xlsx", f"_{datetime.now().date().isoformat()}.xlsx"
+cur_date = datetime.now().date().isoformat()
+merged_excel_path = const.GB_MERGED_EXCEL.replace(
+    "_.xlsx", f"_{cur_date}.xlsx"
 )
 
-all_serials, err = get_user_info_as_list()
+all_gb_api_sn, err = get_user_info_as_list()
 if err:
     logging.error(err)
     exit(1)
 
 # Remove duplicates if any
-all_serials = list(set(all_serials))
+all_gb_api_sn = list(set(all_gb_api_sn))
 
-# # Write to CSV file
-with open(all_api_gbs_csv, "w", newline="") as file:
+# Write to CSV file
+path_api_gb_sn = const.ALL_API_GBS_CSV.replace("_.csv", f"_{cur_date}.csv")
+with open(path_api_gb_sn, "w", newline="") as file:
     writer = csv.writer(file)
     writer.writerow(["site_label", "gb_serial", "last_com", "state"])
-    writer.writerows(all_serials)
+    writer.writerows(all_gb_api_sn)
 
 # Print the result
 x = 1
-for item in all_serials:
+for item in all_gb_api_sn:
     print(
         f" {x}  device_serial: {item[1]}  site_label: {item[0] if item[0] else 'N/A'}"
     )
     x += 1
 # #!!!!! gen all_api_gbs csv with eyedro label & serial
 
-df_serial = pd.read_csv(all_api_gbs_csv)
+df_serial = pd.read_csv(path_api_gb_sn)
 df_serial["site_label"] = df_serial["site_label"].fillna("N/A")
 
-df_gaps = pd.read_csv(gaps_csv)
+df_gaps = pd.read_csv(const.GAPS_CSV)
 df_gaps["gb_serial"] = df_gaps["gb_serial"].str[:3] + "-" + df_gaps["gb_serial"].str[3:]
 
 with pd.ExcelWriter(merged_excel_path, engine="openpyxl") as writer:
@@ -435,15 +460,9 @@ merged_df = pd.merge(df_serial, df_gaps, on="gb_serial", how="right")
 with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
     merged_df.to_excel(writer, sheet_name="merged_api_gaps", index=False)
 
-df_top20 = pd.read_csv(istvan_csv, encoding="ISO-8859-1")
+df_top20 = pd.read_csv(const.TOP20_CSV, encoding="ISO-8859-1")
 with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
     df_top20.to_excel(writer, sheet_name="top20", index=False)
-
-# # Merge with all rows from df2 and matching rows from df1
-# merged_df = pd.merge(df_serials, df_top20, left_on='device_serial', right_on='Meter Serial No.', how='left')
-# merged_df['site_label'] = merged_df['site_label'].fillna('')
-# #merged_df['device_serial'] = merged_df['device_serial'].fillna('')
-# merged_df = merged_df.fillna('')
 
 matching_rows = []
 # Loop through each row in merged_df
@@ -476,26 +495,18 @@ for idx, row in merged_df.iterrows():
 
 # Create a new DataFrame from the list of matching rows
 matching_df = pd.DataFrame(matching_rows)
-matching_df.to_excel(gtb_gaps_excel, index=False)
+matching_df.to_excel(const.GTB_GAPS_EXCEL, index=False)
 
 with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
     matching_df.to_excel(writer, sheet_name="gtb_merged_top20", index=False)
 
-pass
-
-
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-
-# Load the Excel file
-###file_path = r"D:\Downloads\device_serials.xlsx"  # Update with your path
-##xls = pd.ExcelFile(gtb_gaps_excel)
-
-df1 = pd.read_csv(unifier_gb_csv)
+df1 = pd.read_csv(const.UNIFIER_GB_CSV)
 with pd.ExcelWriter(merged_excel_path, mode="a", engine="openpyxl") as writer:
     df1.to_excel(writer, sheet_name="gb_unifier", index=False)
 
-df2 = pd.read_csv(all_api_gbs_csv)
+df2 = pd.read_csv(const.ALL_API_GBS_CSV)
 
 # Drop NaN values
 device_serials = df1["Serial Number"].dropna()
@@ -538,4 +549,10 @@ with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
 
 print(f"Matches saved to {output_path}")
 
+merged_excel_path = const.GB_MERGED_EXCEL.replace(
+    "_.xlsx", f"_{datetime.now().date().isoformat()}.xlsx"
+)
+save_to_postgres(engines[1], merged_excel_path)
 pass
+
+#!!!! TODO: get from DB

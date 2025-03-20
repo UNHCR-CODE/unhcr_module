@@ -354,6 +354,7 @@ def extract_data(data_list, site=None):
     """
     label = None
     for key in data_list:
+        label = None
         if site is None:
             if "site" in key:
                 site = data_list[key]
@@ -364,11 +365,11 @@ def extract_data(data_list, site=None):
             if "label" in data_list:
                 label = data_list["label"]
             return site, table, fn, label
-        elif site == data_list["site"]:
-            table = data_list["table"]
-            fn = data_list["fn"]
-            if "label" in data_list:
-                label = data_list["label"]
+        elif site == key["site"]:
+            table = key["table"]
+            fn = key["fn"]
+            if "label" in key:
+                label = key["label"]
             return site, table, fn, label
 
 
