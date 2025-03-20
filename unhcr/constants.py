@@ -508,6 +508,7 @@ MODULES = [
     ["api_leonics", "api_leonics"],
     ["api_prospect", "api_prospect"],
     ["nigeria_sm_fuel", "sm_fuel"],
+    ["gb_eyedro", "gb_eyedro"],
     ["s3", "s3"],
 ]
 
@@ -562,13 +563,13 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
     return tuple(loaded_modules)
 
 if is_running_on_azure() or is_wsl():
-    TOP20_CSV = os.path.expanduser("~/code/DATA/gaps/new_top_20.csv")
-    GAPS_CSV = os.path.expanduser("~/code/DATA/gaps/gaps.csv")
-    GTB_GAPS_EXCEL = os.path.expanduser("~/code/DATA/gaps/gtb_gaps.xlsx")
-    ALL_API_GBS_CSV = os.path.expanduser("~/code/DATA/all_api_gbs.csv")
-    UNIFIER_GB_CSV = os.path.expanduser("~/code/DATA/unifier_gb.csv")
-    GB_MERGED_EXCEL = os.path.expanduser("~/code/DATA/gaps/merged.xlsx")
-    GB_GAPS_DATA_DIR = os.path.expanduser('~code\DATA\gaps\gap_csv')
+    TOP20_CSV = os.path.expanduser(r"~/code/DATA/gaps/new_top_20.csv")
+    GAPS_CSV = os.path.expanduser(r"~/code/DATA/gaps/gaps.csv")
+    GTB_GAPS_EXCEL = os.path.expanduser(r"~/code/DATA/gaps/gtb_gaps.xlsx")
+    ALL_API_GBS_CSV = os.path.expanduser(r"~/code/DATA/all_api_gbs.csv")
+    UNIFIER_GB_CSV = os.path.expanduser(r"~/code/DATA/unifier_gb.csv")
+    GB_MERGED_EXCEL = os.path.expanduser(r"~/code/DATA/gaps/merged.xlsx")
+    GB_GAPS_DATA_DIR = os.path.expanduser(r'~code\DATA\gaps\gap_csv')
 else:
     TOP20_CSV = r"E:\_UNHCR\CODE\DATA\gaps\new_top_20.csv"
     GAPS_CSV = r"E:\_UNHCR\CODE\DATA\gaps\gaps.csv"

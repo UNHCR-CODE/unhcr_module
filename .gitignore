@@ -18,3 +18,4 @@ Python-3.11.8.tgz
 
 # Ignore NUL file (if it is not needed)
 NUL
+.coverage

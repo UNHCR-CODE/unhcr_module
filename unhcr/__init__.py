@@ -9,6 +9,7 @@ from unhcr import nigeria_sm_fuel
 from unhcr import api_solarman
 from unhcr import err_handler
 from unhcr import app_utils
+from unhcr import gb_eyedro
 
 ##############################
 # Hey there - I've reviewed your changes - here's some feedback:
