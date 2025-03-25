@@ -68,13 +68,13 @@ def db_engine():
     with engine.connect() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS TAKUM_LEONICS_API_RAW (
-                DateTimeServer DATETIME PRIMARY KEY,
+                datetimeserver DATETIME PRIMARY KEY,
                 BDI1_Power_P1_kW INTEGER,
                 external_id VARCHAR(100)
             )
         """)
         conn.execute("""
-            INSERT INTO TAKUM_LEONICS_API_RAW (DateTimeServer, BDI1_Power_P1_kW, external_id)
+            INSERT INTO TAKUM_LEONICS_API_RAW (datetimeserver, BDI1_Power_P1_kW, external_id)
             VALUES ('2024-08-01 10:00:00', 100, '12345')
         """)
         conn.execute("""
@@ -113,7 +113,7 @@ def db_engine():
 def sample_df():
     """Create a sample DataFrame for testing"""
     data = {
-        'DateTimeServer': pd.to_datetime(['2024-08-15 12:00:00', '2024-08-15 12:01:00']),
+        'datetimeserver': pd.to_datetime(['2024-08-15 12:00:00', '2024-08-15 12:01:00']),
         'BDI1_Power_P1_kW': [100, 150],
         'external_id': ['12345', '67890']
     }
@@ -165,7 +165,7 @@ def test_set_db_engine_by_name_postgresql(mock_is_azure, mock_set_engine, setup_
     mock_set_engine.return_value = "mock_engine"
     
     # Set environment variables
-    os.environ["AZURE_TAKUM_LEONICS_API_RAW_CONN_STR"] = "postgres://user:pass@localhost/db"
+    os.environ["AZURE_TAKUM_LEONICS_API_RAW_CONN_STR"] = "postgresql://user:pass@localhost/db"
     os.environ["AZURE_LEONICS_RAW_TABLE"] = "leonics_table"
     
     engine, table = set_db_engine_by_name("postgresql")
@@ -174,7 +174,7 @@ def test_set_db_engine_by_name_postgresql(mock_is_azure, mock_set_engine, setup_
     assert table == "leonics_table"
     assert const.TAKUM_RAW_CONN_STR == "mysql://avnadmin:AVNS_LoixdoCxbSyjyauho38@mysql-takum-hybrid-takum-leonics.d.aivencloud.com:14231/defaultdb"
     assert const.LEONICS_RAW_TABLE == "TAKUM_LEONICS_API_RAW"
-    mock_set_engine.assert_called_once_with("postgres://user:pass@localhost/db")
+    mock_set_engine.assert_called_once_with("postgresql://user:pass@localhost/db")
 
 
 @patch('unhcr.db.set_db_engine')
@@ -223,7 +223,7 @@ def test_sql_execute_select(db_engine):
 def test_sql_execute_insert(db_engine):
     """Test SQL INSERT execution"""
     result, error = sql_execute(
-        "INSERT INTO TAKUM_LEONICS_API_RAW (DateTimeServer, BDI1_Power_P1_kW, external_id) VALUES ('2024-08-02 10:00:00', 200, '67890')",
+        "INSERT INTO TAKUM_LEONICS_API_RAW (datetimeserver, BDI1_Power_P1_kW, external_id) VALUES ('2024-08-02 10:00:00', 200, '67890') Returning datetimeserver",
         db_engine
     )
     assert error is None
@@ -238,12 +238,12 @@ def test_sql_execute_with_parameters(db_engine):
     """Test SQL execution with parameters"""
     params = {'ts': '2024-08-03 10:00:00', 'power': 300, 'id': '13579'}
     result, error = sql_execute(
-        "INSERT INTO TAKUM_LEONICS_API_RAW (DateTimeServer, BDI1_Power_P1_kW) VALUES (:ts, :power)",
+        "INSERT INTO TAKUM_LEONICS_API_RAW (datetimeserver, BDI1_Power_P1_kW) VALUES (:ts, :power) Returning datetimeserver",
         db_engine,
         params
     )
     assert error is None
-    assert result.rowcount == 1
+    assert len(result) == 1
 
     # Verify the insert worked
     verify, _ = sql_execute("SELECT COUNT(*) FROM TAKUM_LEONICS_API_RAW", db_engine)
@@ -289,11 +289,11 @@ def test_update_leonics_db(mock_update_rows, sample_df):
     mock_update_rows.return_value = (MagicMock(rowcount=2), None)
     max_dt = datetime(2024, 8, 14, 0, 0)
     
-    result, error = update_leonics_db(max_dt, sample_df, "test_table", "DateTimeServer")
+    result, error = update_leonics_db(max_dt, sample_df, db_engine)
     
     assert error is None
     assert result.rowcount == 2
-    mock_update_rows.assert_called_once_with(max_dt, sample_df, "test_table", "DateTimeServer")
+    mock_update_rows.assert_called_once_with(max_dt, sample_df, db_engine)
 
 
 def test_update_rows_filtering(db_engine, sample_df):
@@ -304,7 +304,7 @@ def test_update_rows_filtering(db_engine, sample_df):
     with patch('unhcr.db.sql_execute') as mock_sql_execute:
         mock_sql_execute.return_value = (MagicMock(rowcount=2), None)
         
-        result, error = update_rows(max_dt, sample_df, "TAKUM_LEONICS_API_RAW")
+        result, error = update_rows(max_dt, sample_df, db_engine)
         
         assert error is None
         assert mock_sql_execute.called
@@ -333,14 +333,14 @@ def test_update_rows_postgresql(mock_sql_execute, mock_set_engine, sample_df):
     
     max_dt = datetime(2024, 8, 14, 0, 0)
     
-    result, error = update_rows(max_dt, sample_df, "test_table", key="DateTimeServer")
+    result, error = update_rows(max_dt, sample_df, db_engine)
     
     assert error is None
     assert mock_sql_execute.called
     # Check that PostgreSQL conflict syntax is used
     sql_arg = mock_sql_execute.call_args[0][0]
-    assert "ON DUPLICATE KEY UPDATE DateTimeServer =" in sql_arg
-    mock_set_engine.assert_called_once_with("mysql")
+    assert "ON CONFLICT (datetimeserver) DO UPDATE" in sql_arg
+    mock_set_engine.assert_called_once_with("postgresql")
 
 
 @patch('unhcr.db.set_db_engine_by_name')
@@ -358,7 +358,7 @@ def test_update_rows_mysql(mock_sql_execute, mock_set_engine, sample_df):
     mock_sql_execute.assert_called_once()
     # Check that MySQL syntax is used
     sql_arg = mock_sql_execute.call_args[0][0]
-    assert "ON DUPLICATE KEY UPDATE" in sql_arg
+    assert "ON CONFLICT (datetimeserver) DO UPDATE" in sql_arg
     print(mock_set_engine)   #.assert
 
 
@@ -368,7 +368,7 @@ def mock_request(monkeypatch):
     """
     Mocks the requests.request function to return a MockResponse object
     with a status code of 200 and a JSON response containing a single
-    data point with a custom field "DateTimeServer" set to
+    data point with a custom field "datetimeserver" set to
     "2024-08-15T12:00:00Z" and an "external_id" set to "123".
 
     This fixture is used to isolate the tests from actual API calls.
@@ -400,7 +400,7 @@ def mock_request(monkeypatch):
         This function is used to mock the behavior of an API request by returning
         a pre-defined MockResponse object with a status code of 200 and a JSON
         response. The JSON response includes a single data point with a custom
-        "DateTimeServer" field and an "external_id".
+        "datetimeserver" field and an "external_id".
 
         Args:
             *args: Variable length argument list.
@@ -413,7 +413,7 @@ def mock_request(monkeypatch):
 
         return MockResponse(
             200,
-            '{"data": [{"custom": {"DateTimeServer": "2024-08-15T12:00:00Z"}, "external_id": "123"}]}',
+            '{"data": [{"custom": {"datetimeserver": "2024-08-15T12:00:00Z"}, "external_id": "123"}]}',
         )
 
     monkeypatch.setattr(requests, "request", mock_request_func)
@@ -428,7 +428,7 @@ def db_engine():
             text(
                 """
             CREATE TABLE IF NOT EXISTS TAKUM_LEONICS_API_RAW (
-                DateTimeServer DATETIME PRIMARY KEY,
+                datetimeserver DATETIME PRIMARY KEY,
                 BDI1_Power_P1_kW INTEGER
             )
         """
@@ -473,11 +473,11 @@ def mock_api_prospect():
 @pytest.fixture
 def dummy_df():
     """
-    A fixture that returns a pandas DataFrame with a DateTimeServer column and a BDI1_Power_P1_kW column.
+    A fixture that returns a pandas DataFrame with a datetimeserver column and a BDI1_Power_P1_kW column.
     The DataFrame contains two rows of data, with timestamps one minute apart, and power values of 1 and 2 respectively.
     """
     data = {
-        "DateTimeServer": [
+        "datetimeserver": [
             datetime(2024, 1, 1, 10, 0, 0),
             datetime(2024, 1, 1, 10, 1, 0),
         ],
@@ -516,11 +516,11 @@ def test_sql_execute_select(db_engine):
 
 def test_sql_execute_insert(db_engine):
     result, error = unhcr.db.sql_execute(
-        "INSERT INTO TAKUM_LEONICS_API_RAW (DateTimeServer, BDI1_Power_P1_kW) VALUES ('2024-01-01 10:00:00', 1)",
+        "INSERT INTO TAKUM_LEONICS_API_RAW (datetimeserver, BDI1_Power_P1_kW) VALUES ('2024-01-01 10:00:00', 1) returning datetimeserver",
         db_engine,
     )
     assert error is None
-    assert result.rowcount == 1
+    assert len(result) == 1
 
 
 def test_sql_execute_error(db_engine):
@@ -554,26 +554,24 @@ def test_get_db_session():
 # Test cases for update_leonics_db and update_rows
 # -----
 @pytest.mark.parametrize(
-    "max_dt, dummy_df, table_name, expected_count",
+    "max_dt, dummy_df, expected_count",
     [
         (
             datetime(2023, 12, 31),
             pd.DataFrame({"col1": [1, 2], "col2": [3, 4]}),
-            "TAKUM_LEONICS_API_RAW",
-            3,
+            2
         ),
         (
             datetime(2023, 12, 31),
             pd.DataFrame({"col1": [1, 2], "col2": [3, 4]}),
-            "OTHER_TABLE",
-            False,
+            2
         ),
     ],
     ids=["update_leonics_db_success", "update_leonics_db_failure"],
 )
 @patch("unhcr.db.update_leonics_db")
 def test_update_leonics_db_and_update_rows(
-    mock_update_leonics_db, max_dt, dummy_df, table_name, expected_count, db_engine
+    mock_update_leonics_db, max_dt, dummy_df, expected_count, db_engine
 ):
     # Mock the return values of the update_leonics_db function
     mock_update_leonics_db.return_value = (
@@ -581,7 +579,7 @@ def test_update_leonics_db_and_update_rows(
     )
 
     # Call the function
-    result, error = unhcr.db.update_leonics_db(max_dt, dummy_df, table_name)
+    result, error = unhcr.db.update_leonics_db(max_dt, dummy_df, db_engine)
 
     # Assert the expected values
     if expected_count == 0:
@@ -592,7 +590,7 @@ def test_update_leonics_db_and_update_rows(
         assert error is None
 
     # Check if rows were inserted
-    res, err = unhcr.db.sql_execute(f"SELECT COUNT(*) FROM {table_name}", db_engine)
+    res, err = unhcr.db.sql_execute(f"SELECT COUNT(*) FROM takum_leonics_api_raw", db_engine)
     if err is None:
         assert res[0][0] == expected_count
     else:
