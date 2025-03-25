@@ -16,8 +16,21 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, median_absolute_error
 import time
 
-from unhcr import app_utils
+from unhcr import utils
 from unhcr import constants as const
+from unhcr import app_utils
+
+run_dt = datetime.now().date()
+FILTERED_GB_SN_PATH=const.add_csv_dt(const.ALL_API_GBS_CSV_PATH, run_dt.isoformat())
+filtered_gb_sn_df = pd.read_csv(FILTERED_GB_SN_PATH)
+filtered_gb_sn_df['gb_serial'] = filtered_gb_sn_df['gb_serial'].str.replace('-', '', regex=True)
+
+arr = filtered_gb_sn_df[['gb_serial','epoch_utc']].copy()
+arr['epoch_utc'] = pd.to_numeric(arr['epoch_utc'], errors='coerce').fillna(-1).astype(np.int32)
+
+arr = arr.values.tolist()
+
+pass
 
 # OPTIONAL: set your own environment
 ##ef = const.load_env(r'E:\_UNHCR\CODE\unhcr_module\.env')
@@ -42,9 +55,6 @@ data_dir = const.GB_GAPS_DATA_DIR
 # Turn on interactive plotting mode
 plt.ion()
 
-
-import pandas as pd
-import numpy as np
 
 # Method 1: Using standard deviation
 def replace_outliers_std(df, column='wh', threshold=3):
@@ -596,6 +606,7 @@ def extend_dataset_with_medians(df, time_column, value_column, n_periods=500):
     
     return extended_df
 
+
 def run_gapfilling_by_segments(file_path, plot_individual_gaps=True, min_gap_size=10, df=None):
     # Load the data
     """
@@ -923,13 +934,13 @@ def run_gapfilling_by_segments(file_path, plot_individual_gaps=True, min_gap_siz
     return dataframe[padding:(padding *-1)], type
 
 
-def hyper_gaps(table, data_dir):
+def hyper_gaps(table, data_dir, minutes=30):
     gap_csv_path = os.path.join(data_dir, f'{table}_gaps.csv')
     if os.path.isfile(gap_csv_path):
         df = pd.read_csv(gap_csv_path)
         df[["wh", "with_gap"]] = df[["wh", "with_gap"]].astype("float32")
         df["date"] = pd.to_datetime(df["date"])
-        df_cleaned = replace_outliers_interpolate(df, column='wh', window=24, threshold=3)
+        df_cleaned = replace_outliers_interpolate(df, column='wh', window=minutes, threshold=3)
         if not df_cleaned.empty:
             path = os.path.join(data_dir, f'{table.replace("gb_", "gb_clean_")}')
             df_cleaned.to_csv(path + r"_gaps.csv", mode="w", index=False, header=True)
@@ -957,59 +968,14 @@ def hyper_gaps(table, data_dir):
         # Close connection
         cursor.close()
         conn.close()
-    df_cleaned = replace_outliers_interpolate(df, column='wh', window=24, threshold=3)
+    df_cleaned = replace_outliers_interpolate(df, column='wh', window=minutes, threshold=3)
     return df, df_cleaned
 
-def update_gaps_table(tn, local, gb_gaps_table):
-    db_eng, _ = db.set_db_engine_by_name("postgresql", local=local)
-    pass
-    # sql = f"SELECT hypertable_name, epoch_secs, prev_epoch, diff_seconds FROM {gb_gaps_table};"
-    # res, err = db.sql_execute(sql, eng)
 
-    # # Check if we got results
-    # if res:
-    #     # Process data into a DataFrame
-    #     data = []
-    #     for row in res:
-    #         from_timestamp = datetime.fromtimestamp(row[2], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-    #         to_timestamp = datetime.fromtimestamp(row[1], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-    #         days = row[3] / (60 * 60 * 24)  # Convert seconds to days
-            
-    #         data.append([row[0][3:], row[1], row[2], row[3], from_timestamp, to_timestamp, round(days, 2)])
+def update_gaps_table(tn, db_eng):
+    ####### = db.set_local_defaultdb_engine() if local else db.set_azure_defaultdb_engine()
 
-    #     # Create DataFrame
-    #     df = pd.DataFrame(data, columns=["gb_serial", "epoch_secs", "prev_epoch", "diff_seconds", "from_timestamp", "to_timestamp", "days"])
-        
-    #     # Save to CSV
-    #     df.to_csv(gaps_csv, index=False)
-
-    # pass
-    # #!!!!! we have a gaps table
-
-    #!!!!! save data to gaps table
-    # Ensure the table exists
-    res, err = db.sql_execute(f"""
-        CREATE TABLE IF NOT EXISTS {gb_gaps_table} (
-            hypertable_name TEXT,
-            epoch_secs BIGINT,
-            prev_epoch BIGINT,
-            diff_seconds INT,
-            days varchar(10),
-            CONSTRAINT gb_gaps_epoch_secs_prev_epoch_key UNIQUE (hypertable_name, epoch_secs, prev_epoch)
-        );
-    """, db_eng)
-
-    if err:
-        db_eng.dispose()
-        return None, err
-    # # Fetch hypertable names
-    # sql = """SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_name LIKE 'gb_%' ORDER BY hypertable_name;"""
-    # res, err = db.sql_execute(sql, db_eng)
-
-    # Loop through hypertables
-    #for tn in res:
-    print(f'!!!!!!!!!!!!!!!!!!!!!!  {tn[0]}')
-    print('')
+    # save data to gaps table
     res, err = db.sql_execute(f"""
         WITH ordered_epochs AS (
             SELECT epoch_secs, 
@@ -1022,49 +988,104 @@ def update_gaps_table(tn, local, gb_gaps_table):
     """, db_eng)
 
     if err:
-        db_eng.dispose()
+        logging.error(err)
         return None, err
 
+    gaps = []
     for row in res:
-        print(f"{tn[0]} from: {datetime.fromtimestamp(row[1], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} "
-            f"to: {datetime.fromtimestamp(row[0], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} "
-            f"days: {row[2] / (60 * 60 * 24):.2f}")
-        pass
         # Insert into database, ensuring uniqueness
-        db.sql_execute(f"""
-            INSERT INTO {gb_gaps_table} (hypertable_name, epoch_secs, prev_epoch, diff_seconds, days)
+        res1, err = db.sql_execute(f"""
+            INSERT INTO {const.GB_GAPS_TABLE} (hypertable_name, epoch_secs, prev_epoch, diff_seconds, days)
             VALUES ('{tn[0]}', {row[0]}, {row[1]}, {row[2]}, '{row[2] / (60 * 60 * 24):.2f}')
-            ON CONFLICT (hypertable_name, epoch_secs, prev_epoch) DO NOTHING;
+            ON CONFLICT (hypertable_name, epoch_secs, prev_epoch, deleted) DO NOTHING RETURNING 1;
         """, db_eng)
-    db_eng.dispose()
-    return res.rowcount, None
+        if err: 
+            logging.error(err)
+            return None, err
+        sn = tn[0][3:]
+        ts_from = datetime.fromtimestamp(row[1], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        ts_to = datetime.fromtimestamp(row[0], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        days = f'{row[2] / (60 * 60 * 24):.2f}'
+        print(f"{sn} from: {ts_from} to: {ts_to} days: {days}")
+        gaps.append([sn, row[1], row[0], row[2], ts_from, ts_to, days])
+    return gaps, None
 
 
-def concurrent_update_gaps(local=True):
-    def process_chunk(chunk, param1, param2):
-        return [update_gaps_table(item, local=param1, gb_gaps_table=param2) for item in chunk]  # Apply function to each item
-    # get all gb_gap hypertable names
-    #update_gaps_table(engines[1], gb_gaps_table= const.GB_GAPS_TABLE)
-    local_engine = db.set_local_defaultdb_engine()
-    tn = const.GB_GAPS_TABLE
+def concurrent_update_gaps(local=True, csv_path=None, run_dt=datetime.now().date()):
+    """
+    Concurrently update gaps table for all GB tables.
+    
+    If a gaps csv file is provided, it will be read instead of updating the gaps table.
+
+    Parameters:
+        local (bool): Whether to use a local database connection or an Azure database connection. Defaults to True.
+        csv_path (str): The path to the csv file containing the gaps data. If provided, the function will read from the csv file instead of updating the gaps table.
+        run_dt (datetime.date): The date to run the gap filling for. Defaults to the current date.
+
+    Returns:
+        A pandas DataFrame containing the gaps data, or None if there is an error.
+        An error message if there is an error.
+    """
+    if csv_path and os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        return df, None
+
+    def process_chunk(chunk, param1):
+        return [update_gaps_table(item, db_eng=param1) for item in chunk]  # Apply function to each item
+    eng = db.set_local_defaultdb_engine() if local else db.set_azure_defaultdb_engine()
+
+    # Ensure the gaps table exists
+    sql = f'select epoch_secs from {const.GB_GAPS_TABLE} limit 1;'
+    res, err = db.sql_execute(sql, eng)
+    if err:
+        res, err = db.sql_execute(const.SQL_GB_GAPS_TABLE, eng)
+        if err:
+            logging.error(f'{sql} ERROR: {err}')
+            return None, err 
+    else:
+        # soft delete existing gaps if not done today
+        sql = f'select min(updated_at) from {const.GB_GAPS_TABLE} where deleted is true;'
+        res, err = db.sql_execute(sql, eng)
+        if err:
+            logging.error(f'{sql} ERROR: {err}')
+            return None, err
+        if res[0][0] is None or res[0][0].date() < run_dt:
+            sql = f'{const.SQL_GB_GAPS_DELETE}'
+            res, err = db.sql_execute(sql, eng)
+            if err:
+                logging.error(f'{sql} ERROR: {err}')
+                return None, err
+
     # Fetch hypertable names
     sql = """SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_name LIKE 'gb_%' ORDER BY hypertable_name;"""
-    gb_tn_list, err = db.sql_execute(sql, local_engine)
+    gb_tn_list, err = db.sql_execute(sql, eng)
     if err:
-        print(err)
-        exit(22)
+        logging.error(err)
+        return None, err
+
     # set chunks from gb table names list
     num_parts = 10
     chunks = [list(chunk) for chunk in np.array_split(gb_tn_list, num_parts)]  # Ensure list format
 
     with ThreadPoolExecutor(max_workers=num_parts) as executor:
-        results = list(executor.map(partial(process_chunk, param1=local, param2=tn), chunks))
+        results = list(executor.map(partial(process_chunk, param1=eng), chunks))
+    
+    gaps = [item for sublist in results for item in sublist]
+    # Filter out tuples where the first element is empty or None
+    filtered_data = [array for array, value in gaps]
+    # Remove the outer list and keep the nested lists
+    gap_list = [sublist for array in filtered_data for sublist in array]
+    cols=['gb_sn', 'epoch_secs', 'prev_epoch', 'diff_seconds', 'start_ts', 'end_ts', 'days']
+    df = pd.DataFrame(gap_list, columns=cols)
+    if csv_path:
+        df.to_csv(csv_path, index=False)
     # Flatten results
-    return [item for sublist in results for item in sublist]
+    return df, None
 
 #!!!! run to update eyedro.gb_gaps table
 # res = concurrent_update_gaps(local=True)
-# print(res)
+# logging.debug(res)
+# pass
 #!!!! run to update eyedro.gb_gaps table
 
 #!!!! gp_fill_sn_list manually generated TODO: make it automatic
@@ -1290,14 +1311,12 @@ gp_fill_sn_list = [
 
 ttl_wh = []
 # Main function to run the example
-if __name__ == '__main__':
-    #try:
+def get_gb_gaps(gb_sn_list=gp_fill_sn_list, data_dir=const.GB_GAPS_DATA_DIR, run_dt=datetime.now().date()):
     # Start with a clean memory state
     gc.collect()
-    print("Starting memory-efficient gap filling process...")
-    #!!!! gp_fill_sn_list is built manually TODO: make it automatic 
-    loop_cnt = 0
-    for el in gp_fill_sn_list: #['gb_0098082b']:
+    print("Starting memory-efficient gap filling process...") 
+    # TODO: get list of gbs from dfaultdb public.gb_api_no_dups  fileter 006-
+    for el in gb_sn_list: #['gb_0098082b']:
         if el[0] < 'b12-004b7':
             continue
         table = 'gb_' + el[0].replace('-', '')
@@ -1369,10 +1388,12 @@ if __name__ == '__main__':
     for x in ttl_wh:
         print(x)
 
-    # except Exception as e:
-    #     print(f"An error occurred: {str(e)}")
-    # finally:
-    #     # Final cleanup to ensure memory is released
-    #     print("Performing final memory cleanup...")
-    #     gc.collect()
-    #     print("Done.")
+# filtered_gb_sn_df = all_gb_api_sn_df[0][
+#     ~all_gb_api_sn_df[0]["gb_serial"].str.startswith(const.GB_GATEWAY_PREFIX)
+# ]
+
+FILTERED_GB_SN_PATH=const.add_csv_dt(const.ALL_API_GBS_CSV_PATH, run_dt.isoformat())
+filtered_gb_sn_df = pd.read_csv(FILTERED_GB_SN_PATH)
+arr = (filtered_gb_sn_df[['gb_serial','epoch_utc']].values.astype(np.int32)).tolist()
+
+pass

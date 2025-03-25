@@ -142,19 +142,51 @@ def set_db_engine_by_name(ename, local=False):
     return set_db_engine(const.TAKUM_RAW_CONN_STR), const.LEONICS_RAW_TABLE
 
 
+# @contextmanager
+# def get_db_session(engine):
+#     """Provide a transactional scope around a series of operations."""
+#     Session = orm.sessionmaker(bind=engine)
+#     session = Session()
+#     try:
+#         yield session
+#         session.commit()
+#     except exc.SQLAlchemyError:
+#         session.rollback()
+#         raise
+#     finally:
+#         session.close()
+
+from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy import exc
+from contextlib import contextmanager
+import logging
+
 @contextmanager
-def get_db_session(engine):
-    """Provide a transactional scope around a series of operations."""
-    Session = orm.sessionmaker(bind=engine)
+def get_db_session(eng):
+    # Create a scoped session for thread-local session management
+    Session = scoped_session(sessionmaker(bind=eng))
     session = Session()
     try:
         yield session
         session.commit()
-    except exc.SQLAlchemyError:
+    except exc.SQLAlchemyError as db_error:
         session.rollback()
+        error_msg = f"Database update failed: {str(db_error)}"
+        logging.error(error_msg)
+        raise
+    except ValueError as val_error:
+        session.rollback()
+        error_msg = f"Data validation error: {str(val_error)}"
+        logging.error(error_msg)
+        raise
+    except Exception as e:
+        session.rollback()
+        error_msg = f"Unexpected error: {str(e)}"
+        logging.error(error_msg)
         raise
     finally:
         session.close()
+        Session.remove()  # Remove the session from the scoped session registry
 
 
 def sql_execute(sql, engine=default_engine, data=None):
@@ -170,78 +202,79 @@ def sql_execute(sql, engine=default_engine, data=None):
     if engine is None:
         raise ValueError("Database engine must be provided")
 
-    with get_db_session(engine) as session:
-        try:
-            # Use SQLAlchemy's execute method
-            result = session.execute(text(sql), params=data)
-            session.commit()
-            # If it's a SELECT query, fetch results
-            if sql.strip().upper().startswith("SELECT"):
-                return result.fetchall(), None
+    # Assuming get_db_session is defined correctly elsewhere
+    #####with get_db_session(engine) as session:
+    Session = sessionmaker(bind=engine)
+    session = Session()
 
-            # For INSERT, UPDATE, DELETE return the result
-            return result, None
+    try:
+        # Use SQLAlchemy's execute method
+        result = session.execute(text(sql), params=data)
 
-        except exc.SQLAlchemyError as db_error:
-            session.rollback()
-            error_msg = f"Database update failed: {str(db_error)}"
-            logging.error(error_msg)
-            return False, {
-                "error_type": type(db_error).__name__,
-                "error_message": str(db_error),
-                "sql": sql,
-            }
-        except ValueError as val_error:
-            session.rollback()
-            error_msg = f"Data validation error: {str(val_error)}"
-            logging.error(error_msg)
-            return False, {
-                "error_type": "ValidationError",
-                "error_message": str(val_error),
-                "sql": sql,
-            }
-        except Exception as e:
-            session.rollback()
-            error_msg = f"Unexpected error: {str(e)}"
-            logging.error(error_msg)
-            return False, {
-                "error_type": type(e).__name__,
-                "error_message": str(e),
-                "sql": sql,
-            }
-        except Exception as e:
-            session.rollback()
-            return False, {
-                "error_type": type(e).__name__,
-                "error_message": str(e),
-                "sql": sql,
-            }
-        # finally:
-        #     session.close()
+        # If it's a SELECT query, fetch results
+        # if sql.strip().upper().startswith("SELECT"):
+        #     res = result.fetchall()
+        #     return res, None
 
+        # # For INSERT, UPDATE, DELETE return the result
+        res =result.fetchall()
+        session.commit()
+        return res, None
+
+    except exc.SQLAlchemyError as db_error:
+        session.rollback()
+        error_msg = f"Database update failed: {str(db_error)}"
+        logging.error(error_msg)
+        return False, {
+            "error_type": type(db_error).__name__,
+            "error_message": str(db_error),
+            "sql": sql,
+        }
+
+    except ValueError as val_error:
+        session.rollback()
+        error_msg = f"Data validation error: {str(val_error)}"
+        logging.error(error_msg)
+        return False, {
+            "error_type": "ValidationError",
+            "error_message": str(val_error),
+            "sql": sql,
+        }
+
+    except Exception as e:
+        session.rollback()
+        error_msg = f"Unexpected error: {str(e)}"
+        logging.error(error_msg)
+        return False, {
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "sql": sql,
+        }
+    finally:
+        session.close()
 
 default_engine = set_db_engine(const.TAKUM_RAW_CONN_STR)
 
 
-def get_db_max_date(engine=default_engine, table_name="TAKUM_LEONICS_API_RAW"):
+def get_db_max_date(engine=default_engine):
     """
     Retrieves the latest timestamp from the database. If the database is empty or an error occurs,
     returns None and the error.
     """
 
     try:
-        dt, err = sql_execute(f"select max(DatetimeServer) FROM {table_name}", engine)
+        dt, err = sql_execute(f"select max(DatetimeServer) FROM TAKUM_LEONICS_API_RAW", engine)
         assert err is None
         val = dt[0][0]
         if len(val) > 18: 
             val = dt[0][0][:-3]
         return datetime.strptime(val, "%Y-%m-%d %H:%M"), None
     except Exception as e:
-        logging.error(f"Can not get DB max timsestanp   {e}")
+        logging.error(f"Can not get DB max timestanp   {e}")
         return None, e
 
 
-def update_leonics_db(max_dt, df, table_name, key="DatetimeServer"):
+def update_leonics_db(max_dt, df, eng):
     """
     Updates the specified DB table with new data from a DataFrame.
 
@@ -268,10 +301,10 @@ def update_leonics_db(max_dt, df, table_name, key="DatetimeServer"):
         an error (dict) if the update failed. The error dict contains
         information about the error: error_type, error_message, and sql.
     """
-    return update_rows(max_dt, df, table_name, key)
+    return update_rows(max_dt, df, eng)
 
 
-def update_rows(max_dt, df, table_name, key="DateTimeServer"):
+def update_rows(max_dt, df, eng):
     """
     Inserts new data into the specified DB table by filtering and formatting a DataFrame.
 
@@ -308,9 +341,9 @@ def update_rows(max_dt, df, table_name, key="DateTimeServer"):
     # Define the threshold datetime
     threshold = pd.to_datetime(max_dt.isoformat())
     # Filter rows where datetime_column is greater than or equal to the threshold
-    df_filtered = df[df[key] > threshold]
+    df_filtered = df[df['datetimeserver'] > threshold]
     l = len(df_filtered)
-    df_filtered = df_filtered.drop_duplicates(subset=key, keep="first")
+    df_filtered = df_filtered.drop_duplicates(subset='datetimeserver', keep="first")
     #print(l - len(df_filtered))
     if l == 0:
         return SimpleNamespace(rowcount=0), None
@@ -372,27 +405,19 @@ def update_rows(max_dt, df, table_name, key="DateTimeServer"):
     values = values.replace("err", "NULL")
     values.replace("'err'", "NULL")
     # Full DB INSERT statement
-    sql_query = f"INSERT INTO {table_name} ({columns}) VALUES {values}"
+    sql_query = f"INSERT INTO takum_leonics_api_raw ({columns}) VALUES {values}"
     sql_pred = " ON DUPLICATE KEY UPDATE "
 
-    if key == "datetimeserver":
-        default_engine, _ = set_db_engine_by_name("postgresql")
-        sql_pred = " ON CONFLICT (datetimeserver) DO UPDATE SET "
-        for col in df_filtered.columns:
-            sql_pred += f"{col} = EXCLUDED.{col}, "
-    else:
-        default_engine, _ = set_db_engine_by_name("mysql")
-        for col in df_filtered.columns:
-            sql_pred += f"{col} = VALUES({col}), "
-    sql_pred = sql_pred[:-2] + ";"
+    default_engine, _ = set_db_engine_by_name("postgresql")
+    sql_pred = " ON CONFLICT (datetimeserver) DO UPDATE SET "
+    for col in df_filtered.columns:
+        sql_pred += f"{col} = EXCLUDED.{col}, "
+    sql_pred = sql_pred[:-2] +" RETURNING datetimeserver;"
 
-    sql_query += sql_pred
-    res, err = sql_execute(sql_query, default_engine)
+    sql_query += sql_pred 
+    res, err = sql_execute(sql_query, eng)
     assert err is None
-    if not hasattr(res, "rowcount"):
-        logging.warning(f"ERROR update_leonics_db: {res}")
-        return None, "Error: query result is not a cursor"
-    logging.debug(f"ROWS UPDATED: {table_name}  {res.rowcount}")
+    logging.debug(f"ROWS UPDATED: {len(res)}")
     return res, None
 
 
@@ -435,7 +460,7 @@ def prospect_get_start_ts(local=None, start_ts=None):
         return datetime.strptime(val, "%Y-%m-%d %H:%M")
 
 
-def update_prospect(start_ts=None, local=None, table_name=const.LEONICS_RAW_TABLE):
+def update_prospect(eng, start_ts=None, local=None):
     """
     Updates the Prospect API with new data entries from the database.
 
@@ -460,8 +485,8 @@ def update_prospect(start_ts=None, local=None, table_name=const.LEONICS_RAW_TABL
     try:
         start_ts = prospect_get_start_ts(local, start_ts)
         rows, err = sql_execute(
-            f"select * FROM {table_name} where DatetimeServer >= '{start_ts}' order by DatetimeServer  limit 50000;",
-            default_engine,
+            f"select * FROM takum_leonics_api_raw where DatetimeServer >= '{start_ts}' order by DatetimeServer  limit 50000;",
+            eng
         )
         assert err is None
 
@@ -474,7 +499,7 @@ def update_prospect(start_ts=None, local=None, table_name=const.LEONICS_RAW_TABL
         #     postfix='raw_'
         df["external_id"] = df["external_id"].astype(str).apply(lambda x: postfix + x)
 
-        res = api_prospect.api_in_prospect(df, local)
+        res = api_prospect.api_in_prospect(df,local)
         if res is None:
             logging.error("Prospect API failed")
             return None, '"Prospect API failed"'
@@ -484,9 +509,7 @@ def update_prospect(start_ts=None, local=None, table_name=const.LEONICS_RAW_TABL
         logger = logging.getLogger()
         if logger.getEffectiveLevel() < logging.INFO:
             sts = start_ts.replace(" ", "_").replace(":", "HM")
-            sts += str(local)
             df.to_csv(f"sys_pros_{sts}.csv", index=False)
-            # df.to_json(f'sys_pros_{sts}.json', index=False)
 
         logging.info("Data has been saved to 'sys_pros'")
         return res, None
@@ -754,62 +777,58 @@ def update_takum_raw_db(token, start_ts):
         return st, ed
 
     num_days = 2
-    max_dt = start_ts
+    max_dt_local = start_ts
     if start_ts is None:
-        default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name("postgresql")
-        max_dt1, err = get_db_max_date(default_engine, const.LEONICS_RAW_TABLE)
+        max_dt_azure, err = get_db_max_date(azure_defaultdb_engine)
         if err:
             logging.error(f"get_db_max_date Error occurred: {err}")
             exit(1)
-        assert max_dt1 is not None
-        default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name("mysql")
-        max_dt, err = get_db_max_date(default_engine, const.LEONICS_RAW_TABLE)
-        if err:
-            logging.error(f"get_db_max_date1 Error occurred: {err}")
-            exit(1)
-        assert max_dt is not None
+        assert max_dt_azure is not None
+
+        if local_defaultdb_engine is not None:
+            max_dt_local, err = get_db_max_date(local_defaultdb_engine)
+            if err:
+                logging.error(f"get_db_max_date1 Error occurred: {err}")
+                exit(1)
+            assert max_dt_local is not None
+        else:
+            max_dt_local = None
+    else:
+        max_dt_azure = start_ts
+        max_dt_local = start_ts
 
         # backfill 1 week
         # max_dt = max_dt - timedelta(days=7)
-    st, ed = set_date_range(max_dt, num_days)
-    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name("mysql")
-    df_leonics, err = api_leonics.getData(start=st, end=ed, token=token)
-    if err:
-        logging.error(f"api_leonics.getData Error occurred: {err}")
-        exit(2)
-    # Convert the 'datetime_column' to pandas datetime
-    df_leonics["DatetimeServer"] = pd.to_datetime(df_leonics["DatetimeServer"])
-    res, err = update_leonics_db(max_dt, df_leonics, const.LEONICS_RAW_TABLE)
-    if err:
-        logging.error(f"update_leonics_db Error occurred: {err}")
-        exit(3)
-    else:
-        logging.info(f"ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}")
-
-    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name("postgresql")
-
-    st, ed = set_date_range(max_dt1, num_days)
-    default_engine, const.LEONICS_RAW_TABLE = set_db_engine_by_name("postgresql")
+    st, ed = set_date_range(max_dt_azure, num_days)
     df_azure, err = api_leonics.getData(start=st, end=ed, token=token)
     if err:
         logging.error(f"api_leonics.getData Error occurred: {err}")
         exit(2)
     # Convert the 'datetime_column' to pandas datetime
     df_azure["DatetimeServer"] = pd.to_datetime(df_azure["DatetimeServer"])
-    # df_azure['datetimeserver'] = df_leonics['DatetimeServer'].copy()
-    # df_azure = df_azure.drop(columns=['DatetimeServer'])
-    # we use all lowercase column names in AZURE
     df_azure.columns = df_azure.columns.str.lower()
-    res, err = update_leonics_db(
-        max_dt1, df_azure, const.LEONICS_RAW_TABLE, "datetimeserver"
-    )
-    assert res is not None
-    assert err is None
+    res, err = update_leonics_db( max_dt_azure, df_azure, azure_defaultdb_engine)
     if err:
         logging.error(f"update_leonics_db Error occurred: {err}")
         exit(3)
     else:
-        logging.info(f"ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}")
+        logging.info(f"AZURE ROWS UPDATED:   {len(res)}")
+
+    if max_dt_local is not None:
+        st, ed = set_date_range(max_dt_local, num_days)
+        df_leonics, err = api_leonics.getData(start=st, end=ed, token=token)
+        if err:
+            logging.error(f"api_leonics.getData Error occurred: {err}")
+            exit(2)
+        # Convert the 'datetime_column' to pandas datetime
+        df_leonics["DatetimeServer"] = pd.to_datetime(df_leonics["DatetimeServer"])
+        df_leonics.columns = df_leonics.columns.str.lower()
+        res, err = update_leonics_db(max_dt_local, df_leonics, local_defaultdb_engine)
+        if err:
+            logging.error(f"update_leonics_db Error occurred: {err}")
+            exit(3)
+        else:
+            logging.info(f"LOCAL ROWS UPDATED:  {len(res)}")
 
     return start_ts
 
@@ -910,6 +929,6 @@ def set_db_engines():
         engines = [set_local_defaultdb_engine()]
     else:
         engines = [set_azure_defaultdb_engine()]
-        if utils.docker_running():
+        if utils.prospect_running():
             engines.append(set_local_defaultdb_engine())
     return engines

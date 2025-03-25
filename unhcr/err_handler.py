@@ -123,7 +123,8 @@ def err_details(e):
 
 def error_wrapper(func,  msg=None):
     try:
-        return func(), None
+        res = func()
+        return res, None
     except Exception as e:
         return None, err_details(e)
 

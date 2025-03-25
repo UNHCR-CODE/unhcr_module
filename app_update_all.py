@@ -111,31 +111,18 @@ def execute(token, start_ts=None):
     if UPDATE_DB:
         start_ts = db.update_takum_raw_db(token, start_ts)
     if PROSPECT:
-        # db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name('mysql')
-        # res, err = db.update_prospect(local=False)
-        # assert(res is not None)
-        # assert(err is None)
-        # logging.info(f"LOCAL: FALSE {res.status_code}:  {res.text}")
-        db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name(
-            "postgresql"
-        )
         if BACKFILL_DT:
-            db.update_prospect(start_ts=start_ts)  # AZURE
+            db.update_prospect(db.azure_defaultdb_engine, start_ts=start_ts)  # AZURE
         else:
-            db.update_prospect(table_name=const.LEONICS_RAW_TABLE)  # AZURE
+            db.update_prospect(db.azure_defaultdb_engine)  # AZURE
 
         if const.is_running_on_azure():
             return start_ts
 
         try:
-            if utils.docker_running():
+            if utils.prospect_running():
                 logging.info(f"Local Server is responding.")
-                db.default_engine, const.LEONICS_RAW_TABLE = db.set_db_engine_by_name(
-                    "postgresql"
-                )
-                res, err = db.update_prospect(
-                    start_ts=start_ts, local=True, table_name=const.LEONICS_RAW_TABLE
-                )
+                res, err = db.update_prospect(db.local_defaultdb_engine, start_ts=start_ts, local=True)
                 assert res is not None
                 assert err is None
                 logging.info(f"LOCAL: TRUE {res.status_code}:  {res.text}")

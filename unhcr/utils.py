@@ -46,13 +46,90 @@ Key Components
 import csv
 from datetime import datetime, timedelta
 from importlib.metadata import version
+import fnmatch
 import glob
 import logging
 import optparse
 import os
 import requests
 import sys
+import tkinter as tk
+from tkinter import messagebox
 
+# Global variable to store the selected file
+selected_file = None
+
+# Function to display the dropdown populated with file names from a directory
+def show_dropdown_from_directory(directory, file_pattern_filter=None):
+    global selected_file 
+    selected_file = None  # Local variable to store selected file
+
+    def on_submit():
+        global selected_file
+        selected_value = combo.get()  # Get the selected file name from the dropdown
+        if selected_value:
+            selected_file = os.path.join(directory, selected_value)
+        else:
+            selected_file = None
+        top.quit()  # Stop the Tkinter event loop
+
+    def on_cancel():
+        global selected_file
+        selected_file = None
+        top.quit()  # Stop the Tkinter event loop
+
+    # Validate directory existence
+    if not os.path.isdir(directory):
+        messagebox.showerror("Error", "Invalid directory")
+        return None
+
+    # Get the list of matching files
+    files = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+    if file_pattern_filter:
+        files = [f for f in files if fnmatch.fnmatch(f, file_pattern_filter)]
+
+    if not files:
+        messagebox.showerror("Error", f"No files found matching '{file_pattern_filter}' in '{directory}'.")
+        return None
+
+    # Create the top-level window
+    top = tk.Toplevel()
+    top.title(f"Select a File ({directory})")
+    top.geometry("600x300") 
+
+    tk.Label(top, text="Select a file:").pack(padx=20, pady=10)
+
+    # Create a dropdown (ComboBox)
+    combo = tk.StringVar()
+    dropdown = tk.OptionMenu(top, combo, *files)
+    dropdown.pack(padx=20, pady=10)
+    combo.set(files[0])  # Default to first file
+
+    # Add buttons
+    tk.Button(top, text="Submit", command=on_submit).pack(padx=20, pady=5)
+    tk.Button(top, text="Cancel", command=on_cancel).pack(padx=20, pady=5)
+
+    top.grab_set()  # Make modal
+    top.focus_set()
+
+    top.mainloop()  # Start event loop
+
+    top.destroy()  # Destroy window after loop ends
+    return selected_file  # Return selected file
+
+
+# # Directory containing the files (change this to your desired directory)
+# res = show_dropdown_from_directory(r'E:\_UNHCR\CODE\DATA','unifier_gb*.csv')
+# print(res, selected_file)
+
+
+def msgbox_yes_no(title="Confirmation", msg="Are you sure?"):
+    # Create a basic Tkinter window (it won't appear)
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
+
+    # Display a Yes/No prompt
+    return messagebox.askyesno(title=title, message=msg)
 
 
 def config_log_handler(handler, level, formatter, logger):
@@ -418,7 +495,7 @@ def concat_csv_files(input_file, output_file, append=True):
         os.rename(file, new_name)
 
 
-def docker_running(url="http://localhost:3000"):
+def prospect_running(url="http://localhost:3000"):
     """
     Check if the docker container is running by sending a GET request to the server URL.
 
@@ -434,7 +511,7 @@ def docker_running(url="http://localhost:3000"):
     """
     
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=(2, 5))
         if response.status_code > 205:
             logging.info(f"Server at {url} responded with status code: {response.status_code}")
             return False

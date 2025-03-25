@@ -26,6 +26,7 @@ Initialization:
     The env_cmdline_parser function allows specifying a different .env file via command-line arguments.
 """
 
+from datetime import datetime
 from dotenv import find_dotenv, load_dotenv
 import importlib
 import logging
@@ -562,20 +563,96 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
 
     return tuple(loaded_modules)
 
+
+def add_xlsx_dt(path, dt=datetime.now().date().isoformat()):
+    return path.replace(
+    ".xlsx", f"_{dt}.xlsx"
+)
+def add_csv_dt(path, dt=datetime.now().date().isoformat()):
+    return path.replace(
+    ".csv", f"_{dt}.csv"
+)
+
+# Eyedro GB constants
+"""
+196	006-	Gateway      emv2	5VDC
+6	803-	GateWay      emv5	5VDC
+540	009-	GEN 4        emv2	5VDC
+17	B12-	GEN 5        emv5	6VAC
+2	B14-	GEN 5        emv5   6VAC  Ethernet
+1	918-	Inline       ilmv1	230 - 120 VAC
+
+"""
+GB_SN_COLS = ['gb_serial', 'site_label', 'epoch_utc', 'status']
+GB_GATEWAY_PREFIX = ('006-', '803-')
+
 if is_running_on_azure() or is_wsl():
     TOP20_CSV = os.path.expanduser(r"~/code/DATA/gaps/new_top_20.csv")
-    GAPS_CSV = os.path.expanduser(r"~/code/DATA/gaps/gaps.csv")
+    GAPS_CSV_PATH = os.path.expanduser(r"~/code/DATA/gaps/gaps.csv")
     GTB_GAPS_EXCEL = os.path.expanduser(r"~/code/DATA/gaps/gtb_gaps.xlsx")
-    ALL_API_GBS_CSV = os.path.expanduser(r"~/code/DATA/all_api_gbs.csv")
-    UNIFIER_GB_CSV = os.path.expanduser(r"~/code/DATA/unifier_gb.csv")
-    GB_MERGED_EXCEL = os.path.expanduser(r"~/code/DATA/gaps/merged.xlsx")
+    ALL_API_GBS_CSV_PATH = os.path.expanduser(r"~/code/DATA/all_api_gbs.csv")
+    UNIFIER_CSV = os.path.expanduser(r"~/code/DATA/unifier.csv")
+    GB_MERGED_EXCEL_PATH = os.path.expanduser(r"~/code/DATA/gaps/merged.xlsx")
     GB_GAPS_DATA_DIR = os.path.expanduser(r'~code\DATA\gaps\gap_csv')
+    GB_GAPS_CSV= os.path.expanduser(r'~code\DATA\gaps\eyedro_data_gaps.csv')
+    TOP20_ONEDRIVE_PATH =  os.path.expanduser(r'~/code\DATA')
+    DATA_DIR_PATH =  os.path.expanduser(r'~/code\DATA')
 else:
+    DATA_DIR_PATH = r"E:\_UNHCR\CODE\DATA"
     TOP20_CSV = r"E:\_UNHCR\CODE\DATA\gaps\new_top_20.csv"
-    GAPS_CSV = r"E:\_UNHCR\CODE\DATA\gaps\gaps.csv"
+    GAPS_CSV_PATH = r"E:\_UNHCR\CODE\DATA\gaps\gaps.csv"
     GTB_GAPS_EXCEL = r"E:\_UNHCR\CODE\DATA\gaps\gtb_gaps.xlsx"
-    ALL_API_GBS_CSV = r"E:\_UNHCR\CODE\DATA\all_api_gbs.csv"
-    UNIFIER_GB_CSV = r"E:\_UNHCR\CODE\DATA\unifier_gb.csv"
-    GB_MERGED_EXCEL = r"E:\_UNHCR\CODE\DATA\gaps\gb_merged_.xlsx"
+    ALL_API_GBS_CSV_PATH = r"E:\_UNHCR\CODE\DATA\all_api_gbs.csv"
+    UNIFIER_CSV = r"E:\_UNHCR\CODE\DATA\unifier.csv"
+    GB_MERGED_EXCEL_PATH = r"E:\_UNHCR\CODE\DATA\gaps\gb_merged_.xlsx"
     GB_GAPS_DATA_DIR = r'E:\_UNHCR\CODE\DATA\gaps\gap_csv'
-GB_GAPS_TABLE = "eyedro.gb_gaps"
+    GB_GAPS_CSV= r'E:\_UNHCR\CODE\DATA\gaps\eyedro_data_gaps.csv'
+    TOP20_ONEDRIVE_PATH = r"E:\UNHCR\OneDrive - UNHCR\Green Data Team\07 Greenbox Management\Green Box - TOP 20 Countries\New Top 20.xlsx"
+
+GB_GAPS_TABLE = "eyedro.gb_1min_gaps"
+
+SQL_GB_GAPS_DELETE = f"""
+        DELETE FROM {GB_GAPS_TABLE} t1
+        USING {GB_GAPS_TABLE} t2
+        WHERE 
+            t1.hypertable_name = t2.hypertable_name
+            AND t1.epoch_secs = t2.epoch_secs
+            AND t1.prev_epoch = t2.prev_epoch
+            AND t1.diff_seconds = t2.diff_seconds
+            AND t1.days = t2.days
+            AND t1.deleted = TRUE  -- Only delete where deleted is TRUE
+            AND t2.deleted = FALSE;  -- Keep where deleted is FALSE;
+            update {GB_GAPS_TABLE} set deleted = TRUE;
+            select count(*) from {GB_GAPS_TABLE};
+        """
+SQL_GB_GAPS_TABLE = f"""
+        CREATE TABLE IF NOT EXISTS {GB_GAPS_TABLE} (
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ DEFAULT now(),
+            hypertable_name TEXT,
+            epoch_secs BIGINT,
+            prev_epoch BIGINT,
+            diff_seconds INT,
+            days varchar(10),
+            start_ts TIMESTAMPTZ,
+            end_ts TIMESTAMPTZ,
+            deleted boolean DEFAULT false,
+            CONSTRAINT gb_gaps_epoch_secs_prev_epoch_key UNIQUE (hypertable_name, epoch_secs, prev_epoch, deleted)
+        );
+        CREATE OR REPLACE FUNCTION {GB_GAPS_TABLE}()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.updated_at = now();
+            NEW.start_ts = to_timestamp(NEW.prev_epoch::BIGINT);
+            NEW.end_ts = to_timestamp(NEW.epoch_secs::BIGINT);
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        CREATE TRIGGER trigger_{GB_GAPS_TABLE.replace("eyedro.", "_")}
+        BEFORE INSERT OR UPDATE ON {GB_GAPS_TABLE}
+        FOR EACH ROW
+        EXECUTE FUNCTION {GB_GAPS_TABLE}();
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_name = '{GB_GAPS_TABLE}';
+    """
