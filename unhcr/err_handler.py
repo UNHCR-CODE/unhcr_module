@@ -67,11 +67,14 @@ def parse_json(func, msg=None):
     log_err(err, caller_filename, caller_function, caller_lineno)
     return None, err
 
+
 def err_details(e):
     tb_lines = traceback.format_exc().split("\n")[:20]  # Always capture first 20 lines of the traceback
     tb_err = f"\nTRACE:" + "\n".join(tb_lines)
     try:
         raise e
+    except psycopg2.IntegrityError as e:
+        err = f"Integrity error: {e}"
     except psycopg2.OperationalError as e:
         err = f"Database connection error: {e}"
     except psycopg2.DatabaseError as e:
@@ -127,4 +130,3 @@ def error_wrapper(func,  msg=None):
         return res, None
     except Exception as e:
         return None, err_details(e)
-

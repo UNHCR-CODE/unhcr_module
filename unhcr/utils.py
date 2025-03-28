@@ -511,7 +511,7 @@ def prospect_running(url="http://localhost:3000"):
     """
     
     try:
-        response = requests.get(url, timeout=(2, 5))
+        response = requests.get(url, timeout=(5, 5))
         if response.status_code > 205:
             logging.info(f"Server at {url} responded with status code: {response.status_code}")
             return False

@@ -84,7 +84,7 @@ prospect_engine = None
 
 
 # Create a connection pool
-def set_db_engine(connection_string):
+def set_db_engine(connection_string, iso=False):
     global default_engine
     global prospect_engine
     """
@@ -100,16 +100,21 @@ def set_db_engine(connection_string):
     :param connection_string: A DB connection string, e.g. DB://user:pass@host/db
     :return: A SQLAlchemy engine
     """
+    if iso:
+        isolation_level="AUTOCOMMIT"
+    else:
+        isolation_level="SERIALIZABLE"
     return create_engine(
         connection_string,
         pool_size=const.SQLALCHEMY_POOL_SIZE,
         pool_timeout=const.SQLALCHEMY_POOL_TIMEOUT,
         pool_recycle=const.SQLALCHEMY_POOL_RECYCLE,
         max_overflow=const.SQLALCHEMY_MAX_OVERFLOW,
+        #isolation_level=isolation_level
     )
 
 
-def set_db_engine_by_name(ename, local=False):
+def set_db_engine_by_name(ename, local=False, iso=False):
     """
     Sets the database engine by name and configures connection strings accordingly.
 
@@ -139,7 +144,7 @@ def set_db_engine_by_name(ename, local=False):
             "AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR", "zzzzz"
         )
         const.LEONICS_RAW_TABLE = os.getenv("LEONICS_RAW_TABLE", "qqqqq")
-    return set_db_engine(const.TAKUM_RAW_CONN_STR), const.LEONICS_RAW_TABLE
+    return set_db_engine(const.TAKUM_RAW_CONN_STR, iso=iso), const.LEONICS_RAW_TABLE
 
 
 # @contextmanager
@@ -836,17 +841,17 @@ def update_takum_raw_db(token, start_ts):
 local_defaultdb_engine = None
 azure_defaultdb_engine = None
 
-def set_local_defaultdb_engine():
+def set_local_defaultdb_engine(iso=False):
     global local_defaultdb_engine
     if local_defaultdb_engine is None:
-        local_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=True)
+        local_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=True, iso=iso)
     return local_defaultdb_engine
 
 
-def set_azure_defaultdb_engine():
+def set_azure_defaultdb_engine(iso=False):
     global azure_defaultdb_engine
     if azure_defaultdb_engine is None:
-        azure_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=False)
+        azure_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=False, iso=iso)
     return azure_defaultdb_engine
 
 set_local_defaultdb_engine()
@@ -912,7 +917,7 @@ def get_gb_epoch(serial_num, engine, max=True):
     return epoch, None
 
 
-def set_db_engines():
+def set_db_engines(iso=False):
     """
     Set the database engines based on the environment.
 
@@ -926,9 +931,9 @@ def set_db_engines():
 
     engines = []
     if const.is_running_on_azure():
-        engines = [set_local_defaultdb_engine()]
+        engines = [set_local_defaultdb_engine(iso=iso)]
     else:
-        engines = [set_azure_defaultdb_engine()]
+        engines = [set_azure_defaultdb_engine(iso=iso)]
         if utils.prospect_running():
-            engines.append(set_local_defaultdb_engine())
+            engines.append(set_local_defaultdb_engine(iso=iso))
     return engines

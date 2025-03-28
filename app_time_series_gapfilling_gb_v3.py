@@ -20,17 +20,17 @@ from unhcr import utils
 from unhcr import constants as const
 from unhcr import app_utils
 
-run_dt = datetime.now().date()
-FILTERED_GB_SN_PATH=const.add_csv_dt(const.ALL_API_GBS_CSV_PATH, run_dt.isoformat())
-filtered_gb_sn_df = pd.read_csv(FILTERED_GB_SN_PATH)
-filtered_gb_sn_df['gb_serial'] = filtered_gb_sn_df['gb_serial'].str.replace('-', '', regex=True)
+# run_dt = datetime.now().date()
+# FILTERED_GB_SN_PATH=const.add_csv_dt(const.ALL_API_GBS_CSV_PATH, run_dt.isoformat())
+# filtered_gb_sn_df = pd.read_csv(FILTERED_GB_SN_PATH)
+# filtered_gb_sn_df['gb_serial'] = filtered_gb_sn_df['gb_serial'].str.replace('-', '', regex=True)
 
-arr = filtered_gb_sn_df[['gb_serial','epoch_utc']].copy()
-arr['epoch_utc'] = pd.to_numeric(arr['epoch_utc'], errors='coerce').fillna(-1).astype(np.int32)
+# arr = filtered_gb_sn_df[['gb_serial','epoch_utc']].copy()
+# arr['epoch_utc'] = pd.to_numeric(arr['epoch_utc'], errors='coerce').fillna(-1).astype(np.int32)
 
-arr = arr.values.tolist()
+# arr = arr.values.tolist()
 
-pass
+# pass
 
 # OPTIONAL: set your own environment
 ##ef = const.load_env(r'E:\_UNHCR\CODE\unhcr_module\.env')
@@ -73,6 +73,7 @@ def replace_outliers_std(df, column='wh', threshold=3):
     
     return result
 
+
 # Method 2: Using IQR (Interquartile Range)
 def replace_outliers_iqr(df, column='wh', threshold=1.5):
     """Replace outliers based on IQR with the median"""
@@ -92,6 +93,7 @@ def replace_outliers_iqr(df, column='wh', threshold=1.5):
     result.loc[outliers, column] = df[column].median()
     
     return result
+
 
 # Method 3: Using rolling statistics (best for time series)
 def replace_outliers_rolling(df, column='wh', window=10, threshold=3):
@@ -116,6 +118,7 @@ def replace_outliers_rolling(df, column='wh', window=10, threshold=3):
     result.loc[outliers, column] = rolling_median[outliers]
     
     return result
+
 
 # Method 4: Using interpolation (maintains time series continuity)
 def replace_outliers_interpolate(df, column='wh', window=10, threshold=3):
@@ -1392,8 +1395,8 @@ def get_gb_gaps(gb_sn_list=gp_fill_sn_list, data_dir=const.GB_GAPS_DATA_DIR, run
 #     ~all_gb_api_sn_df[0]["gb_serial"].str.startswith(const.GB_GATEWAY_PREFIX)
 # ]
 
-FILTERED_GB_SN_PATH=const.add_csv_dt(const.ALL_API_GBS_CSV_PATH, run_dt.isoformat())
-filtered_gb_sn_df = pd.read_csv(FILTERED_GB_SN_PATH)
-arr = (filtered_gb_sn_df[['gb_serial','epoch_utc']].values.astype(np.int32)).tolist()
+# FILTERED_GB_SN_PATH=const.add_csv_dt(const.ALL_API_GBS_CSV_PATH, run_dt.isoformat())
+# filtered_gb_sn_df = pd.read_csv(FILTERED_GB_SN_PATH)
+# arr = (filtered_gb_sn_df[['gb_serial','epoch_utc']].values.astype(np.int32)).tolist()
 
 pass
