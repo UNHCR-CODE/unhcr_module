@@ -44,9 +44,11 @@ mods = [
     ["db", "db"],
 ]
 
-res = app_utils.app_init(mods, "unhcr.update_all.log", "0.4.7", level="INFO", override=True)
+res = app_utils.app_init(mods, "unhcr.gap_filling.log", "0.4.7", level="INFO", override=True)
 if const.LOCAL:
-    app_utils, const, db = res
+    logger,app_utils, const, db = res
+else:
+    logger = res
 
 engines = db.set_db_engines()
 
@@ -991,7 +993,7 @@ def update_gaps_table(tn, db_eng):
     """, db_eng)
 
     if err:
-        logging.error(err)
+        logger.error(err)
         return None, err
 
     gaps = []
@@ -1003,7 +1005,7 @@ def update_gaps_table(tn, db_eng):
             ON CONFLICT (hypertable_name, epoch_secs, prev_epoch, deleted) DO NOTHING RETURNING 1;
         """, db_eng)
         if err: 
-            logging.error(err)
+            logger.error(err)
             return None, err
         sn = tn[0][3:]
         ts_from = datetime.fromtimestamp(row[1], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
@@ -1014,7 +1016,7 @@ def update_gaps_table(tn, db_eng):
     return gaps, None
 
 
-def concurrent_update_gaps(local=True, csv_path=None, run_dt=datetime.now().date()):
+def concurrent_update_gaps(local=True, csv_path=None, run_dt=datetime.now().date(), force=False):
     """
     Concurrently update gaps table for all GB tables.
     
@@ -1029,7 +1031,7 @@ def concurrent_update_gaps(local=True, csv_path=None, run_dt=datetime.now().date
         A pandas DataFrame containing the gaps data, or None if there is an error.
         An error message if there is an error.
     """
-    if csv_path and os.path.exists(csv_path):
+    if not force and csv_path and os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
         return df, None
 
@@ -1043,27 +1045,27 @@ def concurrent_update_gaps(local=True, csv_path=None, run_dt=datetime.now().date
     if err:
         res, err = db.sql_execute(const.SQL_GB_GAPS_TABLE, eng)
         if err:
-            logging.error(f'{sql} ERROR: {err}')
+            logger.error(f'{sql} ERROR: {err}')
             return None, err 
     else:
         # soft delete existing gaps if not done today
         sql = f'select min(updated_at) from {const.GB_GAPS_TABLE} where deleted is true;'
         res, err = db.sql_execute(sql, eng)
         if err:
-            logging.error(f'{sql} ERROR: {err}')
+            logger.error(f'{sql} ERROR: {err}')
             return None, err
         if res[0][0] is None or res[0][0].date() < run_dt:
             sql = f'{const.SQL_GB_GAPS_DELETE}'
             res, err = db.sql_execute(sql, eng)
             if err:
-                logging.error(f'{sql} ERROR: {err}')
+                logger.error(f'{sql} ERROR: {err}')
                 return None, err
 
     # Fetch hypertable names
     sql = """SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_name LIKE 'gb_%' ORDER BY hypertable_name;"""
     gb_tn_list, err = db.sql_execute(sql, eng)
     if err:
-        logging.error(err)
+        logger.error(err)
         return None, err
 
     # set chunks from gb table names list
@@ -1087,8 +1089,8 @@ def concurrent_update_gaps(local=True, csv_path=None, run_dt=datetime.now().date
 
 #!!!! run to update eyedro.gb_gaps table
 # res = concurrent_update_gaps(local=True)
-# logging.debug(res)
-# pass
+# logger.debug(res)
+pass
 #!!!! run to update eyedro.gb_gaps table
 
 #!!!! gp_fill_sn_list manually generated TODO: make it automatic

@@ -17,9 +17,10 @@ from unhcr import err_handler
 
 run_dt = datetime.now().date()
 
-mods = [["constants", "const"],["db", "db"],["err_handler", "err_handler"]]
+mods = const.import_local_libs([["constants", "const"],["db", "db"],["err_handler", "err_handler"]])
+logger, *rest = mods
 if const.LOCAL:  # testing with local python files
-    const, db, err_handler = const.import_local_libs(mods=mods)
+    logger, const, db, err_handler = mods
 
 engines = db.set_db_engines()
 
@@ -133,7 +134,7 @@ def parse_user_info_as_df(user_info_data):
         final_data.append(row)
 
     # Optionally: Get the count of final rows
-    logging.debug(f"Final row count: {len(final_data)}")
+    logger.debug(f"Final row count: {len(final_data)}")
     # Convert merged data to a pandas DataFrame
     final_df = pd.DataFrame(final_data, columns=const.GB_SN_COLS)
 
@@ -154,14 +155,14 @@ def get_user_info_as_df():
     user_info_data, err = get_gb_user_info_data()
     if err or len(user_info_data["Errors"]) != 0:
         err_str = f"app_gb_serial_nums: Failed to get user info data ERROR: {err}  {user_info_data['Errors']}"
-        logging.error(err_str)
+        logger.error(err_str)
         return None, err_str
     all_serials_df, err = err_handler.error_wrapper(
         lambda: parse_user_info_as_df(user_info_data)
     )
     if err:
         err_str = f"app_gb_serial_nums: Failed to parse user info data ERROR: {err}"
-        logging.error(err_str)
+        logger.error(err_str)
         return None, err_str
     return all_serials_df, None
 
@@ -305,11 +306,11 @@ def create_tables(serials, engine):
         return 'All good Houston', None
     except psycopg2.DatabaseError as e:
         conn.rollback()  # Rollback on failure
-        logging.error(f"Database error during table creation: {e}")
+        logger.error(f"Database error during table creation: {e}")
         err = e
     except Exception as e:
         conn.rollback()  # Rollback on any other failure
-        logging.error(f"Unexpected error: {e}")
+        logger.error(f"Unexpected error: {e}")
         err = e
     finally:
         conn.close()  # ✅ Always close the connection
@@ -745,9 +746,9 @@ def create_gb_gaps_table(eng):
         res, err = db.sql_execute(const.SQL_GB_GAPS_TABLE, eng)
         if err:
             print(const.SQL_GB_GAPS_TABLE)
-            logging.error(err)
+            logger.error(err)
             return None, err
-    logging.debug(res)
+    logger.debug(res)
 #!!!!! save greening the blue 2024 spreadsheet & merged spreadsheet
 # gtb_excel_path = r'E:\UNHCR\OneDrive - UNHCR\Energy Team\Concept development\AZURE DATA\Greening the Blue\20240319_2024_GB_Data_v5.xlsx'
 # save_to_postgres(engines[1], gtb_excel_path, prefix = '')

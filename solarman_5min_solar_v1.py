@@ -27,7 +27,7 @@ Data processing:
     
 Error handling: 
     The file handles errors that may occur during the processing of data, such as logging errors and 
-    exiting with an error code. The error messages are logged using the logging.error function. 
+    exiting with an error code. The error messages are logged using the logger.error function. 
 """
 
 from decimal import Decimal
@@ -50,8 +50,7 @@ from unhcr import db
 from unhcr import nigeria_sm_fuel as sm_fuel
 from unhcr import utils
 
-if const.LOCAL:  # testing with local python files
-    const, api_solarman, db, sm_fuel, utils = const.import_local_libs(
+mods = const.import_local_libs(
         # mpath=const.MOD_PATH,
         mods=[
             ["constants", "const"],
@@ -61,14 +60,17 @@ if const.LOCAL:  # testing with local python files
             ["utils", "utils"],
         ]
     )
+logger, *rest = mods
+if const.LOCAL:  # testing with local python files
+    logger, const, api_solarman, db, sm_fuel, utils = mods
 
 utils.log_setup(level="INFO", log_file="unhcr.solar_5min.log", override=True)
-logging.info(
-    f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}"
+logger.info(
+    f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logger.getLevelName(logger.getLogger().getEffectiveLevel())}"
 )
 
 if not utils.is_version_greater_or_equal("0.4.7"):
-    logging.error(
+    logger.error(
         "This version of the script requires at least version 0.4.7 of the unhcr module."
     )
     exit(47)
@@ -95,7 +97,7 @@ for engine in engines:
 
         ts, err = db.get_fuel_max_ts(site, engine)
         if err:
-            logging.error(err)
+            logger.error(err)
             continue
         site1, table, fn, label = utils.extract_data(api_solarman.INVERTERS, site)
 
@@ -139,15 +141,15 @@ for engine in engines:
             df_filtered["Time"] = df_filtered["Time"].dt.strftime("%Y-%m-%dT%H:%M:%S")
 
             df_filtered.to_csv("combined_sorted_filtered.csv", index=False)
-            logging.debug(
+            logger.debug(
                 f"{len(df_filtered)}  {len(combined_df)}  ✅ Combined and sorted CSV saved as 'combined_sorted_filtered.csv'."
             )
         else:
-            logging.warning("⚠️ No matching data found in any CSV files.")
+            logger.warning("⚠️ No matching data found in any CSV files.")
             continue
 
         if df_filtered.empty:
-            logging.warning(f"⚠️ {site} No new data found.")
+            logger.warning(f"⚠️ {site} No new data found.")
             continue
 
         liters, sm_data = sm_fuel.extract_csv_data_new(
@@ -242,4 +244,4 @@ for engine in engines:
 
         res, err = db.update_fuel_data(engine, merged_hourly_sums, table, site)
         if err:
-            logging.error(err.message[:100])
+            logger.error(err.message[:100])

@@ -25,8 +25,12 @@ import logging
 
 from unhcr import constants as const
 
+mods = const.import_local_libs(mods=[["constants", "const"]])
+logger, *rest = mods
 if const.LOCAL:  # testing with local python files
-    const, *rest = const.import_local_libs(mods=[["constants", "const"]])
+    logger, const = mods
+else:
+    logger = mods
 
 # from unhcr import constants as const
 
@@ -51,8 +55,8 @@ def list_files_in_folder(bucket_name, folder_name):
         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=folder_name)
         if "Contents" in response:
             for item in response["Contents"]:
-                logging.info(f"Item: {item['Key']}, Size: {item['Size']} bytes")
+                logger.info(f"Item: {item['Key']}, Size: {item['Size']} bytes")
         else:
-            logging.info(f"No files found in folder '{folder_name}'.")
+            logger.info(f"No files found in folder '{folder_name}'.")
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logger.error(f"Error: {e}")

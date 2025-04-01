@@ -28,15 +28,16 @@ from unhcr import db
 ## print(ef)
 # OPTIONAL: set your own environment
 
+mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"]])
+logger, *rest = mods
 if const.LOCAL: # testing with local python files
-    mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"]])
-    utils, const, db, *rest = mods
+    logger, utils, const, db = mods
 
 utils.log_setup(level="INFO", log_file="unhcr.update_all.log", override=True)
-logging.info(f"PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
+logger.info(f"PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
 
 if not utils.is_version_greater_or_equal('0.4.7'):
-    logging.error(
+    logger.error(
         "This version of the script requires at least version 0.4.6 of the unhcr module."
     )
     exit(47)

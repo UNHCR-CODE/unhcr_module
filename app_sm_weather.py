@@ -15,7 +15,9 @@ mods = [
 
 res = app_utils.app_init(mods, "unhcr.sm_weather.log", "0.4.6", level="INFO", override=True)
 if const.LOCAL:
-    app_utils, const, db, api_solarman = res
+    logger,app_utils, const, db, api_solarman = res
+else:
+    logger = res
 
 engines = db.set_db_engines()
 
@@ -26,7 +28,7 @@ for engine in engines:
         device = api_solarman.WEATHER[key]
         epoch, err = db.get_sm_weather_max_epoch(device["deviceId"], engine)
         if err:
-            logging.error(err)
+            logger.error(err)
             continue
         epochs.append(epoch)
     if not epochs:
@@ -48,10 +50,10 @@ for engine in engines:
                 continue
             res, err = api_solarman.update_weather_db(df, epoch, engine)
             if err:
-                logging.error(f"sm_weather update_weather_db (next site) ERROR: {err}")
+                logger.error(f"sm_weather update_weather_db (next site) ERROR: {err}")
                 break
 
-            logging.info(f"sm_weather SITE: {site} Date: {date_str} Rows: {res}")
+            logger.info(f"sm_weather SITE: {site} Date: {date_str} Rows: {res}")
             date_obj = date_obj + timedelta(days=1)
             date_str = date_obj.strftime("%Y-%m-%d")
 

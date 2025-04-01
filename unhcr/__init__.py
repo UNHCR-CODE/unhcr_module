@@ -10,6 +10,7 @@ from unhcr import api_solarman
 from unhcr import err_handler
 from unhcr import app_utils
 from unhcr import gb_eyedro
+from unhcr import models
 
 ##############################
 # Hey there - I've reviewed your changes - here's some feedback:

@@ -501,6 +501,7 @@ if res is None:
     exit(999)
 
 MODULES = [
+    ["models", "models"],
     ["err_handler", "err_handler"],
     ["app_utils", "app_utils"],
     ["utils", "utils"],
@@ -514,29 +515,37 @@ MODULES = [
 ]
 
 
-def import_local_libs(mpath=MOD_PATH, mods=MODULES):
+def import_local_libs(mods=MODULES, mpath=MOD_PATH,  logger=None):
     """
     Dynamically imports local modules from the specified local directory, allowing their functions and variables to be accessed globally by assigning them to the globals() dictionary.
 
     Parameters
     ----------
+    mods : list of lists, optional
+        A list of lists where each inner list contains two strings: the module's file name (without '.py') and the name to assign the loaded module in globals().
     mpath : str, optional
         The directory path where the modules are located, by default MOD_PATH.
-    mods : list of lists
-        A list of lists where each inner list contains two strings: the module's file name (without '.py') and the name to assign the loaded module in globals().
+    logger : logging.Logger, optional
+        A logger object to use for logging errors during module loading, by default None (which will create a logger with the name "import_local_libs").
 
     Returns
     -------
-    list
-        A list of loaded modules.
+    tuple
+        A tuple where the first element is the logger used and the second element is a list of loaded modules.
 
     Notes
     -----
     This function dynamically imports modules from the specified local directory, allowing their functions and variables to be accessed globally by assigning them to the globals() dictionary.
     """
     loaded_modules = []
+    if not logger:
+        logger = utils.log_setup()
+    loaded_modules.append(logger)
+
     for mod in mods:
         module_name, global_name = mod
+        if module_name == 'models':
+            pass
         if module_name in sys.modules:
             # Use the already loaded module
             loaded_modules.append(sys.modules[module_name])
@@ -607,7 +616,7 @@ else:
     GB_MERGED_EXCEL_PATH = r"E:\_UNHCR\CODE\DATA\gaps\gb_merged_.xlsx"
     GB_GAPS_DATA_DIR = r'E:\_UNHCR\CODE\DATA\gaps\gap_csv'
     GB_GAPS_CSV= r'E:\_UNHCR\CODE\DATA\gaps\eyedro_data_gaps.csv'
-    TOP20_ONEDRIVE_PATH = r"E:\UNHCR\OneDrive - UNHCR\Green Data Team\07 Greenbox Management\Green Box - TOP 20 Countries\New Top 20.xlsx"
+    TOP20_ONEDRIVE_PATH = r"E:\UNHCR\OneDrive - UNHCR\Green Data Team\07 Greenbox Management\Green Box daily tracing sheet 2025.xlsx"
 
 GB_GAPS_TABLE = "eyedro.gb_1min_gaps"
 

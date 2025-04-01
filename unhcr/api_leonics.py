@@ -37,9 +37,10 @@ urllib3.disable_warnings(InsecureRequestWarning)
 from unhcr import constants as const
 from unhcr import err_handler
 
-mods = [["constants", "const"], ["err_handler", "err_handler"]]
+mods = const.import_local_libs([["constants", "const"], ["err_handler", "err_handler"]])
+logger, *rest = mods
 if const.LOCAL:  # testing with local python files
-    const, err_handler = const.import_local_libs(mods=mods)
+    logger, const, err_handler = mods
 
 
 def getAuthToken(dt=None):
@@ -60,7 +61,7 @@ def getAuthToken(dt=None):
     """
     if dt is None:
         dt = datetime.now().date()
-    logging.info(f"Getting auth token for date: {dt}")
+    logger.info(f"Getting auth token for date: {dt}")
     # TODO this is not hardcoded --- constants.py gets them from the environ
     payload = {
         "SystemCode": "LEONICS",
@@ -168,5 +169,5 @@ def getData(start, end, token=None):
         df = df.drop(columns=["A_DateServer", "A_TimeServer"])
         return df, None
     except Exception as e:
-        logging.error("Leonics getData ERROR:", e)
+        logger.error("Leonics getData ERROR:", e)
         return None, e

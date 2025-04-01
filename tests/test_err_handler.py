@@ -11,6 +11,7 @@ from unhcr import err_handler
 
 # Assuming the code with err_details and error_wrapper is already imported.
 
+
 @pytest.mark.parametrize("exception, expected_msg", [
     (psycopg2.OperationalError("Database connection error"), "Database connection error"),
     (psycopg2.DatabaseError("Database query error"), "Database query error"),

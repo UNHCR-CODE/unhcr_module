@@ -33,20 +33,27 @@ def app_init(mods, log_file, version, mpath=const.MOD_PATH, level="INFO", overri
     -----
     Exits the program with an error code if the current unhcr module version is less than the required version.
     """
+    logger = None
     try:
-        utils.log_setup(level=level, log_file=log_file, override=override)
-        logging.info(
-            f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}"
+        logger = utils.log_setup(level=level, log_file=log_file, override=override)
+    except Exception as e:
+        logger = logging.getLogger("app_utils")  # Ensure logger exists
+        logger.error(f"app_utils ERROR: {e}")
+        return (logger,)
+
+    try:
+        logger.info(
+            f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logger.getLevelName(logger.getLogger().getEffectiveLevel())}"
         )
 
         if not utils.is_version_greater_or_equal(version):
-            logging.error(
+            logger.error(
                 "This version of the script requires at least version 0.4.6 of the unhcr module."
             )
             exit(int(version.replace(".", "")))
 
         if const.LOCAL:  # testing with local python files
-            return const.import_local_libs(mpath=mpath, mods=mods)
+            return const.import_local_libs(mpath=mpath, mods=mods, logger=logger)
     except Exception as e:
-        logging.error(f"app_utils ERROR: {e}")
-    return None
+        logger.error(f"app_utils ERROR: {e}")
+    return (logger,)

@@ -61,7 +61,9 @@ mods = [
 
 res = app_utils.app_init(mods, "unhcr.update_all.log", "0.4.6", level="INFO", override=True)
 if const.LOCAL:
-    app_utils, const, utils, db, api_solarman = res
+    logger, app_utils, const, utils, db, api_solarman = res
+else:
+    logger = res
 
 engines = db.set_db_engines()
 

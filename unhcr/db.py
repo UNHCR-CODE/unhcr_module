@@ -69,8 +69,7 @@ from unhcr import utils
 from unhcr import api_prospect
 from unhcr import api_leonics
 
-if const.LOCAL:  # testing with local python files
-    const, utils, api_leonics, api_prospect = const.import_local_libs(
+mods = const.import_local_libs(
         mods=[
             ["constants", "const"],
             ["utils", "utils"],
@@ -78,13 +77,18 @@ if const.LOCAL:  # testing with local python files
             ["api_prospect", "api_prospect"],
         ]
     )
+logger, *rest = mods
+if const.LOCAL:  # testing with local python files
+    logger,const, utils, api_leonics, api_prospect = mods
+else:
+    logger = mods
 
 default_engine = None
 prospect_engine = None
 
 
 # Create a connection pool
-def set_db_engine(connection_string, iso=False):
+def set_db_engine(connection_string):
     global default_engine
     global prospect_engine
     """
@@ -100,10 +104,10 @@ def set_db_engine(connection_string, iso=False):
     :param connection_string: A DB connection string, e.g. DB://user:pass@host/db
     :return: A SQLAlchemy engine
     """
-    if iso:
-        isolation_level="AUTOCOMMIT"
-    else:
-        isolation_level="SERIALIZABLE"
+    # if iso:
+    #     isolation_level="AUTOCOMMIT"
+    # else:
+    #     isolation_level="SERIALIZABLE"
     return create_engine(
         connection_string,
         pool_size=const.SQLALCHEMY_POOL_SIZE,
@@ -114,7 +118,7 @@ def set_db_engine(connection_string, iso=False):
     )
 
 
-def set_db_engine_by_name(ename, local=False, iso=False):
+def set_db_engine_by_name(ename, local=False):
     """
     Sets the database engine by name and configures connection strings accordingly.
 
@@ -144,7 +148,7 @@ def set_db_engine_by_name(ename, local=False, iso=False):
             "AIVEN_TAKUM_LEONICS_API_RAW_CONN_STR", "zzzzz"
         )
         const.LEONICS_RAW_TABLE = os.getenv("LEONICS_RAW_TABLE", "qqqqq")
-    return set_db_engine(const.TAKUM_RAW_CONN_STR, iso=iso), const.LEONICS_RAW_TABLE
+    return set_db_engine(const.TAKUM_RAW_CONN_STR), const.LEONICS_RAW_TABLE
 
 
 # @contextmanager
@@ -177,17 +181,17 @@ def get_db_session(eng):
     except exc.SQLAlchemyError as db_error:
         session.rollback()
         error_msg = f"Database update failed: {str(db_error)}"
-        logging.error(error_msg)
+        logger.error(error_msg)
         raise
     except ValueError as val_error:
         session.rollback()
         error_msg = f"Data validation error: {str(val_error)}"
-        logging.error(error_msg)
+        logger.error(error_msg)
         raise
     except Exception as e:
         session.rollback()
         error_msg = f"Unexpected error: {str(e)}"
-        logging.error(error_msg)
+        logger.error(error_msg)
         raise
     finally:
         session.close()
@@ -211,7 +215,7 @@ def sql_execute(sql, engine=default_engine, data=None):
     #####with get_db_session(engine) as session:
     Session = sessionmaker(bind=engine)
     session = Session()
-
+    ######session.execute(text("SET search_path TO solarman;"))
     try:
         # Use SQLAlchemy's execute method
         result = session.execute(text(sql), params=data)
@@ -229,7 +233,7 @@ def sql_execute(sql, engine=default_engine, data=None):
     except exc.SQLAlchemyError as db_error:
         session.rollback()
         error_msg = f"Database update failed: {str(db_error)}"
-        logging.error(error_msg)
+        logger.error(error_msg)
         return False, {
             "error_type": type(db_error).__name__,
             "error_message": str(db_error),
@@ -239,7 +243,7 @@ def sql_execute(sql, engine=default_engine, data=None):
     except ValueError as val_error:
         session.rollback()
         error_msg = f"Data validation error: {str(val_error)}"
-        logging.error(error_msg)
+        logger.error(error_msg)
         return False, {
             "error_type": "ValidationError",
             "error_message": str(val_error),
@@ -249,7 +253,7 @@ def sql_execute(sql, engine=default_engine, data=None):
     except Exception as e:
         session.rollback()
         error_msg = f"Unexpected error: {str(e)}"
-        logging.error(error_msg)
+        logger.error(error_msg)
         return False, {
             "error_type": type(e).__name__,
             "error_message": str(e),
@@ -275,7 +279,7 @@ def get_db_max_date(engine=default_engine):
             val = dt[0][0][:-3]
         return datetime.strptime(val, "%Y-%m-%d %H:%M"), None
     except Exception as e:
-        logging.error(f"Can not get DB max timestanp   {e}")
+        logger.error(f"Can not get DB max timestanp   {e}")
         return None, e
 
 
@@ -379,9 +383,9 @@ def update_rows(max_dt, df, eng):
     #         # Execute the query with multiple bind parameters
     #         res = sql_execute(text(sql_query), param_list)
     #         if isinstance(res, str):
-    #             logging.error(f'ERROR update_leonics_db: {res}')
+    #             logger.error(f'ERROR update_leonics_db: {res}')
     #             return None, 'Error: query result is not a string'
-    #         logging.debug(f'ROWS UPDATED: {table_name}  {res.rowcount}')
+    #         logger.debug(f'ROWS UPDATED: {table_name}  {res.rowcount}')
     #         return res, None
     #     except Exception as e:
     #         print(f"Error occurred: {e}")
@@ -422,7 +426,7 @@ def update_rows(max_dt, df, eng):
     sql_query += sql_pred 
     res, err = sql_execute(sql_query, eng)
     assert err is None
-    logging.debug(f"ROWS UPDATED: {len(res)}")
+    logger.debug(f"ROWS UPDATED: {len(res)}")
     return res, None
 
 
@@ -486,7 +490,7 @@ def update_prospect(eng, start_ts=None, local=None):
         Various informational and error logs, including the status of API calls and any exceptions that occur.
     """
 
-    logging.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
+    logger.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
     try:
         start_ts = prospect_get_start_ts(local, start_ts)
         rows, err = sql_execute(
@@ -506,21 +510,21 @@ def update_prospect(eng, start_ts=None, local=None):
 
         res = api_prospect.api_in_prospect(df,local)
         if res is None:
-            logging.error("Prospect API failed")
+            logger.error("Prospect API failed")
             return None, '"Prospect API failed"'
-        logging.info(f"{res.status_code}:  {res.text}")
+        logger.info(f"{res.status_code}:  {res.text}")
 
         # Save the DataFrame to a CSV file
-        logger = logging.getLogger()
-        if logger.getEffectiveLevel() < logging.INFO:
+        logger = logger.getLogger()
+        if logger.getEffectiveLevel() < logger.INFO:
             sts = start_ts.replace(" ", "_").replace(":", "HM")
             df.to_csv(f"sys_pros_{sts}.csv", index=False)
 
-        logging.info("Data has been saved to 'sys_pros'")
+        logger.info("Data has been saved to 'sys_pros'")
         return res, None
 
     except Exception as e:
-        logging.error(f"PROSPECT Error occurred: {e}")
+        logger.error(f"PROSPECT Error occurred: {e}")
         return None, e
 
 
@@ -541,11 +545,11 @@ def backfill_prospect(start_ts=None, local=True):
         Exception: Logs any errors that occur during the prospect key retrieval process.
     """
 
-    logging.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
+    logger.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
     try:
         prospect_backfill_key(api_prospect.get_prospect_url_key, start_ts, local)
     except Exception as e:
-        logging.error(f"PROSPECT Error occurred: {e}")
+        logger.error(f"PROSPECT Error occurred: {e}")
 
 
 # WIP
@@ -581,7 +585,7 @@ def prospect_backfill_key(
         "Authorization": f"Bearer {key}",
     }
 
-    logging.info(f"\n\n{key}\n{url}\n{start_ts}")
+    logger.info(f"\n\n{key}\n{url}\n{start_ts}")
 
     rows, err = sql_execute(
         f"select * FROM {table_name} where DatetimeServer > '{start_ts}' order by DatetimeServer limit 1450",
@@ -600,23 +604,23 @@ def prospect_backfill_key(
 
     res = api_prospect.api_in_prospect(df, local)
     if res is None:
-        logging.error("Prospect API failed, exiting")
+        logger.error("Prospect API failed, exiting")
         exit()
-    logging.info(f"{res.status_code}:  {res.text}")
+    logger.info(f"{res.status_code}:  {res.text}")
 
     sts = start_ts.replace(" ", "_").replace(":", "HM")
     sts += str(local)
     df.to_csv(f"sys_pros_{sts}.csv", index=False)
 
     # Save the DataFrame to a CSV file
-    logger = logging.getLogger()
-    if logger.getEffectiveLevel() < logging.INFO:
+    logger = logger.getLogger()
+    if logger.getEffectiveLevel() < logger.INFO:
         sts = start_ts.replace(" ", "_").replace(":", "HM")
         sts += str(local)
         df.to_csv(f"sys_pros_{sts}.csv", index=False)
         # df.to_json(f'sys_pros_{sts}.json', index=False)
 
-    logging.info(f"Data has been saved to 'sys_pros'   LOCAL: {local}")
+    logger.info(f"Data has been saved to 'sys_pros'   LOCAL: {local}")
 
 
 def update_fuel_data(engine, merged_hourly_sums, table, site):
@@ -786,14 +790,14 @@ def update_takum_raw_db(token, start_ts):
     if start_ts is None:
         max_dt_azure, err = get_db_max_date(azure_defaultdb_engine)
         if err:
-            logging.error(f"get_db_max_date Error occurred: {err}")
+            logger.error(f"get_db_max_date Error occurred: {err}")
             exit(1)
         assert max_dt_azure is not None
 
         if local_defaultdb_engine is not None:
             max_dt_local, err = get_db_max_date(local_defaultdb_engine)
             if err:
-                logging.error(f"get_db_max_date1 Error occurred: {err}")
+                logger.error(f"get_db_max_date1 Error occurred: {err}")
                 exit(1)
             assert max_dt_local is not None
         else:
@@ -807,33 +811,33 @@ def update_takum_raw_db(token, start_ts):
     st, ed = set_date_range(max_dt_azure, num_days)
     df_azure, err = api_leonics.getData(start=st, end=ed, token=token)
     if err:
-        logging.error(f"api_leonics.getData Error occurred: {err}")
+        logger.error(f"api_leonics.getData Error occurred: {err}")
         exit(2)
     # Convert the 'datetime_column' to pandas datetime
     df_azure["DatetimeServer"] = pd.to_datetime(df_azure["DatetimeServer"])
     df_azure.columns = df_azure.columns.str.lower()
     res, err = update_leonics_db( max_dt_azure, df_azure, azure_defaultdb_engine)
     if err:
-        logging.error(f"update_leonics_db Error occurred: {err}")
+        logger.error(f"update_leonics_db Error occurred: {err}")
         exit(3)
     else:
-        logging.info(f"AZURE ROWS UPDATED:   {len(res)}")
+        logger.info(f"AZURE ROWS UPDATED:   {len(res)}")
 
     if max_dt_local is not None:
         st, ed = set_date_range(max_dt_local, num_days)
         df_leonics, err = api_leonics.getData(start=st, end=ed, token=token)
         if err:
-            logging.error(f"api_leonics.getData Error occurred: {err}")
+            logger.error(f"api_leonics.getData Error occurred: {err}")
             exit(2)
         # Convert the 'datetime_column' to pandas datetime
         df_leonics["DatetimeServer"] = pd.to_datetime(df_leonics["DatetimeServer"])
         df_leonics.columns = df_leonics.columns.str.lower()
         res, err = update_leonics_db(max_dt_local, df_leonics, local_defaultdb_engine)
         if err:
-            logging.error(f"update_leonics_db Error occurred: {err}")
+            logger.error(f"update_leonics_db Error occurred: {err}")
             exit(3)
         else:
-            logging.info(f"LOCAL ROWS UPDATED:  {len(res)}")
+            logger.info(f"LOCAL ROWS UPDATED:  {len(res)}")
 
     return start_ts
 
@@ -841,17 +845,17 @@ def update_takum_raw_db(token, start_ts):
 local_defaultdb_engine = None
 azure_defaultdb_engine = None
 
-def set_local_defaultdb_engine(iso=False):
+def set_local_defaultdb_engine():
     global local_defaultdb_engine
     if local_defaultdb_engine is None:
-        local_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=True, iso=iso)
+        local_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=True)
     return local_defaultdb_engine
 
 
-def set_azure_defaultdb_engine(iso=False):
+def set_azure_defaultdb_engine():
     global azure_defaultdb_engine
     if azure_defaultdb_engine is None:
-        azure_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=False, iso=iso)
+        azure_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=False)
     return azure_defaultdb_engine
 
 set_local_defaultdb_engine()
@@ -917,7 +921,7 @@ def get_gb_epoch(serial_num, engine, max=True):
     return epoch, None
 
 
-def set_db_engines(iso=False):
+def set_db_engines():
     """
     Set the database engines based on the environment.
 
@@ -931,9 +935,9 @@ def set_db_engines(iso=False):
 
     engines = []
     if const.is_running_on_azure():
-        engines = [set_local_defaultdb_engine(iso=iso)]
+        engines = [set_local_defaultdb_engine()]
     else:
-        engines = [set_azure_defaultdb_engine(iso=iso)]
+        engines = [set_azure_defaultdb_engine()]
         if utils.prospect_running():
-            engines.append(set_local_defaultdb_engine(iso=iso))
+            engines.append(set_local_defaultdb_engine())
     return engines

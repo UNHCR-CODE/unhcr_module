@@ -27,9 +27,10 @@ import requests
 
 from unhcr import constants as const
 
+mods = const.import_local_libs(mods=[["constants", "const"]])
+logger, *rest = mods
 if const.LOCAL:  # testing with local python files
-    const, *rest = const.import_local_libs(mods=[["constants", "const"]])
-
+    logger, const = mods
 
 def get_prospect_url_key(local=None, out=False):
     """
@@ -62,7 +63,7 @@ def get_prospect_url_key(local=None, out=False):
         if not out:
             key = const.AZURE_API_IN_KEY
 
-    logging.debug(
+    logger.debug(
         f"ZZZZZZZZZZZZZZZ\nlocal  {local}\n out {out}\nurl {url}\nZZZZZZZZZZZZZZ"
     )
     return url, key
@@ -248,7 +249,7 @@ def api_in_prospect(df, local=None):
         )
     # TODO more specific error trapping
     except Exception as e:
-        logging.error("api_in_prospect ERROR", e)
+        logger.error("api_in_prospect ERROR", e)
         return None
 
 
@@ -270,7 +271,7 @@ def get_prospect_last_data(response, key="datetimeserver"):
 
     j = json.loads(response.text)
     # print(json.dumps(j, indent=2))
-    # logging.info(f'\n\n{j['data'][0]}')
+    # logger.info(f'\n\n{j['data'][0]}')
     res = ""
     idd = ""
     try:
@@ -281,5 +282,5 @@ def get_prospect_last_data(response, key="datetimeserver"):
                 idd = d["external_id"]
                 res = d["custom"][key]
     except Exception as e:
-        logging.error(f"ERROR: get_prospect_last_data {e}")
+        logger.error(f"ERROR: get_prospect_last_data {e}")
     return res
