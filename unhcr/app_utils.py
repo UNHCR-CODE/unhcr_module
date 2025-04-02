@@ -43,7 +43,7 @@ def app_init(mods, log_file, version, mpath=const.MOD_PATH, level="INFO", overri
 
     try:
         logger.info(
-            f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logger.getLevelName(logger.getLogger().getEffectiveLevel())}"
+            f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logging.getLevelName(int(logger.level))}"
         )
 
         if not utils.is_version_greater_or_equal(version):

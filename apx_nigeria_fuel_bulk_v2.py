@@ -10,7 +10,6 @@
     The script is designed to be run periodically to keep the database up to date with the latest fuel data.
 """
 
-import logging
 import os
 import pandas as pd
 
@@ -22,21 +21,23 @@ import unhcr.constants as const
 # OPTIONAL: set your own environment
 
 import unhcr.db as db
-import unhcr.nigeria_sm_fuel as sm_fuel
+import unhcr.galooli_sm_fuel as sm_fuel
 import unhcr.utils as utils
 
-if const.LOCAL: # testing with local python files
-    const, db, sm_fuel, utils = const.import_local_libs(
+mods = const.import_local_libs(
         mods=[
             ["constants", "const"],
             ["db", "db"],
-            ["nigeria_sm_fuel", "sm_fuel"],
+            ["galooli_sm_fuel", "sm_fuel"],
             ["utils", "utils"],
         ]
     )
+logger, *rest = mods
+if const.LOCAL: # testing with local python files
+    logger, const, db, sm_fuel, utils = mods
 
 if not utils.is_version_greater_or_equal('0.4.7'):
-    logging.error(
+    logger.error(
         "This version of the script requires at least version 0.4.7 of the unhcr module."
     )
     exit(47)
@@ -57,16 +58,14 @@ fn = None
 site = None  ## Element in BULK --- set to None to do all sites
 table = None
 label = None
-dpath = r"D:\steve\Downloads" + "\\"
-spath = r"\NIGERIA_FUEL_BIOHENRY\data\bulk" + "\\"
+# TODO move to .env file
+dpath = r"E:\steve\Downloads" + "\\"
 
 # FALSE = add rows from Galooli downloaded file to local xlsx and save to DB
 # TRUE = save all rows from Galooli downloaded file to local temp csv file -- does not touch DB
-# TODO: commandline var
+# TODO: commandline var sometimes you want to rerun without combining the Galooli bulk fuel files ?????
 mashup = True
 #mashup = False
-
-append = False
 
 for idx in range(len(sm_fuel.BULK)):
 
@@ -77,7 +76,7 @@ for idx in range(len(sm_fuel.BULK)):
 
     if mashup:
         df = sm_fuel.concat_csv_files(dpath, fn, label)
-        logging.debug(f"concat_csv_files: {len(df)} rows")
+        logger.debug(f"concat_csv_files: {len(df)} rows")
         if len(df) == 0:
             continue
 
@@ -95,7 +94,7 @@ for idx in range(len(sm_fuel.BULK)):
     for engine in engines:
         res, err = db.update_bulk_fuel(engine, df, table)
         if res:
-            print(f"{site} {table} update_bulk_fuel DB rows:  {res.rowcount}")
+            print(f"{site} {table} update_bulk_fuel DB rows:  inserted/updated: {res[0][0]}/{res[0][1]}")
         if err:
             print(f"{site} {table}  update_bulk_fuel DB ERROR:  {err}")
     pass

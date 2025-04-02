@@ -643,6 +643,7 @@ def update_fuel_data(engine, merged_hourly_sums, table, site):
         None, None, None
     """
     sql = """
+    WITH insert_attempt AS (
         INSERT INTO fuel.TABLE(
             st_ts,
             end_ts,
@@ -660,12 +661,17 @@ def update_fuel_data(engine, merged_hourly_sums, table, site):
             delta1 = EXCLUDED.delta1,
             delta2 = EXCLUDED.delta2,
             kwh_l_dg1 = EXCLUDED.kwh_l_dg1,
-            kwh_l_dg2 = EXCLUDED.kwh_l_dg2;
+            kwh_l_dg2 = EXCLUDED.kwh_l_dg2
+        RETURNING xmax = 0 AS inserted
+    )
+    SELECT
+        COUNT(*) FILTER (WHERE inserted) AS inserted_count,
+        COUNT(*) FILTER (WHERE NOT inserted) AS updated_count
+    FROM insert_attempt;
         """.replace(
         "TABLE", table
     )
 
-    from sqlalchemy import create_engine
 
     merged_hourly_sums_notnull = merged_hourly_sums.where(
         pd.notnull(merged_hourly_sums), "null"
@@ -751,13 +757,20 @@ def update_bulk_fuel(engine, df, table):
         return None, "Nothing to update"
 
     sql = """
-    INSERT INTO fuel.TABLE ("Unit Name", "Time", "Event Name", "Value", liters_used, liter_bought)
-    VALUES
-    ON CONFLICT ("Unit Name", "Time", "Event Name")
-    DO UPDATE SET
-        "Value" = EXCLUDED."Value",
-        liters_used = EXCLUDED.liters_used,
-        liter_bought = EXCLUDED.liter_bought
+    WITH insert_attempt AS (
+        INSERT INTO fuel.TABLE ("Unit Name", "Time", "Event Name", "Value", liters_used, liter_bought)
+        VALUES
+        ON CONFLICT ("Unit Name", "Time", "Event Name")
+        DO UPDATE SET
+            "Value" = EXCLUDED."Value",
+            liters_used = EXCLUDED.liters_used,
+            liter_bought = EXCLUDED.liter_bought
+        RETURNING xmax = 0 AS inserted
+    )
+    SELECT
+        COUNT(*) FILTER (WHERE inserted) AS inserted_count,
+        COUNT(*) FILTER (WHERE NOT inserted) AS updated_count
+    FROM insert_attempt;
     """.replace(
         "TABLE", table
     )

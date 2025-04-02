@@ -509,7 +509,7 @@ MODULES = [
     ["db", "db"],
     ["api_leonics", "api_leonics"],
     ["api_prospect", "api_prospect"],
-    ["nigeria_sm_fuel", "sm_fuel"],
+    ["galooli_sm_fuel", "sm_fuel"],
     ["gb_eyedro", "gb_eyedro"],
     ["s3", "s3"],
 ]

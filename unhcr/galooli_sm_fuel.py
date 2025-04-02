@@ -123,7 +123,7 @@ BULK = [
 ]
 
 
-def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
+def solarman_api_historical(devices, year=2024, month=12, day=21, days=1):
     """
     Retrieves historical data from the Solarman API for the given site and period.
 
@@ -155,184 +155,180 @@ def solarman_api_historical(site="OGOJA", year=2024, month=12, day=21, days=1):
     sm_dt = datetime(year, month, day)
     url = f"{const.SM_URL}/device/v1.0/historical?language=en"
     res = []
+    divisor = len(devices)
     for ii in range(0, days):
         data = []
         first = True
-        for item in INVERTERS:
-            if site not in item:
-                continue
-            sm_devices = item[site]
-            x = -1
-            divisor = len(sm_devices)
-            for device in sm_devices:
-                x += 1
-                if x > 0:
-                    epoch_values = [item[0] for item in data]
-                    first = False
+        x = -1
+        for device in devices:
+            x += 1
+            if x > 0:
+                epoch_values = [item[0] for item in data]
+                first = False
 
-                last_epoch = None
-                logger.info(f'Device Serial Number: {device["deviceSn"]} Device ID: {device["deviceId"]}')
+            last_epoch = None
+            logger.info(f'Device Serial Number: {device}')
 
-                payload = json.dumps(
-                    {
-                        "deviceSn": device["deviceSn"],
-                        "deviceId": device["deviceId"],
-                        "startTime": yr + "-" + mm + "-" + dd,
-                        "endTime": "2997-10-26",
-                        "timeType": 1,
-                    }
-                )
-                headers = {
-                    "Content-Type": "application/json",
-                    "User-Agent": "UNHCR_STEVE",
-                    "Authorization": f"Bearer {const.SM_BIZ_ACCESS_TOKEN}",
+            payload = json.dumps(
+                {
+                    "deviceSn": device,
+                    #####"deviceId": device["deviceId"],
+                    "startTime": yr + "-" + mm + "-" + dd,
+                    "endTime": "2997-10-26",
+                    "timeType": 1,
                 }
+            )
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "UNHCR_STEVE",
+                "Authorization": f"Bearer {const.SM_BIZ_ACCESS_TOKEN}",
+            }
 
-                response = requests.request("POST", url, headers=headers, data=payload)
-                if response.status_code != 200:
-                    logger.error(f"BAD API RESPONSE ERROR: {response.status_code}   {response.text}")
-                    exit()
+            response = requests.request("POST", url, headers=headers, data=payload)
+            if response.status_code != 200:
+                logger.error(f"BAD API RESPONSE ERROR: {response.status_code}   {response.text}")
+                exit()
 
-                j = json.loads(response.text)
-                for item in j["paramDataList"]:
-                    e = round(int(item["collectTime"]) / 300) * 300
-                    e += 60 * 60  # add 1 hour for Africa
-                    if e == last_epoch:
-                        continue
-                    last_epoch = e
-                    info = {
-                        "deviceId": str(j["deviceId"]),
-                        "org_epoch": item["collectTime"],
-                        "epoch": e,  # item["collectTime"]
-                    }
-                    for d in item["dataList"]:
-                        if d["name"] == "System Time":
-                            dt = datetime.fromtimestamp(
-                                e, UTC
-                            )  # depriciated datetime.utcfromtimestamp(e).strftime('%Y-%m-%d %H:%M')
-                            info["ts"] = dt
+            j = json.loads(response.text)
+            for item in j["paramDataList"]:
+                e = round(int(item["collectTime"]) / 300) * 300
+                e += 60 * 60  # add 1 hour for Africa
+                if e == last_epoch:
+                    continue
+                last_epoch = e
+                info = {
+                    "deviceId": str(j["deviceId"]),
+                    "org_epoch": item["collectTime"],
+                    "epoch": e,  # item["collectTime"]
+                }
+                for d in item["dataList"]:
+                    if d["name"] == "System Time":
+                        dt = datetime.fromtimestamp(
+                            e, UTC
+                        )  # depriciated datetime.utcfromtimestamp(e).strftime('%Y-%m-%d %H:%M')
+                        info["ts"] = dt
 
-                        if d["name"] == "Load  Power L1":
-                            info["load_p1_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "Load  Power L2":
-                            info["load_p2_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "Load  Power L3":
-                            info["load_p3_w"] = utils.str_to_float_or_zero(d["value"])
-                        # TODO: this disappeared from 1 of the inverters
-                        # if d["name"] == "Battery Status":
-                        #     info["batt_status"] = str(d["value"])
-                        if d["name"] == "Battery Power":
-                            info["batt_pwr_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "SoC":
-                            info["batt_soc"] = str(d["value"])
-                        if d["name"] == "Total Charging Energy":
-                            info["batt_chg_ttl_kwh"] = utils.str_to_float_or_zero(
-                                d["value"]
-                            )
+                    if d["name"] == "Load  Power L1":
+                        info["load_p1_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "Load  Power L2":
+                        info["load_p2_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "Load  Power L3":
+                        info["load_p3_w"] = utils.str_to_float_or_zero(d["value"])
+                    # TODO: this disappeared from 1 of the inverters
+                    # if d["name"] == "Battery Status":
+                    #     info["batt_status"] = str(d["value"])
+                    if d["name"] == "Battery Power":
+                        info["batt_pwr_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "SoC":
+                        info["batt_soc"] = str(d["value"])
+                    if d["name"] == "Total Charging Energy":
+                        info["batt_chg_ttl_kwh"] = utils.str_to_float_or_zero(
+                            d["value"]
+                        )
 
-                        if d["name"] == "Gen Daily Run Time":
-                            info["gen_run_hrs"] = str(d["value"])
-                        if d["name"] == "Total Consumption Power":
-                            info["load_pwr_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "Generator Active Power":
-                            info["gen_pwr_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "Daily Production Generator":
-                            info["gen_produce_kwh"] = utils.str_to_float_or_zero(
-                                d["value"]
-                            )
+                    if d["name"] == "Gen Daily Run Time":
+                        info["gen_run_hrs"] = str(d["value"])
+                    if d["name"] == "Total Consumption Power":
+                        info["load_pwr_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "Generator Active Power":
+                        info["gen_pwr_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "Daily Production Generator":
+                        info["gen_produce_kwh"] = utils.str_to_float_or_zero(
+                            d["value"]
+                        )
 
-                        if d["name"] == "Total Solar Power":
-                            info["solar_ttl_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "Cumulative Production (Active)":
-                            info["prod_cumulative_kwh"] = utils.str_to_float_or_zero(
-                                d["value"]
-                            )
-                        if d["name"] == "Daily Production (Active)":
-                            info["prod_daily_kwh"] = utils.str_to_float_or_zero(
-                                d["value"]
-                            )
-                        if d["name"] == "DC Voltage PV1":
-                            info["pv1_v"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Voltage PV2":
-                            info["pv2_v"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Voltage PV3":
-                            info["pv3_v"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Voltage PV4":
-                            info["pv4_v"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Voltage PV5":
-                            info["pv5_v"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Voltage PV6":
-                            info["pv6_v"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Voltage PV7":
-                            info["pv7_v"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Voltage PV8":
-                            info["pv8_v"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Power PV1":
-                            info["pv1_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Power PV2":
-                            info["pv2_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Power PV3":
-                            info["pv3_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Power PV4":
-                            info["pv4_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Power PV5":
-                            info["pv5_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Power PV6":
-                            info["pv6_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Power PV7":
-                            info["pv7_w"] = utils.str_to_float_or_zero(d["value"])
-                        if d["name"] == "DC Power PV8":
-                            info["pv8_w"] = utils.str_to_float_or_zero(d["value"])
-                    if first:
-                        data.append(
+                    if d["name"] == "Total Solar Power":
+                        info["solar_ttl_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "Cumulative Production (Active)":
+                        info["prod_cumulative_kwh"] = utils.str_to_float_or_zero(
+                            d["value"]
+                        )
+                    if d["name"] == "Daily Production (Active)":
+                        info["prod_daily_kwh"] = utils.str_to_float_or_zero(
+                            d["value"]
+                        )
+                    if d["name"] == "DC Voltage PV1":
+                        info["pv1_v"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Voltage PV2":
+                        info["pv2_v"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Voltage PV3":
+                        info["pv3_v"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Voltage PV4":
+                        info["pv4_v"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Voltage PV5":
+                        info["pv5_v"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Voltage PV6":
+                        info["pv6_v"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Voltage PV7":
+                        info["pv7_v"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Voltage PV8":
+                        info["pv8_v"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Power PV1":
+                        info["pv1_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Power PV2":
+                        info["pv2_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Power PV3":
+                        info["pv3_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Power PV4":
+                        info["pv4_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Power PV5":
+                        info["pv5_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Power PV6":
+                        info["pv6_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Power PV7":
+                        info["pv7_w"] = utils.str_to_float_or_zero(d["value"])
+                    if d["name"] == "DC Power PV8":
+                        info["pv8_w"] = utils.str_to_float_or_zero(d["value"])
+                if first:
+                    data.append(
+                        [
+                            int(info["epoch"]),
+                            utils.str_to_float_or_zero(info["gen_pwr_w"]),
+                            1,
+                        ]
+                    )
+                else:
+                    match = next(
+                        (
+                            (index, it)
+                            for index, it in enumerate(data)
+                            if it[0] == e
+                        ),
+                        None,
+                    )
+                    if match:
+                        index, matching_item = match
+                        if utils.str_to_float_or_zero(info["gen_pwr_w"]) != 0:
+                            pass
+                        data[index][1] += utils.str_to_float_or_zero(
+                            info["gen_pwr_w"]
+                        )
+                        data[index][2] += 1
+
+                        # data[index]["gen_produce_kwh"] += utils.str_to_float_or_zero(info["gen_produce_kwh"])
+                        # data[index]["gen_pwr_w"] += utils.str_to_float_or_zero(info["gen_pwr_w"])
+                        # data[index]["load_pwr_w"] += utils.str_to_float_or_zero(info["load_pwr_w"])
+                        # data[index]["batt_chg_ttl_kwh"] += utils.str_to_float_or_zero(info["batt_chg_ttl_kwh"])
+                        # data[index]["batt_pwr_w"] += utils.str_to_float_or_zero(info["batt_pwr_w"])
+                        # data[index]["load_p1_w"] += utils.str_to_float_or_zero(info["load_p1_w"])
+                        # data[index]["load_p2_w"] += utils.str_to_float_or_zero(info["load_p2_w"])
+                        # data[index]["load_p3_w"] += utils.str_to_float_or_zero(info["load_p3_w"])
+                        # data[index]["gen_run_hrs"] += '_' + str(info["gen_run_hrs"])
+                        # data[index]["batt_soc"] += '_' + str(info["batt_soc"])
+                        # data[index]["batt_status"] += '_' + str(info["batt_status"])
+                        # data[index]["deviceId"] += '_' + str(info["deviceId"])
+                    else:
+                        index = bisect.bisect_left(epoch_values, info["epoch"])
+                        # Insert the new item at the correct index
+                        data.insert(
+                            index,
                             [
                                 int(info["epoch"]),
                                 utils.str_to_float_or_zero(info["gen_pwr_w"]),
                                 1,
-                            ]
+                            ],
                         )
-                    else:
-                        match = next(
-                            (
-                                (index, it)
-                                for index, it in enumerate(data)
-                                if it[0] == e
-                            ),
-                            None,
-                        )
-                        if match:
-                            index, matching_item = match
-                            if utils.str_to_float_or_zero(info["gen_pwr_w"]) != 0:
-                                pass
-                            data[index][1] += utils.str_to_float_or_zero(
-                                info["gen_pwr_w"]
-                            )
-                            data[index][2] += 1
-
-                            # data[index]["gen_produce_kwh"] += utils.str_to_float_or_zero(info["gen_produce_kwh"])
-                            # data[index]["gen_pwr_w"] += utils.str_to_float_or_zero(info["gen_pwr_w"])
-                            # data[index]["load_pwr_w"] += utils.str_to_float_or_zero(info["load_pwr_w"])
-                            # data[index]["batt_chg_ttl_kwh"] += utils.str_to_float_or_zero(info["batt_chg_ttl_kwh"])
-                            # data[index]["batt_pwr_w"] += utils.str_to_float_or_zero(info["batt_pwr_w"])
-                            # data[index]["load_p1_w"] += utils.str_to_float_or_zero(info["load_p1_w"])
-                            # data[index]["load_p2_w"] += utils.str_to_float_or_zero(info["load_p2_w"])
-                            # data[index]["load_p3_w"] += utils.str_to_float_or_zero(info["load_p3_w"])
-                            # data[index]["gen_run_hrs"] += '_' + str(info["gen_run_hrs"])
-                            # data[index]["batt_soc"] += '_' + str(info["batt_soc"])
-                            # data[index]["batt_status"] += '_' + str(info["batt_status"])
-                            # data[index]["deviceId"] += '_' + str(info["deviceId"])
-                        else:
-                            index = bisect.bisect_left(epoch_values, info["epoch"])
-                            # Insert the new item at the correct index
-                            data.insert(
-                                index,
-                                [
-                                    int(info["epoch"]),
-                                    utils.str_to_float_or_zero(info["gen_pwr_w"]),
-                                    1,
-                                ],
-                            )
-                            epoch_values = [item[0] for item in data]
+                        epoch_values = [item[0] for item in data]
 
         for d in data:
             d[1] /= 12 * 1000
@@ -556,7 +552,7 @@ def extract_csv_data(site, fn, fn1, from_dt=None):
     return df, df1, data
 
 
-def extract_csv_data_new(site, df, from_dt=None):
+def extract_csv_data_new(device_sns, df, from_dt=None):
     # default processing date
     dt = datetime.utcnow() - timedelta(days=1)
     yr = dt.year
@@ -591,7 +587,7 @@ def extract_csv_data_new(site, df, from_dt=None):
         return None, None, None
 
     # Extract and filter epochs from data
-    data = solarman_api_historical(site=site, year=yr, month=mnth, day=day, days=days)
+    data = solarman_api_historical(devices=device_sns, year=yr, month=mnth, day=day, days=days)
     return liters, data
 
 
