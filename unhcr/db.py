@@ -462,7 +462,7 @@ def prospect_get_start_ts(local=None, start_ts=None):
         server = "datetimeserver"
         postfix = "sys_%"
         conn_str = const.PROS_CONN_AZURE_STR
-        if local:
+        if local or const.is_running_on_azure():
             conn_str = const.PROS_CONN_LOCAL_STR
         prospect_engine = set_db_engine(conn_str)
         sql = f"select custom->>'{server}', external_id from data_custom where external_id like '{postfix}' order by custom->>'{server}' desc limit 1"
@@ -803,11 +803,12 @@ def update_takum_raw_db(token, start_ts):
     num_days = 2
     max_dt_local = start_ts
     if start_ts is None:
-        max_dt_azure, err = get_db_max_date(azure_defaultdb_engine)
-        if err:
-            logger.error(f"get_db_max_date Error occurred: {err}")
-            exit(1)
-        assert max_dt_azure is not None
+        if not const.is_running_on_azure():
+            max_dt_azure, err = get_db_max_date(azure_defaultdb_engine)
+            if err:
+                logger.error(f"get_db_max_date Error occurred: {err}")
+                exit(1)
+            assert max_dt_azure is not None
 
         if local_defaultdb_engine is not None:
             max_dt_local, err = get_db_max_date(local_defaultdb_engine)
@@ -823,20 +824,21 @@ def update_takum_raw_db(token, start_ts):
 
         # backfill 1 week
         # max_dt = max_dt - timedelta(days=7)
-    st, ed = set_date_range(max_dt_azure, num_days)
-    df_azure, err = api_leonics.getData(start=st, end=ed, token=token)
-    if err:
-        logger.error(f"api_leonics.getData Error occurred: {err}")
-        exit(2)
-    # Convert the 'datetime_column' to pandas datetime
-    df_azure["DatetimeServer"] = pd.to_datetime(df_azure["DatetimeServer"])
-    df_azure.columns = df_azure.columns.str.lower()
-    res, err = update_leonics_db(max_dt_azure, df_azure, azure_defaultdb_engine)
-    if err:
-        logger.error(f"update_leonics_db Error occurred: {err}")
-        exit(3)
-    else:
-        logger.info(f"AZURE ROWS UPDATED:   {len(res)}")
+    if not const.is_running_on_azure():
+        st, ed = set_date_range(max_dt_azure, num_days)
+        df_azure, err = api_leonics.getData(start=st, end=ed, token=token)
+        if err:
+            logger.error(f"api_leonics.getData Error occurred: {err}")
+            exit(2)
+        # Convert the 'datetime_column' to pandas datetime
+        df_azure["DatetimeServer"] = pd.to_datetime(df_azure["DatetimeServer"])
+        df_azure.columns = df_azure.columns.str.lower()
+        res, err = update_leonics_db(max_dt_azure, df_azure, azure_defaultdb_engine)
+        if err:
+            logger.error(f"update_leonics_db Error occurred: {err}")
+            exit(3)
+        else:
+            logger.info(f"AZURE ROWS UPDATED:   {len(res)}")
 
     if max_dt_local is not None:
         st, ed = set_date_range(max_dt_local, num_days)
