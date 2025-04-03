@@ -65,7 +65,11 @@ if const.LOCAL:
 else:
     logger = res
 
-engines = db.set_db_engines()
+if const.is_running_on_azure():
+    engines = [db.set_local_defaultdb_engine()]
+else:
+    engines = db.set_db_engines()
+
 
 # just to test S3
 # TODO waiting for new creds

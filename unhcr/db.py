@@ -1,56 +1,56 @@
 """
 Overview
-    This script db.py manages database interactions for energy monitoring data. It connects to a DB database using 
-    SQLAlchemy and interacts with a Prospect API. The primary functions handle updating both the database and the API 
-    with new data, managing duplicates, and logging errors. Connection pooling is used for database efficiency. 
+    This script db.py manages database interactions for energy monitoring data. It connects to a DB database using
+    SQLAlchemy and interacts with a Prospect API. The primary functions handle updating both the database and the API
+    with new data, managing duplicates, and logging errors. Connection pooling is used for database efficiency.
     A critical vulnerability exists: the update_rows function is susceptible to SQL injection.
 
 Key Components
 sql_execute(sql, engine=default_engine, data=None):
-    Executes SQL queries against the DB database. Handles session management and utilizes connection pooling. 
+    Executes SQL queries against the DB database. Handles session management and utilizes connection pooling.
     Important: Vulnerable to SQL injection in update_rows due to string formatting.
 
-update_leonics_db(max_dt, df, table_name, key='DatetimeServer'): 
-    Orchestrates the database update process. Retrieves the latest timestamp from the database, filters new data from the 
+update_leonics_db(max_dt, df, table_name, key='DatetimeServer'):
+    Orchestrates the database update process. Retrieves the latest timestamp from the database, filters new data from the
     input DataFrame, and inserts the new data into the specified table. Includes error handling.
 
-update_rows(max_dt, df, table_name, key="DateTimeServer"): 
-    Inserts new data into the DB database. Filters the DataFrame, formats data, and performs a bulk INSERT with an 
+update_rows(max_dt, df, table_name, key="DateTimeServer"):
+    Inserts new data into the DB database. Filters the DataFrame, formats data, and performs a bulk INSERT with an
     ON DUPLICATE KEY UPDATE clause. The ON DUPLICATE KEY UPDATE clause is excessively long and should be refactored.
 
-update_prospect(start_ts=None, local=True, table_name=const.LEONICS_RAW_TABLE): 
+update_prospect(start_ts=None, local=True, table_name=const.LEONICS_RAW_TABLE):
     Manages updates to the Prospect API. Retrieves the latest timestamp from Prospect, queries the database for newer records,
     and sends them to the API. This function could benefit from being broken down into smaller, more manageable functions.
 
-set_db_engine(connection_string): 
-    Creates and returns a SQLAlchemy engine with connection pooling for efficient database access. Pool parameters are 
+set_db_engine(connection_string):
+    Creates and returns a SQLAlchemy engine with connection pooling for efficient database access. Pool parameters are
     configurable via environment variables.
 
-set_db_engine_by_name(ename): 
+set_db_engine_by_name(ename):
     Sets the database engine by name and configures connection strings accordingly.
 
 update_fuel_data(conn_str, merged_hourly_sums, table, site):
-    Updates the fuel data in the database. 
+    Updates the fuel data in the database.
     This function takes in the merged hourly sums DataFrame, connection string, table name, and site name.
     It constructs the SQL query string by replacing 'TABLE' with the table name and adds the VALUES clause.
     The SQL query is then executed using the connection string and the updated row count is printed.
     Finally, the merged hourly sums DataFrame is saved to a CSV file named 'mhs_<site>.csv' and the function returns None, None, None.
 
-update_bulk_fuel(conn_str, df, df1): 
-    Updates the bulk fuel data in the database. 
+update_bulk_fuel(conn_str, df, df1):
+    Updates the bulk fuel data in the database.
     This function takes in the connection string, the first DataFrame, and the second DataFrame.
     It constructs the SQL query string by replacing 'TABLE' with the table name and adds the VALUES clause.
     The SQL query is then executed using the connection string and the updated row count is printed.
     Finally, the first DataFrame is saved to a CSV file named 'mhs_<site>.csv' and the function returns None, None, None.
 
-update_takum_raw_db(token, start_ts): 
-    Updates the Takum raw data in the database. 
+update_takum_raw_db(token, start_ts):
+    Updates the Takum raw data in the database.
     This function takes in the API token and the start timestamp.
     It queries the Takum API for the raw data, filters it, and updates the database.
     The function returns None, None, None.
 
-WIP backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, start_ts, local, table_name): 
-    These functions appear to be related to backfilling data into the Prospect API but are marked as "WIP" 
+WIP backfill_prospect(start_ts=None, local=True) & prospect_backfill_key(func, start_ts, local, table_name):
+    These functions appear to be related to backfilling data into the Prospect API but are marked as "WIP"
     (work in progress) and are not fully functional.
 """
 
@@ -70,18 +70,17 @@ from unhcr import api_prospect
 from unhcr import api_leonics
 
 mods = const.import_local_libs(
-        mods=[
-            ["constants", "const"],
-            ["utils", "utils"],
-            ["api_leonics", "api_leonics"],
-            ["api_prospect", "api_prospect"],
-        ]
-    )
+    mods=[
+        ["constants", "const"],
+        ["utils", "utils"],
+        ["api_leonics", "api_leonics"],
+        ["api_prospect", "api_prospect"],
+    ]
+)
 logger, *rest = mods
 if const.LOCAL:  # testing with local python files
-    logger,const, utils, api_leonics, api_prospect = mods
-else:
-    logger = mods
+    logger, const, utils, api_leonics, api_prospect = mods
+
 
 default_engine = None
 prospect_engine = None
@@ -114,7 +113,7 @@ def set_db_engine(connection_string):
         pool_timeout=const.SQLALCHEMY_POOL_TIMEOUT,
         pool_recycle=const.SQLALCHEMY_POOL_RECYCLE,
         max_overflow=const.SQLALCHEMY_MAX_OVERFLOW,
-        #isolation_level=isolation_level
+        # isolation_level=isolation_level
     )
 
 
@@ -169,6 +168,7 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy import exc
 from contextlib import contextmanager
 import logging
+
 
 @contextmanager
 def get_db_session(eng):
@@ -226,7 +226,7 @@ def sql_execute(sql, engine=default_engine, data=None):
         #     return res, None
 
         # # For INSERT, UPDATE, DELETE return the result
-        res =result.fetchall()
+        res = result.fetchall()
         session.commit()
         return res, None
 
@@ -262,6 +262,7 @@ def sql_execute(sql, engine=default_engine, data=None):
     finally:
         session.close()
 
+
 default_engine = set_db_engine(const.TAKUM_RAW_CONN_STR)
 
 
@@ -272,10 +273,12 @@ def get_db_max_date(engine=default_engine):
     """
 
     try:
-        dt, err = sql_execute(f"select max(DatetimeServer) FROM TAKUM_LEONICS_API_RAW", engine)
+        dt, err = sql_execute(
+            f"select max(DatetimeServer) FROM TAKUM_LEONICS_API_RAW", engine
+        )
         assert err is None
         val = dt[0][0]
-        if len(val) > 18: 
+        if len(val) > 18:
             val = dt[0][0][:-3]
         return datetime.strptime(val, "%Y-%m-%d %H:%M"), None
     except Exception as e:
@@ -350,10 +353,10 @@ def update_rows(max_dt, df, eng):
     # Define the threshold datetime
     threshold = pd.to_datetime(max_dt.isoformat())
     # Filter rows where datetime_column is greater than or equal to the threshold
-    df_filtered = df[df['datetimeserver'] > threshold]
+    df_filtered = df[df["datetimeserver"] > threshold]
     l = len(df_filtered)
-    df_filtered = df_filtered.drop_duplicates(subset='datetimeserver', keep="first")
-    #print(l - len(df_filtered))
+    df_filtered = df_filtered.drop_duplicates(subset="datetimeserver", keep="first")
+    # print(l - len(df_filtered))
     if l == 0:
         return SimpleNamespace(rowcount=0), None
 
@@ -401,7 +404,7 @@ def update_rows(max_dt, df, eng):
     #     f"({', '.join(f'\'{val.strftime('%Y-%m-%d %H:%M')}\'' if isinstance(val, pd.Timestamp) else str(val) for val in df_filtered.loc[idx])})"
     #     for idx in df_filtered.index
     # )
-    
+
     def format_value(val):
         if isinstance(val, pd.Timestamp):
             return f"'{val.strftime('%Y-%m-%d %H:%M')}'"
@@ -421,9 +424,9 @@ def update_rows(max_dt, df, eng):
     sql_pred = " ON CONFLICT (datetimeserver) DO UPDATE SET "
     for col in df_filtered.columns:
         sql_pred += f"{col} = EXCLUDED.{col}, "
-    sql_pred = sql_pred[:-2] +" RETURNING datetimeserver;"
+    sql_pred = sql_pred[:-2] + " RETURNING datetimeserver;"
 
-    sql_query += sql_pred 
+    sql_query += sql_pred
     res, err = sql_execute(sql_query, eng)
     assert err is None
     logger.debug(f"ROWS UPDATED: {len(res)}")
@@ -495,28 +498,28 @@ def update_prospect(eng, start_ts=None, local=None):
         start_ts = prospect_get_start_ts(local, start_ts)
         rows, err = sql_execute(
             f"select * FROM takum_leonics_api_raw where DatetimeServer >= '{start_ts}' order by DatetimeServer  limit 50000;",
-            eng
+            eng,
         )
         assert err is None
 
         # Convert the result to a Pandas DataFrame
         columns = columns = list(rows[0]._fields) if rows else []
-  # Get column names
+        # Get column names
         df = pd.DataFrame(rows, columns=columns)
         postfix = "sys_"
         # if local:
         #     postfix='raw_'
         df["external_id"] = df["external_id"].astype(str).apply(lambda x: postfix + x)
 
-        res = api_prospect.api_in_prospect(df,local)
+        res = api_prospect.api_in_prospect(df, local)
         if res is None:
             logger.error("Prospect API failed")
             return None, '"Prospect API failed"'
         logger.info(f"{res.status_code}:  {res.text}")
 
         # Save the DataFrame to a CSV file
-        logger = logger.getLogger()
-        if logger.getEffectiveLevel() < logger.INFO:
+        #####logger = logging.getLogger()
+        if logger.getEffectiveLevel() < logging.INFO:
             sts = start_ts.replace(" ", "_").replace(":", "HM")
             df.to_csv(f"sys_pros_{sts}.csv", index=False)
 
@@ -613,8 +616,8 @@ def prospect_backfill_key(
     df.to_csv(f"sys_pros_{sts}.csv", index=False)
 
     # Save the DataFrame to a CSV file
-    logger = logger.getLogger()
-    if logger.getEffectiveLevel() < logger.INFO:
+    #####logger = logging.getLogger()
+    if logger.getEffectiveLevel() < logging.INFO:
         sts = start_ts.replace(" ", "_").replace(":", "HM")
         sts += str(local)
         df.to_csv(f"sys_pros_{sts}.csv", index=False)
@@ -672,7 +675,6 @@ def update_fuel_data(engine, merged_hourly_sums, table, site):
         "TABLE", table
     )
 
-
     merged_hourly_sums_notnull = merged_hourly_sums.where(
         pd.notnull(merged_hourly_sums), "null"
     )
@@ -697,12 +699,12 @@ def update_bulk_fuel(engine, df, table):
     """
     Updates the bulk fuel data in the specified database table.
 
-    This function processes a DataFrame containing bulk fuel data, checking each row 
-    against the latest timestamp in the database to determine if it should be 
-    inserted or updated. It constructs an SQL query to insert new data or update 
-    existing records based on the 'Unit Name', 'Time', and 'Event Name' columns. 
-    If a row's 'Value' field contains specific keywords, it extracts numerical 
-    values for 'liters_used' or 'liter_bought'. The function returns the result 
+    This function processes a DataFrame containing bulk fuel data, checking each row
+    against the latest timestamp in the database to determine if it should be
+    inserted or updated. It constructs an SQL query to insert new data or update
+    existing records based on the 'Unit Name', 'Time', and 'Event Name' columns.
+    If a row's 'Value' field contains specific keywords, it extracts numerical
+    values for 'liters_used' or 'liter_bought'. The function returns the result
     of the SQL execution.
 
     Args:
@@ -711,11 +713,11 @@ def update_bulk_fuel(engine, df, table):
         table (str): The name of the database table to update.
 
     Returns:
-        tuple: A tuple containing the result of the SQL execution and an error message 
+        tuple: A tuple containing the result of the SQL execution and an error message
         (if any). Returns None and an error message if no new data is found to update.
     """
 
-    res, err =sql_execute(f'select max("Time") from fuel.{table};', engine)
+    res, err = sql_execute(f'select max("Time") from fuel.{table};', engine)
     if res:
         ts = datetime.strptime(res[0][0], "%Y-%m-%d %H:%M:%S")
     else:
@@ -829,7 +831,7 @@ def update_takum_raw_db(token, start_ts):
     # Convert the 'datetime_column' to pandas datetime
     df_azure["DatetimeServer"] = pd.to_datetime(df_azure["DatetimeServer"])
     df_azure.columns = df_azure.columns.str.lower()
-    res, err = update_leonics_db( max_dt_azure, df_azure, azure_defaultdb_engine)
+    res, err = update_leonics_db(max_dt_azure, df_azure, azure_defaultdb_engine)
     if err:
         logger.error(f"update_leonics_db Error occurred: {err}")
         exit(3)
@@ -858,6 +860,7 @@ def update_takum_raw_db(token, start_ts):
 local_defaultdb_engine = None
 azure_defaultdb_engine = None
 
+
 def set_local_defaultdb_engine():
     global local_defaultdb_engine
     if local_defaultdb_engine is None:
@@ -870,6 +873,7 @@ def set_azure_defaultdb_engine():
     if azure_defaultdb_engine is None:
         azure_defaultdb_engine, _ = set_db_engine_by_name("postgresql", local=False)
     return azure_defaultdb_engine
+
 
 set_local_defaultdb_engine()
 set_azure_defaultdb_engine()
@@ -912,6 +916,7 @@ def get_fuel_max_ts(site, engine):
         return None, err
     ts = val[0][0]
     return ts, None
+
 
 def get_gb_epoch(serial_num, engine, max=True):
     """

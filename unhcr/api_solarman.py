@@ -239,6 +239,35 @@ WEATHER_MAPPING = {
 }
 
 
+def db_get_devices_site_sn_id(eng, dev_type=None, site_key=''):
+    sql = """
+        WITH site_devices AS (
+            SELECT s."name", dsh.station_id, dsh.device_sn, dsh.device_id, d.device_type 
+            FROM solarman.device_site_history dsh
+            JOIN solarman.stations s ON s.id = dsh.station_id
+            JOIN solarman.devices d ON dsh.device_sn = d.device_sn
+            WHERE dsh.end_time IS NULL 
+        ), 
+        device_sns AS (
+            SELECT device_sn FROM site_devices
+        )
+        select * from site_devices where device_type = 'DEV_TYPE';
+        -- SELECT * FROM solarman.inverter_data 
+        -- WHERE device_sn IN (SELECT device_sn FROM site_devices SITE_KEY)
+        -- order by ts, device_id;
+    """.replace("DEV_TYPE", dev_type)
+    if site_key:
+        sql = sql.replace("SITE_KEY", f"WHERE name LIKE '%SITE_KEY%'")
+    else:
+        sql = sql.replace("SITE_KEY", "")
+    if dev_type:
+        sql = sql.replace("DEV_TYPE", dev_type)
+    else:
+        sql = sql.replace("'DEV_TYPE'", "")
+    df = pd.read_sql(sql, eng)
+    return df
+
+
 def camel_to_snake(name):
     """Converts a camelCase string to snake_case."""
     name = re.sub(r"(?<=[a-z])(?=[A-Z])", "_", name)
@@ -378,7 +407,7 @@ def api_get_weather_data(date_str, devices):
 
     Parameters:
     date_str (str): The start date for data retrieval in 'YYYY-MM-DD' format.
-    devices (list): A list of dictionaries, each containing 'deviceSn' and 'deviceId' keys.
+    devices (list): A list of dictionaries, each containing 'station_id', 'deviceSn' and 'deviceId' keys.
 
     Returns:
     pd.DataFrame: A DataFrame containing the weather data, or None if no data is retrieved.
@@ -388,7 +417,7 @@ def api_get_weather_data(date_str, devices):
     data = []
     first = True
     x = -1
-    for device in devices:
+    for device in devices.itertuples(index=False):
         x += 1
         if x > 0:
             epoch_values = [item["epoch"] for item in data]
@@ -399,8 +428,9 @@ def api_get_weather_data(date_str, devices):
 
         payload = json.dumps(
             {
-                "deviceSn": device["deviceSn"],
-                "deviceId": device["deviceId"],
+                "station_id": device.station_id,
+                "deviceSn": device.device_sn,
+                "deviceId": device.device_id,
                 "startTime": date_str,
                 "endTime": "2099-01-01",
                 "timeType": 1,
@@ -424,6 +454,8 @@ def api_get_weather_data(date_str, devices):
                     continue
                 last_epoch = e
                 info = {
+                    "station_id": device.station_id,
+                    "device_sn": str(j["deviceSn"]),
                     "device_id": str(j["deviceId"]),
                     "org_epoch": item["collectTime"],
                     "epoch": e,  # item["collectTime"]
@@ -437,7 +469,7 @@ def api_get_weather_data(date_str, devices):
                         item["sn"] = d["value"]
                         dt = datetime.fromtimestamp(
                             e, UTC
-                        )  # depriciated datetime.utcfromtimestamp(e).strftime('%Y-%m-%d %H:%M')
+                        )
                         info["ts"] = dt
                     elif d["name"] in WEATHER_MAPPING:
                         field, converter = WEATHER_MAPPING[d["name"]]
@@ -483,6 +515,8 @@ def update_weather_db(df, epoch, engine):
     """
 
     try:
+        df["station_id"] = df["station_id"].astype("int32")
+        # df["device_sn"] = df["device_sn"]
         df["device_id"] = df["device_id"].astype("int32")  # int4
         df["org_epoch"] = df["org_epoch"].astype("int32")  # int4
         df["epoch"] = df["epoch"].astype("int32")  # int4
@@ -504,10 +538,11 @@ def update_weather_db(df, epoch, engine):
             conn.execute(
                 text(
                     """
-                INSERT INTO solarman.weather (device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr)
-                SELECT device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr FROM solarman.temp_weather
-                ON CONFLICT (device_id, ts) DO UPDATE 
-                SET org_epoch = EXCLUDED.org_epoch,
+                INSERT INTO solarman.weather (station_id, device_sn, device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr)
+                SELECT station_id, device_sn, device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr FROM solarman.temp_weather
+                ON CONFLICT (device_sn, ts) DO UPDATE 
+                SET device_id = EXCLUDED.device_id,
+                    org_epoch = EXCLUDED.org_epoch,
                     epoch = EXCLUDED.epoch,
                     temp_c = EXCLUDED.temp_c,
                     panel_temp = EXCLUDED.panel_temp,
