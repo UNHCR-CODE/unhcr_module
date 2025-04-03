@@ -120,8 +120,11 @@ def execute(token, start_ts=None):
         if BACKFILL_DT:
             db.update_prospect(db.azure_defaultdb_engine, start_ts=start_ts)  # AZURE
         else:
-            db.update_prospect(db.azure_defaultdb_engine)  # AZURE
-
+            if const.is_running_on_azure():
+                db.update_prospect(db.local_defaultdb_engine)
+                return
+            else:
+                db.update_prospect(db.azure_defaultdb_engine)
         if const.is_running_on_azure():
             return start_ts
 
