@@ -12,14 +12,14 @@ import sqlalchemy
 import sys
 import traceback
 
-from app_time_series_gapfilling_gb_v3 import get_gb_gaps, concurrent_update_gaps
+from app_time_series_gapfilling_gb_v3 import concurrent_update_gaps
 from unhcr import app_utils
 from unhcr import err_handler
 from unhcr import utils
 import unhcr.constants as const
 from unhcr import db
 
-run_dt = datetime.now().date()
+run_dt = datetime.now().date() #####- timedelta(days=1)
 
 mods = [
     ["app_utils", "app_utils"],
@@ -49,7 +49,7 @@ UNIFIER_GB_CSV_PATH = const.add_csv_dt(const.UNIFIER_CSV, run_dt.isoformat())
 # if os.path.exists(FILTERED_GB_SN_PATH):
 #     filtered_gb_sn_df = pd.read_csv(FILTERED_GB_SN_PATH)
 # else:
-#     all_gb_api_sn_df, err = err_handler.error_wrapper(lambda: gb_eyedro.get_user_info_as_df())
+#     all_gb_api_sn_df, err = err_handler.error_wrapper(lambda: gb_eyedro.api_get_user_info_as_df())
 #     if err:
 #         logger.error(err)
 #         exit(2)
@@ -401,28 +401,6 @@ def save_to_postgres(engine, file_path, prefix="gb_"):
         sys.exit(9)
 
 
-def create_gb_gaps_table(eng):
-    res, err = db.sql_execute(f'select epoch_secs from {const.GB_GAPS_TABLE} limit 1;', eng)
-    if err:
-        res, err = db.sql_execute(const.SQL_GB_GAPS_TABLE, eng)
-        if err:
-            print(const.SQL_GB_GAPS_TABLE)
-            logger.error(err)
-            return None, err
-    logger.debug(res)
-#!!!!! save greening the blue 2024 spreadsheet & merged spreadsheet
-# gtb_excel_path = r'E:\UNHCR\OneDrive - UNHCR\Energy Team\Concept development\AZURE DATA\Greening the Blue\20240319_2024_GB_Data_v5.xlsx'
-# save_to_postgres(engines[1], gtb_excel_path, prefix = '')
-# save_to_postgres(engines[0], gtb_excel_path, prefix = '')
-
-# merged_excel_path = const.add_xlsx_dt(const.GB_MERGED_EXCEL_PATH, run_dt.isoformat())
-# )
-# save_to_postgres(engines[1], merged_excel_path, prefix = 'gb_')
-# save_to_postgres(engines[0], merged_excel_path, prefix = 'gb_')
-
-# pass
-#!!!!!!!!!!!!!!!!!!!
-
 r""" 
 Prior to running this script:
 1. Download unifier report from https://eu1.unifier.oraclecloud.com/unhcr/bp/route/home/i-unifier?__uref=uuu986636683
@@ -431,7 +409,7 @@ Prior to running this script:
     Select "smh_GB_Meters-report-v1" owner Steve Hermes
     Run as csv  (downloads as "Report.csv")
     Copy download to "CODE\DATA\gb_unifier_2024-03-18.csv" (rename and add current date (use your local root dir))
-    
+    (NOTE: this is handled by outlook classic that moves the daily report from my inbox to inbox->unifier and then saves as a CSV)
 2. Run gapfilling script "CODE\unhcr_module\app_time_series_gapfilling_gb_v3.py"
 
 3.
@@ -464,6 +442,7 @@ if msg:
     UNIFIER_GB_CSV_PATH = utils.selected_file
     utils.selected_file = None
 
+#!!!!!!!!  AZURE
 eng = db.set_azure_defaultdb_engine()
 
 #1. get all valid GB serial numbers, from csv if updated today, otherwise from API and save to csv
@@ -471,7 +450,7 @@ eng = db.set_azure_defaultdb_engine()
 if os.path.exists(FILTERED_GB_SN_PATH):
     filtered_gb_sn_df = pd.read_csv(FILTERED_GB_SN_PATH)
 else:
-    all_gb_api_sn_df, err = err_handler.error_wrapper(lambda: gb_eyedro.get_user_info_as_df())
+    all_gb_api_sn_df, err = err_handler.error_wrapper(lambda: gb_eyedro.api_get_user_info_as_df())
     if err:
         logger.error(err)
         exit(2)

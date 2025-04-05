@@ -22,10 +22,7 @@ logger, *rest = mods
 if const.LOCAL:  # testing with local python files
     logger, const, db, err_handler = mods
 
-engines = db.set_db_engines()
-
-
-def get_gb_user_info_data():
+def api_get_gb_user_info():
     """
     Retrieve user info data from the GreenButton API v1.
 
@@ -141,7 +138,7 @@ def parse_user_info_as_df(user_info_data):
     return final_df
 
 
-def get_user_info_as_df():
+def api_get_user_info_as_df():
     """
     Gets the user info data from the API, parses it into a list of tuples of
     (site_label, device_serial), and returns the list or an error string.
@@ -152,9 +149,11 @@ def get_user_info_as_df():
         str: error string if an error occurred
     """
     # Extract top-level DeviceSerialList
-    user_info_data, err = get_gb_user_info_data()
+    user_info_data, err = api_get_gb_user_info()
     if err or len(user_info_data["Errors"]) != 0:
-        err_str = f"app_gb_serial_nums: Failed to get user info data ERROR: {err}  {user_info_data['Errors']}"
+        err_str = f"app_gb_serial_nums: Failed to get user info data ERROR: {err}"
+        if user_info_data and "Errors" in user_info_data:
+            err_str += f" {user_info_data['Errors']}"
         logger.error(err_str)
         return None, err_str
     all_serials_df, err = err_handler.error_wrapper(
@@ -167,12 +166,12 @@ def get_user_info_as_df():
     return all_serials_df, None
 
 
-def create_tables(serials, engine):
+def db_create_tables(serials, db_eng=db.set_local_defaultdb_engine()):
     res = True
     err = None
-    conn = engine.raw_connection()  # Get raw psycopg2 connection
+    conn = db_eng.raw_connection()  # Get raw psycopg2 connection
     try:
-        conn = engine.connect()
+        conn = db_eng.connect()
         with conn as cur:
             for serial in serials:
                 serial = serial.replace("gb_", "").lower()
@@ -294,7 +293,7 @@ def create_tables(serials, engine):
 
                 trans.commit()
                 trans.close()
-                with engine.connect().execution_options(isolation_level='AUTOCOMMIT') as procedure_conn:
+                with db_eng.connect().execution_options(isolation_level='AUTOCOMMIT') as procedure_conn:
                     # Direct execution of stored procedure 
                     sql = f"CALL refresh_continuous_aggregate('eyedro.gb_{serial}_hourly', NULL, localtimestamp + INTERVAL '2 days')"
                     procedure_sql = text(sql)
@@ -316,7 +315,6 @@ def create_tables(serials, engine):
         conn.close()  # ✅ Always close the connection
 
     return res, err
-
 
 
 """_summary_
@@ -740,29 +738,19 @@ Let me know if you need help setting it up! 🚀
 """
 
 
-def create_gb_gaps_table(eng):
-    res, err = db.sql_execute(f'select epoch_secs from {const.GB_GAPS_TABLE} limit 1;', eng)
+def db_create_gb_gaps_table(db_eng=db.set_local_defaultdb_engine()):
+    res, err = db.sql_execute(f'select epoch_secs from {const.GB_GAPS_TABLE} limit 1;', db_eng)
     if err:
-        res, err = db.sql_execute(const.SQL_GB_GAPS_TABLE, eng)
+        res, err = db.sql_execute(const.SQL_GB_GAPS_TABLE, db_eng)
         if err:
             print(const.SQL_GB_GAPS_TABLE)
             logger.error(err)
             return None, err
     logger.debug(res)
-#!!!!! save greening the blue 2024 spreadsheet & merged spreadsheet
-# gtb_excel_path = r'E:\UNHCR\OneDrive - UNHCR\Energy Team\Concept development\AZURE DATA\Greening the Blue\20240319_2024_GB_Data_v5.xlsx'
-# save_to_postgres(engines[1], gtb_excel_path, prefix = '')
-# save_to_postgres(engines[0], gtb_excel_path, prefix = '')
-
-# merged_excel_path = const.add_xlsx_dt(const.GB_MERGED_EXCEL_PATH, run_dt.isoformat())
-# )
-# save_to_postgres(engines[1], merged_excel_path, prefix = 'gb_')
-# save_to_postgres(engines[0], merged_excel_path, prefix = 'gb_')
-
-# pass
+    return res, err
 
 
-def get_gb_hypertables(eng):
+def db_get_gb_hypertables(db_eng=db.set_local_defaultdb_engine()):
     """
     Gets all hypertables in the "eyedro" schema that have a name like 'gb_%'.
     
@@ -773,10 +761,10 @@ def get_gb_hypertables(eng):
     list of str: A list of hypertable names.
     """
     return db.sql_execute("""SELECT hypertable_name FROM timescaledb_information.hypertables 
-    where hypertable_schema = 'eyedro' and hypertable_name like 'gb_%';""", eng)
+    where hypertable_schema = 'eyedro' and hypertable_name like 'gb_%';""", db_eng)
 
 
-def hyper_gb_gaps(hypertable_name, eng):
+def db_hyper_gb_gaps(hypertable_name, db_eng=db.set_local_defaultdb_engine()):
     """
     Collects all hypergaps in the "eyedro" schema and writes the results to a CSV file.
     
@@ -790,7 +778,7 @@ def hyper_gb_gaps(hypertable_name, eng):
     The results are written to a CSV file in the "data/gaps" directory. The file is named "eyedro_data_gaps.csv".
     """
     try:
-        conn = eng.raw_connection()
+        conn = db_eng.raw_connection()
         with conn.cursor() as cursor:
             query = f"""
             WITH ordered_epochs AS (
@@ -825,9 +813,9 @@ def hyper_gb_gaps(hypertable_name, eng):
     return []
 
 
-def hyper_gb_gaps_concur(eng, ht_names, chunks=10, src='local'):
+def hyper_gb_gaps_concur(ht_names, chunks=10, src='local', db_eng=db.set_local_defaultdb_engine()):
     def process_chunk(chunk, param1):
-        return [hyper_gb_gaps(item[0], eng=param1) for item in chunk]  # Apply function to each item
+        return [db_hyper_gb_gaps(item[0], db_eng=param1) for item in chunk]  # Apply function to each item
 
     # ht_names = []
     # for item in res:
@@ -841,14 +829,14 @@ def hyper_gb_gaps_concur(eng, ht_names, chunks=10, src='local'):
     # local_engine = db.set_local_defaultdb_engine()
 
     with ThreadPoolExecutor(max_workers=num_parts) as executor:
-        results = list(executor.map(partial(process_chunk, param1=eng), chunks))
+        results = list(executor.map(partial(process_chunk, param1=db_eng), chunks))
 
     return results
     # Flatten results
     return [item for sublist in results for item in sublist]
 
 
-def get_all_gb_gaps(src='local'):
+def db_get_all_gb_gaps(src='local'):
     """
     Retrieves and processes data gaps for all "gb" hypertables.
 
@@ -865,13 +853,9 @@ def get_all_gb_gaps(src='local'):
         None
     """
 
-    if src == 'local':
-        eng = engines[1]
-    else:
-        eng = engines[0]
-    ht_names, err = get_gb_hypertables(eng)
+    ht_names, err = db_get_gb_hypertables()
     pass
-    res = hyper_gb_gaps_concur(eng, ht_names)
+    res = hyper_gb_gaps_concur(ht_names=ht_names)
     flattened_data = list(chain.from_iterable(chain.from_iterable(res)))
     #Step 3: Convert results to DataFrame
     df = pd.DataFrame(flattened_data, columns=["hypertable", "epoch_secs", "prev_epoch", "diff_seconds"])
@@ -884,5 +868,5 @@ def get_all_gb_gaps(src='local'):
     print(df.head())
     print(f"✅ Data gaps found in {len(df)} rows. Results saved to 'eyedro_data_gaps.csv'.")
     
-# res = get_all_gb_gaps(src='local')
+# res = db_get_all_gb_gaps(src='local')
 # pass
