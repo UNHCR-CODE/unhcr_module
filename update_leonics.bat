@@ -33,5 +33,5 @@ IF "%1"=="" (
 )
 
 REM changed python path to make it work in Windows scheduler -- was running a different python
-%VENV_DIR%\Scripts\python.exe app_update_all.py --log INFO
+%VENV_DIR%\Scripts\python.exe app_update_leonics.py --log INFO
 deactivate

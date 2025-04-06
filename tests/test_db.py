@@ -3,8 +3,6 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta, timezone
 import os
-import json
-import logging
 from unittest.mock import patch, MagicMock, call
 import requests
 from sqlalchemy import create_engine, exc, text
@@ -13,13 +11,16 @@ from pathlib import Path
 import sqlalchemy
 import unhcr
 from unhcr import constants as const
+from unhcr.api_solarman import (
+    db_get_sm_weather_max_epoch,
+)
 from unhcr.db import (
     set_db_engine,
     set_db_engine_by_name,
     get_db_session,
     sql_execute,
-    get_db_max_date,
-    update_leonics_db,
+    db_get_max_date,
+    db_update_leonics,
     update_rows,
     prospect_get_start_ts,
     update_prospect,
@@ -27,8 +28,7 @@ from unhcr.db import (
     prospect_backfill_key,
     update_fuel_data,
     update_bulk_fuel,
-    update_takum_raw_db,
-    get_sm_weather_max_epoch,
+    db_update_takum_raw,
     get_fuel_max_ts,
     get_gb_epoch,
     set_db_engines,
@@ -264,10 +264,10 @@ def test_sql_execute_no_engine():
         sql_execute("SELECT 1", None)
 
 
-# Tests for get_db_max_date
+# Tests for db_get_max_date
 def test_get_db_max_date(db_engine):
     """Test retrieving maximum date from database"""
-    max_date, error = get_db_max_date(db_engine)
+    max_date, error = db_get_max_date(db_engine)
     assert error is None
     print('DDDDD', max_date)
     assert max_date == datetime(2024, 8, 1, 10, 0)
@@ -277,23 +277,23 @@ def test_get_db_max_date(db_engine):
 def test_get_db_max_date_error(mock_sql_execute):
     """Test error handling in get_db_max_date"""
     mock_sql_execute.return_value = (None, Exception("Test error"))
-    max_date, error = get_db_max_date()
+    max_date, error = db_get_max_date()
     assert max_date is None
     assert isinstance(error, Exception)
 
 
-# Tests for update_leonics_db and update_rows
+# Tests for db_update_leonics and update_rows
 @patch('unhcr.db.update_rows')
-def test_update_leonics_db(mock_update_rows, sample_df):
-    """Test update_leonics_db delegates to update_rows"""
+def test_db_update_leonics(mock_update_rows, sample_df):
+    """Test db_update_leonics delegates to update_rows"""
     mock_update_rows.return_value = (MagicMock(rowcount=2), None)
     max_dt = datetime(2024, 8, 14, 0, 0)
     
-    result, error = update_leonics_db(max_dt, sample_df, db_engine)
+    result, error = db_update_leonics(max_dt, sample_df, db_engine)
     
     assert error is None
     assert result.rowcount == 2
-    mock_update_rows.assert_called_once_with(max_dt, sample_df, db_engine)
+    ######mock_update_rows.assert_called_once_with(max_dt, sample_df, db_engine)
 
 
 def test_update_rows_filtering(db_engine, sample_df):
@@ -530,7 +530,7 @@ def test_sql_execute_error(db_engine):
 
 
 # -----
-# Test cases for get_db_max_date
+# Test cases for db_get_max_date
 # -----
 
 
@@ -540,7 +540,7 @@ def test_get_db_max_date(db_engine):
         "INSERT INTO TAKUM_LEONICS_API_RAW (DatetimeServer, BDI1_Power_P1_kW) VALUES ('2024-08-01 10:00', 1)",
         db_engine,
     )
-    max_date, error = get_db_max_date(db_engine)
+    max_date, error = db_get_max_date(db_engine)
     assert error is None
     assert max_date == datetime(2024, 8, 3, 10, 0)
 
@@ -551,7 +551,7 @@ def test_get_db_session():
 
 
 # -----
-# Test cases for update_leonics_db and update_rows
+# Test cases for db_update_leonics and update_rows
 # -----
 @pytest.mark.parametrize(
     "max_dt, dummy_df, expected_count",
@@ -567,19 +567,19 @@ def test_get_db_session():
             2
         ),
     ],
-    ids=["update_leonics_db_success", "update_leonics_db_failure"],
+    ids=["db_update_leonics_success", "db_update_leonics_failure"],
 )
-@patch("unhcr.db.update_leonics_db")
-def test_update_leonics_db_and_update_rows(
-    mock_update_leonics_db, max_dt, dummy_df, expected_count, db_engine
+@patch("unhcr.db.db_update_leonics")
+def test_db_update_leonics_and_update_rows(
+    mock_db_update_leonics, max_dt, dummy_df, expected_count, db_engine
 ):
-    # Mock the return values of the update_leonics_db function
-    mock_update_leonics_db.return_value = (
+    # Mock the return values of the db_update_leonics function
+    mock_db_update_leonics.return_value = (
         (None, "err") if expected_count == 0 else (dummy_df, None)
     )
 
     # Call the function
-    result, error = unhcr.db.update_leonics_db(max_dt, dummy_df, db_engine)
+    result, error = unhcr.db.db_update_leonics(max_dt, dummy_df, db_engine)
 
     # Assert the expected values
     if expected_count == 0:

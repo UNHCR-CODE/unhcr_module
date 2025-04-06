@@ -10,7 +10,7 @@ sql_execute(sql, engine=default_engine, data=None):
     Executes SQL queries against the DB database. Handles session management and utilizes connection pooling.
     Important: Vulnerable to SQL injection in update_rows due to string formatting.
 
-update_leonics_db(max_dt, df, table_name, key='DatetimeServer'):
+db_update_leonics(max_dt, df, table_name, key='DatetimeServer'):
     Orchestrates the database update process. Retrieves the latest timestamp from the database, filters new data from the
     input DataFrame, and inserts the new data into the specified table. Includes error handling.
 
@@ -64,23 +64,24 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, exc, orm, text
 
+from unhcr import app_utils
 from unhcr import constants as const
 from unhcr import utils
 from unhcr import api_prospect
 from unhcr import api_leonics
 
-mods = const.import_local_libs(
-    mods=[
-        ["constants", "const"],
-        ["utils", "utils"],
-        ["api_leonics", "api_leonics"],
-        ["api_prospect", "api_prospect"],
-    ]
-)
-logger, *rest = mods
-if const.LOCAL:  # testing with local python files
-    logger, const, utils, api_leonics, api_prospect = mods
+mods=[
+    ["app_utils", "app_utils"],
+    ["constants", "const"],
+    ["utils", "utils"],
+    ["api_leonics", "api_leonics"],
+    ["api_prospect", "api_prospect"],
+]
 
+res = app_utils.app_init(mods=mods, log_file="unhcr.db.log", version="0.4.7", level="INFO", override=False)
+logger = res[0]
+if const.LOCAL:  # testing with local python files
+    logger, app_utils, const, utils, api_leonics, api_prospect = res
 
 default_engine = None
 prospect_engine = None
@@ -266,7 +267,7 @@ def sql_execute(sql, engine=default_engine, data=None):
 default_engine = set_db_engine(const.TAKUM_RAW_CONN_STR)
 
 
-def get_db_max_date(engine=default_engine):
+def db_get_max_date(engine=default_engine):
     """
     Retrieves the latest timestamp from the database. If the database is empty or an error occurs,
     returns None and the error.
@@ -286,7 +287,7 @@ def get_db_max_date(engine=default_engine):
         return None, e
 
 
-def update_leonics_db(max_dt, df, eng):
+def db_update_leonics(eng, max_dt, df):
     """
     Updates the specified DB table with new data from a DataFrame.
 
@@ -386,7 +387,7 @@ def update_rows(max_dt, df, eng):
     #         # Execute the query with multiple bind parameters
     #         res = sql_execute(text(sql_query), param_list)
     #         if isinstance(res, str):
-    #             logger.error(f'ERROR update_leonics_db: {res}')
+    #             logger.error(f'ERROR db_update_leonics: {res}')
     #             return None, 'Error: query result is not a string'
     #         logger.debug(f'ROWS UPDATED: {table_name}  {res.rowcount}')
     #         return res, None
@@ -785,7 +786,7 @@ def update_bulk_fuel(engine, df, table):
 
 
 # TODO Rename this here and in `execute`
-def update_takum_raw_db(token, start_ts):
+def db_update_takum_raw(eng, token, start_ts):
     def set_date_range(st_dt, num_days, backfill=False):
         st = (st_dt + timedelta(minutes=1)).date().isoformat()
         st = st.replace("-", "")
@@ -803,60 +804,32 @@ def update_takum_raw_db(token, start_ts):
     num_days = 2
     max_dt_local = start_ts
     if start_ts is None:
-        if not const.is_running_on_azure():
-            max_dt_azure, err = get_db_max_date(azure_defaultdb_engine)
-            if err:
-                logger.error(f"get_db_max_date Error occurred: {err}")
-                exit(1)
-            assert max_dt_azure is not None
-
-        if local_defaultdb_engine is not None:
-            max_dt_local, err = get_db_max_date(local_defaultdb_engine)
-            if err:
-                logger.error(f"get_db_max_date1 Error occurred: {err}")
-                exit(1)
-            assert max_dt_local is not None
-        else:
-            max_dt_local = None
+        max_dt_local, err = db_get_max_date(eng)
+        if err or max_dt_local is None:
+            logger.error(f"db_get_max_date Error occurred: {err}")
+            return None, err
     else:
-        max_dt_azure = start_ts
         max_dt_local = start_ts
 
         # backfill 1 week
         # max_dt = max_dt - timedelta(days=7)
-    if not const.is_running_on_azure():
-        st, ed = set_date_range(max_dt_azure, num_days)
-        df_azure, err = api_leonics.getData(start=st, end=ed, token=token)
-        if err:
-            logger.error(f"api_leonics.getData Error occurred: {err}")
-            exit(2)
-        # Convert the 'datetime_column' to pandas datetime
-        df_azure["DatetimeServer"] = pd.to_datetime(df_azure["DatetimeServer"])
-        df_azure.columns = df_azure.columns.str.lower()
-        res, err = update_leonics_db(max_dt_azure, df_azure, azure_defaultdb_engine)
-        if err:
-            logger.error(f"update_leonics_db Error occurred: {err}")
-            exit(3)
-        else:
-            logger.info(f"AZURE ROWS UPDATED:   {len(res)}")
 
-    if max_dt_local is not None:
-        st, ed = set_date_range(max_dt_local, num_days)
-        df_leonics, err = api_leonics.getData(start=st, end=ed, token=token)
-        if err:
-            logger.error(f"api_leonics.getData Error occurred: {err}")
-            exit(2)
-        # Convert the 'datetime_column' to pandas datetime
-        df_leonics["DatetimeServer"] = pd.to_datetime(df_leonics["DatetimeServer"])
-        df_leonics.columns = df_leonics.columns.str.lower()
-        res, err = update_leonics_db(max_dt_local, df_leonics, local_defaultdb_engine)
-        if err:
-            logger.error(f"update_leonics_db Error occurred: {err}")
-            exit(3)
-        else:
-            logger.info(f"LOCAL ROWS UPDATED:  {len(res)}")
+    st, ed = set_date_range(max_dt_local, num_days)
+    df_leonics, err = api_leonics.getData(start=st, end=ed, token=token)
+    if err:
+        logger.error(f"api_leonics.getData Error occurred: {err}")
+        return None, err
+    # Convert the 'datetime_column' to pandas datetime
+    df_leonics["DatetimeServer"] = pd.to_datetime(df_leonics["DatetimeServer"])
+    df_leonics.columns = df_leonics.columns.str.lower()
+    res, err = db_update_leonics(eng, max_dt_local, df_leonics)
+    if err:
+        logger.error(f"db_update_leonics Error occurred: {err}")
+        return None, err
+    else:
+        logger.info(f"LOCAL ROWS UPDATED:  {len(res)}")
 
-    return start_ts
+    return start_ts, None
 
 
 local_defaultdb_engine = None
@@ -879,24 +852,6 @@ def set_azure_defaultdb_engine():
 
 set_local_defaultdb_engine()
 set_azure_defaultdb_engine()
-
-
-def get_sm_weather_max_epoch(device_id, engine):
-    """
-    Retrieves the latest timestamp from the database. If the database is empty or an error occurs,
-    returns None and the error.
-    Args:
-        device_id (int): The device ID to query the database for.
-        engine (sqlalchemy.engine.Engine): The connection engine to use.
-    Returns:
-        tuple: A tuple containing the latest timestamp as an integer, and None if the query was successful, or an error message if it was not.
-    """
-    sql = f"select max(org_epoch) FROM solarman.weather where device_id = {device_id}"
-    val, err = sql_execute(sql, engine)
-    if err is not None:
-        return None, err
-    epoch = val[0][0]
-    return epoch, None
 
 
 def get_fuel_max_ts(site, engine):

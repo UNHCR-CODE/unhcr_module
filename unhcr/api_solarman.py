@@ -23,25 +23,27 @@ from sqlalchemy import text, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
+from unhcr import app_utils
 from unhcr import constants as const
 from unhcr import utils
 from unhcr import db
 from unhcr import err_handler
 from unhcr import models
 
-mods = const.import_local_libs(
-        mods=[
-            ["constants", "const"],
-            ["utils", "utils"],
-            ["db", "db"],
-            ["err_handler", "err_handler"],
-            ["models", "models"],
-        ]
-    )
-logger, *rest = mods
-# local testing ===================================
+
+mods=[
+    ["app_utils", "app_utils"],
+    ["constants", "const"],
+    ["utils", "utils"],
+    ["db", "db"],
+    ["err_handler", "err_handler"],
+    ["models", "models"],
+]
+
+res = app_utils.app_init(mods=mods, log_file="unhcr.api_solarman.log", version="0.4.7", level="INFO", override=False)
+logger = res[0]
 if const.LOCAL:  # testing with local python files
-    logger, const, utils, db, err_handler, models = mods
+    logger, app_utils, const, utils, db, err_handler, models = res
 
 # Solarman API credentials (replace with your actual credentials)
 APP_ID = const.SM_APP_ID
@@ -238,6 +240,24 @@ WEATHER_MAPPING = {
     "Daily Irradiance": ("daily_irr", str),
 }
 
+def db_get_sm_weather_max_epoch(db_eng, device_sn):
+    """
+    Retrieves the latest timestamp from the database. If the database is empty or an error occurs,
+    returns None and the error.
+    Args:
+        device_id (int): The device ID to query the database for.
+        engine (sqlalchemy.engine.Engine): The connection engine to use.
+    Returns:
+        tuple: A tuple containing the latest timestamp as an integer, and None if the query was successful, or an error message if it was not.
+    """
+    sql = f"select max(org_epoch) FROM solarman.weather where device_sn = '{device_sn}'"
+    val, err = db.sql_execute(sql, db_eng)
+    if err is not None:
+        return None, err
+    epoch = val[0][0]
+    return epoch, None
+
+
 
 def db_get_devices_site_sn_id(eng, dev_type=None, site_key=''):
     sql = """
@@ -424,7 +444,7 @@ def api_get_weather_data(date_str, devices):
             first = False
 
         last_epoch = None
-        logging.info(f"Device ID: {device}")
+        logging.info(f"Device: {device}")
 
         payload = json.dumps(
             {
@@ -498,7 +518,7 @@ def api_get_weather_data(date_str, devices):
     return df
 
 
-def update_weather_db(df, epoch, engine):
+def db_update_weather(df, epoch, engine):
     """
     Updates the weather database with new data.
 
@@ -556,7 +576,7 @@ def update_weather_db(df, epoch, engine):
             conn.commit()
             return len(df), None
     except Exception as e:
-        return None, f"update_weather_db ERROR: {e}"
+        return None, f"db_update_weather ERROR: {e}"
 
 
 def get_station_daily_data(

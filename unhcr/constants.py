@@ -34,6 +34,7 @@ import optparse
 import os
 import requests
 import sys
+
 from unhcr import utils
 
 # Define constants
@@ -490,7 +491,6 @@ def env_cmdline_parser():
         return None
 
 
-utils.log_setup(override=True)
 # loads environment variables and sets constants
 args = utils.create_cmdline_parser()
 if args is None:
@@ -539,7 +539,7 @@ def import_local_libs(mods=MODULES, mpath=MOD_PATH,  logger=None):
     """
     loaded_modules = []
     if not logger:
-        logger = utils.log_setup()
+        logger = utils.log_setup('unhcr.constants.log')
     loaded_modules.append(logger)
 
     for mod in mods:

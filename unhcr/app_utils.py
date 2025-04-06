@@ -4,7 +4,18 @@ import sys
 from unhcr import constants as const
 from unhcr import utils
 
-def app_init(mods, log_file, version, mpath=const.MOD_PATH, level="INFO", override=False):
+
+def get_previous_midnight_epoch(epoch: int = None) -> int:
+    seconds_per_day = 24 * 60 * 60
+    seconds_since_midnight = epoch % seconds_per_day
+
+    # Subtract seconds since midnight to get to the most recent midnight
+    last_midnight_epoch = epoch - seconds_since_midnight
+
+    return last_midnight_epoch
+
+
+def app_init(mods, log_file, version, mpath=const.MOD_PATH, level="INFO", override=True, quiet=True):
     """
     Initialize the application by setting up logging, checking the module version,
     and optionally importing local libraries for testing.
@@ -35,16 +46,17 @@ def app_init(mods, log_file, version, mpath=const.MOD_PATH, level="INFO", overri
     """
     logger = None
     try:
-        logger = utils.log_setup(level=level, log_file=log_file, override=override)
+        logger = utils.log_setup(log_file=log_file, level=level, override=override)
     except Exception as e:
         logger = logging.getLogger("app_utils")  # Ensure logger exists
         logger.error(f"app_utils ERROR: {e}")
         return (logger,)
 
     try:
-        logger.info(
-            f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logging.getLevelName(int(logger.level))}"
-        )
+        if not quiet:
+            logger.info(
+                f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logging.getLevelName(int(logger.level))}"
+            )
 
         if not utils.is_version_greater_or_equal(version):
             logger.error(

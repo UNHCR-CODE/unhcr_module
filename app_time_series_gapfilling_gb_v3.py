@@ -44,7 +44,7 @@ mods = [
     ["db", "db"],
 ]
 
-res = app_utils.app_init(mods, "unhcr.gap_filling.log", "0.4.7", level="INFO", override=True)
+res = app_utils.app_init(mods=mods, log_file="unhcr.gap_filling.log", version="0.4.7", level="INFO", override=True, quiet=False)
 if const.LOCAL:
     logger,app_utils, const, db = res
 else:

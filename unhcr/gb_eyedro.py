@@ -1,26 +1,76 @@
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from functools import partial
 from itertools import chain
-import logging
-import os
+import json
+import time
 import numpy as np
 import pandas as pd
-
 import psycopg2
+from psycopg2.extras import execute_values
 import requests
 from sqlalchemy import text
+import time
+
+from unhcr import app_utils
 from unhcr import constants as const
 from unhcr import db
 from unhcr import err_handler
 
 run_dt = datetime.now().date()
-
-mods = const.import_local_libs([["constants", "const"],["db", "db"],["err_handler", "err_handler"]])
-logger, *rest = mods
+mods = [["app_utils", "app_utils"],["constants", "const"],["db", "db"],["err_handler", "err_handler"]]
+res = app_utils.app_init(mods=mods, log_file="unhcr.gb_eyedro.log", version="0.4.7", level="INFO", override=False)
+logger = res[0]
 if const.LOCAL:  # testing with local python files
-    logger, const, db, err_handler = mods
+    logger, app_utils, const, db, err_handler = res
+
+epoch_2024 = 1704067199
+epoch_2023 = 1672502399
+epoch_2022 = 1640937599
+epoch_2021 = 1609372799
+epoch_2020 = 1577807999
+
+def map_gb(device_data):
+    if all(len(sublist) == 0 for sublist in device_data['Wh']):
+        return pd.DataFrame()
+
+    parameter_mapping = {"A": "a_p", "V": "v_p", "PF": "pf_p", "Wh": "wh_p"}
+    records = {}
+
+    for param, lists in device_data.items():
+        param_prefix = parameter_mapping.get(param, param)  # Default to param name if not in mapping
+        for i, dataset in enumerate(lists):
+            for timestamp, value in dataset:
+                ts_str = datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+                if ts_str not in records:
+                    records[ts_str] = {"ts": ts_str, "epoch_secs": timestamp}  # Initialize timestamp row
+                records[ts_str][f"{param_prefix}{i + 1}"] = value
+    # Convert records dict to DataFrame
+    df = pd.DataFrame.from_dict(records, orient="index")
+    # !!! no need for this, but might use it later
+    # # Ensure missing columns (V & PF) exist with NaN
+    # expected_columns = ["ts"] + [f"{p}{i}" for p in ["a_p", "v_p", "pf_p", "wh_p"] for i in range(1, 4)]
+    # for col in expected_columns:
+    #     if col not in df:
+    #         df[col] = None  # Or df[col] = 0 for default values
+
+    # if amps are missing, drop the row Eyedro send wh when there are no amps
+    # Define the required columns
+    required_columns = ['a_p1', 'a_p2', 'a_p3']
+
+    # Check if all required columns are in the DataFrame
+    if all(col in df.columns for col in required_columns):
+        # If all required columns exist, drop rows with NaN in those columns
+        df = df.dropna(subset=required_columns)
+    else:
+        # If any required columns are missing, remove all rows
+        df = df.iloc[0:0]  # This clears the DataFrame
+    if not df.empty:
+        df.loc[:, "api_flag"] = -666
+     # flag using new API
+    return df.sort_values("ts").reset_index(drop=True)
+
 
 def api_get_gb_user_info():
     """
@@ -317,7 +367,390 @@ def db_create_tables(serials, db_eng=db.set_local_defaultdb_engine()):
     return res, err
 
 
-"""_summary_
+def log_gb_errors(errs, logger):
+    logger.debug(f"ERRORS: {errs}")
+    if len(errs) > 1 and any('DeviceSerial invalid' in str(item) for item in errs[1]):
+        return errs[1]
+    elif len(errs) > 2 and any('Invalid DateStartSecUtc' in str(item) for item in errs[2]):
+        logger.debug('Invalid DateStartSecUtc NORMAL END OF DATA')
+        return errs[2]
+    elif any('API' in str(item) for item in errs[0]):
+        return errs[0]
+    return errs
+
+
+def meter_response_empty(serial, epoch=None):
+    url = f'{const.GB_API_V1_API_BASE_URL}{const.GB_API_V1_GET_DATA}'
+    epoch_str = f"&DateStartSecUtc={str(epoch)}" if epoch else ""
+    meter_url = f"{url}{str(serial)}{epoch_str}&DateNumSteps=1440&UserKey={const.GB_API_V1_EMPTY_KEY}"
+
+    response = requests.get(meter_url, timeout=600)
+    response.raise_for_status()  # Raise an exception for HTTP errors
+    return json.loads(response.text)
+
+
+def get_last_com_epoch(s_num, logger=logger):
+    # Get UTC midnight for today
+    midnight_utc = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Convert to epoch (seconds since Unix epoch)
+    midnight_epoch = int(midnight_utc.timestamp())
+    data = meter_response_empty(s_num)
+    if data is None:
+        ###logger.error(f"ZZZ {s_num} ERROR: NO DATA")
+        return midnight_epoch, None
+    if data['Errors']:
+        err = log_gb_errors(data['Errors'], logger)
+        ##logger.error(f"ZZZ {s_num}  {midnight_epoch} ERRORS: {err}")
+        return midnight_epoch, data
+    last_comm = data['LastCommSecUtc']
+    return app_utils.get_previous_midnight_epoch(last_comm), data
+
+def update_gb_db(serial, df, engine, msg=''):
+    """
+    Updates the database with new data for a given serial number using an UPSERT operation.
+
+    This function takes a DataFrame containing device data and inserts it into a PostgreSQL table
+    named "gb_<serial>". If a record with the same timestamp and epoch_secs already exists, it updates
+    the existing record with new values for each parameter. The function commits the transaction after
+    successfully inserting/updating the records, and logs the number of inserted and updated rows.
+
+    Args:
+        serial (str): The serial number of the device.
+        df (pd.DataFrame): A DataFrame containing the device data to be inserted/updated.
+        engine (sqlalchemy.engine.base.Engine): The SQLAlchemy engine connected to the PostgreSQL database.
+
+    Returns:
+        tuple: A tuple containing a list with the number of inserted and updated records, and an error object (if any).
+               If an error occurs, the function returns (None, error).
+    """
+
+    columns_str = ", ".join(df.columns)
+    # Use ON CONFLICT for UPSERT (Insert or Update)
+    upsert_sql = f"""
+WITH insert_attempt AS (
+    INSERT INTO eyedro.gb_{serial} ({columns_str})
+    VALUES %s
+    ON CONFLICT (ts, epoch_secs) DO UPDATE SET
+        a_p1 = EXCLUDED.a_p1,
+        a_p2 = EXCLUDED.a_p2,
+        a_p3 = EXCLUDED.a_p3,
+        v_p1 = EXCLUDED.v_p1,
+        v_p2 = EXCLUDED.v_p2,
+        v_p3 = EXCLUDED.v_p3,
+        pf_p1 = EXCLUDED.pf_p1,
+        pf_p2 = EXCLUDED.pf_p2,
+        pf_p3 = EXCLUDED.pf_p3,
+        wh_p1 = EXCLUDED.wh_p1,
+        wh_p2 = EXCLUDED.wh_p2,
+        wh_p3 = EXCLUDED.wh_p3,
+        api_flag = EXCLUDED.api_flag
+    RETURNING xmax = 0 AS inserted
+)
+SELECT 
+    COUNT(*) FILTER (WHERE inserted) AS inserted_count,
+    COUNT(*) FILTER (WHERE NOT inserted) AS updated_count
+FROM insert_attempt;
+"""
+
+    conn = engine.raw_connection()  # Get raw psycopg2 connection
+    try:
+        with conn.cursor() as cur:
+            # cur.executemany(upsert_sql, df.to_records(index=False).tolist())
+            execute_values(cur, upsert_sql, df.to_records(index=False).tolist(),page_size=1500)
+            #xx = cur.rowcount
+                    # Fetch the inserted count
+            ######cur.execute("SELECT COUNT(*) FROM insert_attempt")  # Correct query to count
+            # Get the inserted count from RETURNING
+            #inserted_count = len(cur.fetchall()) # cur.rowcount #cur.fetchone()[0]  # Fetch single row result
+            inserted_count, updated_count = cur.fetchone()  
+            #print(f"Inserted: {inserted_count}, Updated: {updated_count}")
+
+            # Use rowcount to get total affected rows (inserts + updates)
+            # total_affected = len(df)
+
+            # # Calculate updated count
+            # updated_count = total_affected - inserted_count
+
+            # Commit transaction
+            conn.commit()
+
+    except psycopg2.DatabaseError as e:
+        conn.rollback()  # Rollback on failure
+        logger.error(f"ZZZ {serial} update_gb_db Database error during UPSERT: {e}")
+        return None, e
+    except Exception as e:
+        conn.rollback()  # Rollback on any other failure
+        logger.error(f"ZZZ {serial} update_gb_db Unexpected error: {e}")
+        return None, e
+    finally:
+        conn.close()
+    logger.info(f"{serial} {df["ts"].min()} {df["ts"].max()} In: {inserted_count}, Up: {updated_count} ✅ {msg}")
+    return [inserted_count, updated_count], None
+
+
+def upsert_gb_data(s_num, engine, epoch_cutoff = epoch_2020, epoch_start = None, MAX_EMPTY=30, msg='', logger=logger):
+    no_data_cnt = 0
+    ttl_cnt = 0
+    err_cnt = 0
+    busy_cnt = 0
+    ttl_inserted = 0
+    ttl_updated = 0
+    ttl_empty = 0
+    MAX_BUSY = 7
+    MAX_ERR = 15
+    epoch, data = get_last_com_epoch(s_num, logger)
+    if epoch < epoch_cutoff: # or s_num == '00980639':
+        logger.info(f"ZZZ {s_num} last com before cutoff: {datetime.fromtimestamp(epoch, timezone.utc).isoformat()}\n{datetime.fromtimestamp(epoch_cutoff, timezone.utc).isoformat()}" )
+        return s_num, ttl_cnt, err_cnt, ttl_inserted, ttl_updated, ttl_empty
+    #!!!!! epoch = get_db_epoch(s_num, engine, max=True)
+    #!!!!! epoch = 1740535260
+    if data and "DeviceData" in data:
+        df = map_gb(data["DeviceData"])
+        if not df.empty:
+            cnt, err = update_gb_db(s_num, df, engine, msg)
+            if err:
+                logger.error(f"ZZZ {s_num}  {epoch} ERRORS: {err}")
+                return s_num, ttl_cnt, err_cnt, ttl_inserted, ttl_updated, ttl_empty
+            ttl_inserted += cnt[0]
+            ttl_updated += cnt[1]
+            ttl_cnt += 1
+            print(cnt, ttl_cnt, epoch, s_num)
+        ####!!!! max_epoch_db = get_db_epoch(s_num, engine, max=True)
+        #!!! min_epoch_db = get_db_epoch(s_num, local_engine, max=False)
+    
+    logger.info(f"{s_num} last com: {datetime.fromtimestamp(epoch, timezone.utc).isoformat()} cutoff: {datetime.fromtimestamp(epoch_cutoff, timezone.utc).isoformat()}" )
+    if data and "Errors" in data:
+        if len(data["Errors"]) == 0:
+            epoch -= 86400
+        else:
+            logger.error(f"last_comm TRY AGAIN ZZZ {s_num}  {epoch} ERRORS: {data['Errors']}")
+    elif data is None:
+        logger.error(f"data None TRY AGAIN ZZZ {s_num}  {epoch}")
+    ####epoch = min_epoch_db # start where we left off
+    if epoch_start:
+        epoch = epoch_start
+        try:
+            sql = f'select min(epoch_secs), min(ts) from eyedro.gb_{s_num};'
+            res, err = db.sql_execute(sql, engine)
+            if res[0][0] and res[0][0] < epoch_start:
+                epoch = app_utils.get_previous_midnight_epoch(res[0][0])
+        except: 
+            pass
+
+    while epoch >= epoch_cutoff and err_cnt < MAX_ERR and busy_cnt < MAX_BUSY:  #2024-01-01
+        # if ttl_cnt > 7:
+        #     #!!!!if epoch <= max_epoch_db and min_epoch_db <= epoch_cutoff:
+        #     #    return ttl_cnt, err_cnt, ttl_inserted, ttl_updated
+        #     return ttl_cnt, err_cnt, ttl_inserted, ttl_updated
+
+        #     epoch = min_epoch_db
+        #     ttl_cnt = -200
+        data = meter_response_empty(s_num, epoch)
+        ttl_cnt += 1
+        # these first 3 errors will retry
+        if data is None:
+            no_data_cnt += 1
+            err_cnt += 1
+            logger.error(f"{err_cnt} ZZZ {s_num} {epoch} ERROR: NO DATA: {no_data_cnt}")
+            ###epoch -= 86400
+            time.sleep(.5)
+            continue
+        if 'Errors' in data and len(data['Errors']) != 0:
+            gb_err = log_gb_errors(data['Errors'], logger)
+            if 'Invalid DateStartSecUtc' in str(gb_err[1]):
+                logger.info(f'Invalid DateStartSecUtc NORMAL END OF DATA  {s_num} {epoch} {ttl_cnt} {err_cnt} {ttl_inserted} {ttl_updated} {ttl_empty}')
+                return s_num, ttl_cnt, err_cnt, ttl_inserted, ttl_updated, ttl_empty
+            err_cnt += 1
+            logger.error(f"{err_cnt} ZZZ {s_num}  {epoch} ERRORS: {gb_err}")
+            if 'API Error' in gb_err[1]:
+                print(f'{s_num} {epoch}  ERROR: API Error. Contact Eyedro Admin.')
+                time.sleep(.5)
+            if  'API busy' in gb_err[1]:
+                print(f'{s_num} {epoch}  BUSY: ERROR: API Error. Contact Eyedro Admin.')
+                busy_cnt += 1
+                time.sleep(2)
+            continue
+        if 'DeviceData' not in data:
+            err_cnt += 1
+            no_data_cnt += 1
+            logger.error(f"{err_cnt} ZZZ {s_num} {epoch} ERROR: NO DATA IN RESPONSE: {no_data_cnt}")
+            time.sleep(.5)
+            continue
+        else:
+            df = map_gb(data["DeviceData"])
+            if not df.empty:
+                cnt, err = update_gb_db(s_num, df, engine, msg)
+                ttl_empty = 0
+                err_cnt = 0
+                busy_cnt = 0
+                #!!! if gaps:
+                #     columns = ['a_p1', 'a_p2', 'a_p3']
+                #     existing_columns = [col for col in columns if col in df.columns] 
+                #     if existing_columns:
+                #         df_filtered = df[df[existing_columns].isna().any(axis=1)]  # Select rows with NaN in any of the existing columns
+                #         df_filtered.loc[:, ~df_filtered.columns.isin(['ts', 'epoch_secs'])] = None
+
+                #         cnt1, err1 = update_gb_db(s_num, df_filtered, engine, msg)
+                #         print(epoch,datetime.fromtimestamp(epoch, timezone.utc).date(), s_num, err, err1)
+                if cnt:
+                    ttl_inserted += cnt[0]
+                    ttl_updated += cnt[1]
+            else:
+                ttl_empty += 1
+                if ttl_empty >= MAX_EMPTY:
+                    logger.warning(f"ZZZ {s_num} {ttl_empty} data empty: {datetime.fromtimestamp(epoch, timezone.utc).isoformat()}\n{datetime.fromtimestamp(epoch_cutoff, timezone.utc).isoformat()}" )
+                    break
+        epoch -= 86400
+        # event = keyboard.read_event(suppress=True) if keyboard.is_pressed('space') else None
+        # if event and event.event_type == keyboard.KEY_DOWN:
+        #     print("Key pressed! Skipping execution and continuing loop.")
+        #     break
+
+    if busy_cnt >= MAX_BUSY or err_cnt >= MAX_ERR or ttl_empty >= MAX_EMPTY:
+        if busy_cnt >= MAX_BUSY:
+            msg = 'BUSY'
+        elif ttl_empty >= MAX_EMPTY:
+            msg = 'EMPTY'
+        else:
+            msg = 'ERROR'
+        logger.warning(f"EEEE {msg} {s_num} {epoch} ERROR: API errors too many times. exiting busy: {busy_cnt >= MAX_BUSY} {busy_cnt} errs: {err_cnt >= MAX_ERR} {err_cnt} empty: {ttl_empty >= MAX_EMPTY} {ttl_empty}")
+    return s_num, ttl_cnt, err_cnt, ttl_inserted, ttl_updated, ttl_empty
+
+
+def db_create_gb_gaps_table(db_eng=db.set_local_defaultdb_engine()):
+    res, err = db.sql_execute(f'select epoch_secs from {const.GB_GAPS_TABLE} limit 1;', db_eng)
+    if err:
+        res, err = db.sql_execute(const.SQL_GB_GAPS_TABLE, db_eng)
+        if err:
+            print(const.SQL_GB_GAPS_TABLE)
+            logger.error(err)
+            return None, err
+    logger.debug(res)
+    return res, err
+
+
+def db_get_gb_hypertables(db_eng=db.set_local_defaultdb_engine()):
+    """
+    Gets all hypertables in the "eyedro" schema that have a name like 'gb_%'.
+    
+    Parameters:
+    end (datetime): The end date for the query.
+    
+    Returns:
+    list of str: A list of hypertable names.
+    """
+    return db.sql_execute("""SELECT hypertable_name FROM timescaledb_information.hypertables 
+    where hypertable_schema = 'eyedro' and hypertable_name like 'gb_%';""", db_eng)
+
+
+def db_hyper_gb_gaps(hypertable_name, db_eng=db.set_local_defaultdb_engine()):
+    """
+    Collects all hypergaps in the "eyedro" schema and writes the results to a CSV file.
+    
+    The function first gets all hypertables in the "eyedro" schema, then runs a query on each one
+    to detect gaps in the data. The results are collected in a list and then written to a CSV file.
+    
+    The query is a window query that calculates the difference between the current epoch and the previous
+    epoch for each row in the table. If the difference is not equal to 60 (i.e., there is a gap), the row
+    is included in the results.
+    
+    The results are written to a CSV file in the "data/gaps" directory. The file is named "eyedro_data_gaps.csv".
+    """
+    try:
+        conn = db_eng.raw_connection()
+        with conn.cursor() as cursor:
+            query = f"""
+            WITH ordered_epochs AS (
+                SELECT epoch_secs, 
+                    LAG(epoch_secs) OVER (ORDER BY epoch_secs) AS prev_epoch
+                FROM eyedro.{hypertable_name}
+            )
+            SELECT '{hypertable_name}' AS hypertable, epoch_secs, prev_epoch, (epoch_secs - prev_epoch) AS diff_seconds
+            FROM ordered_epochs
+            WHERE (epoch_secs - prev_epoch) != 60;
+            """
+
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            print(f"Processed hypertable {hypertable_name}, gaps found: {len(rows)}")
+        conn.close()
+        return rows
+
+    except psycopg2.OperationalError as e:
+        err = e
+        print(f"Database connection error: {e}")
+    except psycopg2.DatabaseError as e:
+        err = e
+        print(f"Database query error: {e}")
+    except Exception as e:
+        err = e
+        print(f"Unexpected error: {e}")
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
+    return []
+
+
+def hyper_gb_gaps_concur(ht_names, chunks=10, src='local', db_eng=db.set_local_defaultdb_engine()):
+    def process_chunk(chunk, param1):
+        return [db_hyper_gb_gaps(item[0], db_eng=param1) for item in chunk]  # Apply function to each item
+
+    # ht_names = []
+    # for item in res:
+    #     ht_names.append(item[0][0])
+    
+    num_parts = chunks
+    chunks = [list(chunk) for chunk in np.array_split(ht_names, num_parts)]  # Ensure list format
+
+    # cutoff = datetime.now(timezone.utc) - timedelta(days=12)
+    # epoch_cutoff = get_previous_midnight_epoch(int(cutoff.timestamp()))
+    # local_engine = db.set_local_defaultdb_engine()
+
+    with ThreadPoolExecutor(max_workers=num_parts) as executor:
+        results = list(executor.map(partial(process_chunk, param1=db_eng), chunks))
+
+    return results
+    # Flatten results
+    return [item for sublist in results for item in sublist]
+
+
+def db_get_all_gb_gaps(src='local'):
+    """
+    Retrieves and processes data gaps for all "gb" hypertables.
+
+    This function connects to a local or remote database, retrieves hypertable names,
+    and uses concurrent execution to find data gaps in each hypertable. The results
+    are compiled into a DataFrame and saved to a CSV file. A summary of the results
+    is printed to the console.
+
+    Args:
+        src (str): Specifies the data source. Use 'local' for the local database 
+                   and any other value for the remote database.
+
+    Returns:
+        None
+    """
+
+    ht_names, err = db_get_gb_hypertables()
+    pass
+    res = hyper_gb_gaps_concur(ht_names=ht_names)
+    flattened_data = list(chain.from_iterable(chain.from_iterable(res)))
+    #Step 3: Convert results to DataFrame
+    df = pd.DataFrame(flattened_data, columns=["hypertable", "epoch_secs", "prev_epoch", "diff_seconds"])
+    df['src'] = src
+
+    #Save results to CSV
+    df.to_csv(const.GB_GAPS_CSV, index=False)
+
+    #Print summary
+    print(df.head())
+    print(f"✅ Data gaps found in {len(df)} rows. Results saved to 'eyedro_data_gaps.csv'.")
+
+
+
+
+""" TimescaleDB Notes
 what does this do ?    SELECT add_continuous_aggregate_policy(
         'eyedro.gb_{serial}_hourly',
         start_offset => INTERVAL '10 days',
@@ -737,136 +1170,3 @@ Best practice: Keep recent data uncompressed and only compress older data for st
 Let me know if you need help setting it up! 🚀
 """
 
-
-def db_create_gb_gaps_table(db_eng=db.set_local_defaultdb_engine()):
-    res, err = db.sql_execute(f'select epoch_secs from {const.GB_GAPS_TABLE} limit 1;', db_eng)
-    if err:
-        res, err = db.sql_execute(const.SQL_GB_GAPS_TABLE, db_eng)
-        if err:
-            print(const.SQL_GB_GAPS_TABLE)
-            logger.error(err)
-            return None, err
-    logger.debug(res)
-    return res, err
-
-
-def db_get_gb_hypertables(db_eng=db.set_local_defaultdb_engine()):
-    """
-    Gets all hypertables in the "eyedro" schema that have a name like 'gb_%'.
-    
-    Parameters:
-    end (datetime): The end date for the query.
-    
-    Returns:
-    list of str: A list of hypertable names.
-    """
-    return db.sql_execute("""SELECT hypertable_name FROM timescaledb_information.hypertables 
-    where hypertable_schema = 'eyedro' and hypertable_name like 'gb_%';""", db_eng)
-
-
-def db_hyper_gb_gaps(hypertable_name, db_eng=db.set_local_defaultdb_engine()):
-    """
-    Collects all hypergaps in the "eyedro" schema and writes the results to a CSV file.
-    
-    The function first gets all hypertables in the "eyedro" schema, then runs a query on each one
-    to detect gaps in the data. The results are collected in a list and then written to a CSV file.
-    
-    The query is a window query that calculates the difference between the current epoch and the previous
-    epoch for each row in the table. If the difference is not equal to 60 (i.e., there is a gap), the row
-    is included in the results.
-    
-    The results are written to a CSV file in the "data/gaps" directory. The file is named "eyedro_data_gaps.csv".
-    """
-    try:
-        conn = db_eng.raw_connection()
-        with conn.cursor() as cursor:
-            query = f"""
-            WITH ordered_epochs AS (
-                SELECT epoch_secs, 
-                    LAG(epoch_secs) OVER (ORDER BY epoch_secs) AS prev_epoch
-                FROM eyedro.{hypertable_name}
-            )
-            SELECT '{hypertable_name}' AS hypertable, epoch_secs, prev_epoch, (epoch_secs - prev_epoch) AS diff_seconds
-            FROM ordered_epochs
-            WHERE (epoch_secs - prev_epoch) != 60;
-            """
-
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            print(f"Processed hypertable {hypertable_name}, gaps found: {len(rows)}")
-        conn.close()
-        return rows
-
-    except psycopg2.OperationalError as e:
-        err = e
-        print(f"Database connection error: {e}")
-    except psycopg2.DatabaseError as e:
-        err = e
-        print(f"Database query error: {e}")
-    except Exception as e:
-        err = e
-        print(f"Unexpected error: {e}")
-    finally:
-        if 'conn' in locals() and conn:
-            conn.close()
-
-    return []
-
-
-def hyper_gb_gaps_concur(ht_names, chunks=10, src='local', db_eng=db.set_local_defaultdb_engine()):
-    def process_chunk(chunk, param1):
-        return [db_hyper_gb_gaps(item[0], db_eng=param1) for item in chunk]  # Apply function to each item
-
-    # ht_names = []
-    # for item in res:
-    #     ht_names.append(item[0][0])
-    
-    num_parts = chunks
-    chunks = [list(chunk) for chunk in np.array_split(ht_names, num_parts)]  # Ensure list format
-
-    # cutoff = datetime.now(timezone.utc) - timedelta(days=12)
-    # epoch_cutoff = get_previous_midnight_epoch(int(cutoff.timestamp()))
-    # local_engine = db.set_local_defaultdb_engine()
-
-    with ThreadPoolExecutor(max_workers=num_parts) as executor:
-        results = list(executor.map(partial(process_chunk, param1=db_eng), chunks))
-
-    return results
-    # Flatten results
-    return [item for sublist in results for item in sublist]
-
-
-def db_get_all_gb_gaps(src='local'):
-    """
-    Retrieves and processes data gaps for all "gb" hypertables.
-
-    This function connects to a local or remote database, retrieves hypertable names,
-    and uses concurrent execution to find data gaps in each hypertable. The results
-    are compiled into a DataFrame and saved to a CSV file. A summary of the results
-    is printed to the console.
-
-    Args:
-        src (str): Specifies the data source. Use 'local' for the local database 
-                   and any other value for the remote database.
-
-    Returns:
-        None
-    """
-
-    ht_names, err = db_get_gb_hypertables()
-    pass
-    res = hyper_gb_gaps_concur(ht_names=ht_names)
-    flattened_data = list(chain.from_iterable(chain.from_iterable(res)))
-    #Step 3: Convert results to DataFrame
-    df = pd.DataFrame(flattened_data, columns=["hypertable", "epoch_secs", "prev_epoch", "diff_seconds"])
-    df['src'] = src
-
-    #Save results to CSV
-    df.to_csv(const.GB_GAPS_CSV, index=False)
-
-    #Print summary
-    print(df.head())
-    print(f"✅ Data gaps found in {len(df)} rows. Results saved to 'eyedro_data_gaps.csv'.")
-    
-# res = db_get_all_gb_gaps(src='local')
-# pass

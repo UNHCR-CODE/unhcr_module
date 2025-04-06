@@ -13,7 +13,7 @@ mods=[
     ["models", "models"],
 ]
 
-res = app_utils.app_init(mods, "unhcr.update_all.log", "0.4.6", level="INFO", override=True)
+res = app_utils.app_init(mods=mods, log_file="unhcr.update_all.log", version="0.4.6", level="INFO", override=True)
 if const.LOCAL:
     logger, app_utils, const, models = res
 else:

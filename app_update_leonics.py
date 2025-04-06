@@ -59,17 +59,13 @@ mods = [
     ["api_solarman", "api_solarman"],
 ]
 
-res = app_utils.app_init(mods, "unhcr.update_all.log", "0.4.6", level="INFO", override=True)
+res = app_utils.app_init(mods=mods, log_file="unhcr.update_all.log", version="0.4.6", level="INFO", override=True, quiet=False)
 if const.LOCAL:
     logger, app_utils, const, utils, db, api_solarman = res
 else:
     logger = res
 
-if const.is_running_on_azure():
-    engines = [db.set_local_defaultdb_engine()]
-else:
-    engines = db.set_db_engines()
-
+eng = db.set_local_defaultdb_engine()
 
 # just to test S3
 # TODO waiting for new creds
@@ -115,32 +111,25 @@ def execute(token, start_ts=None):
     if UPDATE_DB or PROSPECT:
         logging.debug("Retrieved Leonics token")
     if UPDATE_DB:
-        start_ts = db.update_takum_raw_db(token, start_ts)
+        start_ts, err = db.db_update_takum_raw(eng, token, start_ts)
+        if err:
+            logging.error(f"Leonics DB update error: {err}")
+            return
     if PROSPECT:
         if BACKFILL_DT:
-            db.update_prospect(db.azure_defaultdb_engine, start_ts=start_ts)  # AZURE
+            db.update_prospect(eng, start_ts=start_ts, local=True)  # AZURE
         else:
-            if const.is_running_on_azure():
-                db.update_prospect(db.local_defaultdb_engine)
+            res, err = utils.prospect_running()
+            if err:
+                logging.warning(f"Prospect Server not running locally. {res} {err}")
                 return
-            else:
-                db.update_prospect(db.azure_defaultdb_engine)
-        if const.is_running_on_azure():
-            return start_ts
 
-        try:
-            if utils.prospect_running():
-                logging.info(f"Local Server is responding.")
-                res, err = db.update_prospect(db.local_defaultdb_engine, start_ts=start_ts, local=True)
-                assert res is not None
-                assert err is None
-                logging.info(f"LOCAL: TRUE {res.status_code}:  {res.text}")
-            else:
-                logging.info(f"Server not responding")
-                start_ts = None
-        except requests.ConnectionError:
-            logging.error(f"Server connection error.")
-            start_ts = None
+            res, err = db.update_prospect(eng, local=True)
+            if err:
+                logging.error(f"Prospect update error: {err}")
+                return
+            
+            logging.info(f"Prospect update successful. {res}")
     return start_ts
 
 

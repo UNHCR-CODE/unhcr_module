@@ -15,22 +15,18 @@ Key Components
     constants import: 
         This file imports necessary credentials (ACCESS_KEY, SECRET_KEY) and S3 location information (BUCKET_NAME, FOLDER_NAME) 
         from a separate constants module. This separation of credentials from the main code is a good security practice.
-    Logging: 
-        The code uses the logging module to provide information about the files found or any errors encountered. 
-        This is crucial for monitoring and debugging.
 """
 
 import boto3
-import logging
 
+from unhcr import app_utils
 from unhcr import constants as const
 
-mods = const.import_local_libs(mods=[["constants", "const"]])
-logger, *rest = mods
+mods=[["app_utils", "app_utils"],["constants", "const"]]
+res = app_utils.app_init(mods=mods, log_file="unhcr.s3.log", version="0.4.7", level="INFO", override=False)
+logger = res[0]
 if const.LOCAL:  # testing with local python files
-    logger, const = mods
-else:
-    logger = mods
+    logger, app_utils, const = res
 
 # from unhcr import constants as const
 

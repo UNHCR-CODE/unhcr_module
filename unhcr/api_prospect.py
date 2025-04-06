@@ -25,12 +25,16 @@ import logging
 import re
 import requests
 
+from unhcr import app_utils
 from unhcr import constants as const
 
-mods = const.import_local_libs(mods=[["constants", "const"]])
-logger, *rest = mods
+mods = [["app_utils", "app_utils"], ["constants", "const"]]
+res = app_utils.app_init(mods=mods, log_file="unhcr.api_prospect.log", version="0.4.7", level="INFO", override=False)
+logger = res[0]
 if const.LOCAL:  # testing with local python files
-    logger, const = mods
+    logger, app_utils, const = res
+
+
 
 def get_prospect_url_key(local=None, out=False):
     """

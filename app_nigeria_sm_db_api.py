@@ -32,7 +32,7 @@ mods=[
     ["utils", "utils"],
 ]
 
-res =app_utils.app_init(mods=mods,  log_file="unhcr.app_nigeria_sm_db_api.log", version= '0.4.7', level="INFO", override=True)
+res =app_utils.app_init(mods=mods,  log_file="unhcr.app_nigeria_sm_db_api.log", version= '0.4.7', level="INFO", override=True, quiet=False)
 
 # local testing ===================================
 if const.LOCAL:  # testing with local python files

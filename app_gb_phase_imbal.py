@@ -1,76 +1,20 @@
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
-from functools import partial
-import io
-import itertools
-import json
-import logging
-import threading
-import numpy as np
+from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime
+import matplotlib.pyplot as plt
 import os
-import re
-import time
-from numpy import sort
-from openpyxl import load_workbook
-from openpyxl.chart import BarChart, LineChart, Reference
-from openpyxl.chart.layout import Layout, ManualLayout
 import pandas as pd
-from psycopg2.extras import execute_values, execute_batch
-from psycopg2 import DatabaseError
-import requests
-from sqlalchemy import text
-import sys
-import zipfile
-import py7zr
-
-from unhcr import constants as const
-from unhcr import db
-from unhcr import utils
-from unhcr import gb_eyedro
-
-
-mods = const.import_local_libs(
-        mods=[
-            ["constants", "const"],
-            ["db", "db"],
-            ["utils", "utils"],
-            ["gb_eyedro", "gb_eyedro"],
-        ]
-    )
-logger, *rest = mods
-# local testing ===================================
-if const.LOCAL:  # testing with local python files
-    logger, const, db, utils, gb_eyedro = mods
-
-utils.log_setup(level="INFO", log_file="unhcr.gb_1miny.log", override=True)
-logger.info(
-    f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logging.getLevelName(int(logger.level))}"
-)
-
-if not utils.is_version_greater_or_equal('0.4.7'):
-    logger.error(
-        "This version of the script requires at least version 0.4.6 of the unhcr module."
-    )
-    exit(47)
-
-engines = db.set_db_engines()
-
-
-
-
-
-
-
-import pandas as pd
-import numpy as np
+from pathlib import Path
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler
-import matplotlib.pyplot as plt
-import seaborn as sns
-import os
-from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor
 
+from unhcr import app_utils
+from unhcr import constants as const
+
+mods=[["app_utils", "app_utils"], ["constants", "const"]]
+res = app_utils.app_init(mods=mods, log_file="unhcr.gb_phase_imbal.log", version="0.4.7", level="INFO", override=True)
+logger = res[0]
+if const.LOCAL:
+    logger,app_utils, const = res
 
 def process_phase_dataset(df, site_name, normalize=False, n_clusters=4):
     """

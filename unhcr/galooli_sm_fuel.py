@@ -40,15 +40,16 @@ from datetime import UTC, datetime, timedelta
 import pandas as pd
 import pytz
 import requests
+
+from unhcr import app_utils
 from unhcr import constants as const
 from unhcr import utils
 
-mods = const.import_local_libs(
-        mods=[["constants", "const"], ["utils", "utils"]]
-    )
-logger, *rest = mods
+mods=[["app_utils", "app_utils"],["constants", "const"], ["utils", "utils"]]
+res = app_utils.app_init(mods=mods, log_file="unhcr.galooli_sm_fuel.log", version="0.4.7", level="INFO", override=False)
+logger = res[0]
 if const.LOCAL:  # testing with local python files
-    logger, const, utils = mods
+    logger, app_utils, const, utils = res
 
 tz = "GMT"
 

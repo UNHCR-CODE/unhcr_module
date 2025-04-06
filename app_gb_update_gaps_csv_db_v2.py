@@ -30,13 +30,10 @@ mods = [
     ['gb_eyedro', 'gb_eyedro'],
 ]
 
-res = app_utils.app_init(
-    mods, "unhcr.gb_serial_nums.log", "0.4.7", level="INFO", override=True
-)
+res = app_utils.app_init(mods=mods, log_file="unhcr.gb_serial_nums.log", version="0.4.7", level="INFO", override=True, quiet=False)
+logger = res[0]
 if const.LOCAL:
     logger,app_utils, err_handler, utils, const, db, gb_eyedro = res
-else:
-    logger = res
 
 engines = db.set_db_engines()
 

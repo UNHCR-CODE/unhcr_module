@@ -36,7 +36,7 @@ fi
 
 
 # Run the update_all.py script
-python3 app_update_all.py --log INFO 
+python3 app_update_leonics.py --log INFO 
 EXIT_CODE=$?  # Store the exit code of Python
 
 deactivate

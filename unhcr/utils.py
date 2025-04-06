@@ -51,6 +51,7 @@ import glob
 import logging
 import optparse
 import os
+import socket
 import requests
 import sys
 import tkinter as tk
@@ -58,6 +59,9 @@ from tkinter import messagebox
 
 # Global variable to store the selected file
 selected_file = None
+log_file = 'unhcr.utils.log'
+
+
 
 # Function to display the dropdown populated with file names from a directory
 def show_dropdown_from_directory(directory, file_pattern_filter=None):
@@ -152,7 +156,7 @@ def config_log_handler(handler, level, formatter, logger):
     logger.addHandler(handler)
 
 
-def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
+def log_setup(log_file, level="INFO", override=False):
     # Check if the logger already has handlers to prevent adding duplicates
     """
     Configure the logging for the module. If level is None, it will look for a command-line argument --log followed by the desired level, e.g., INFO, DEBUG, etc.
@@ -208,7 +212,7 @@ def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
 
 
 # init logging
-log_setup(override=True)
+log_setup(log_file)
 
 
 def ts2Epoch(dt, offset_hrs=0):
@@ -495,28 +499,48 @@ def concat_csv_files(input_file, output_file, append=True):
         os.rename(file, new_name)
 
 
-def prospect_running(url="http://localhost:3000"):
-    """
-    Check if the docker container is running by sending a GET request to the server URL.
+def is_port_in_use(port, host='127.0.0.1'):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        return s.connect_ex((host, port)) == 0
 
-    Parameters
-    ----------
-    url : str, optional
-        The URL of the server, by default "http://localhost:3000"
 
-    Returns
-    -------
-    bool
-        True if the server is running, False otherwise
-    """
-    
-    try:
-        response = requests.get(url, timeout=(5, 10))
-        if response.status_code > 205:
-            logging.info(f"Server at {url} responded with status code: {response.status_code}")
-            return False
+def prospect_running():
+    ports = [3000, 3001]
+    in_use = []
+    err = ''
+    for port in ports:
+        if is_port_in_use(port):
+            in_use.append(port) #print(f"Port {port} is in use ✅")
         else:
-            return True
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Server at {url} is not responding. ERROR: {e}")
-        return False
+            err += f"Port {port} is free ❌\n"
+    if err == '':
+        err = None
+    return in_use, err
+
+
+# def prospect_running(url="http://localhost:3000"):
+#     """
+#     Check if the docker container is running by sending a GET request to the server URL.
+
+#     Parameters
+#     ----------
+#     url : str, optional
+#         The URL of the server, by default "http://localhost:3000"
+
+#     Returns
+#     -------
+#     bool
+#         True if the server is running, False otherwise
+#     """
+    
+#     try:
+#         response = requests.get(url, timeout=(5, 10))
+#         if response.status_code > 205:
+#             logging.info(f"Server at {url} responded with status code: {response.status_code}")
+#             return False
+#         else:
+#             return True
+#     except requests.exceptions.RequestException as e:
+#         logging.error(f"Server at {url} is not responding. ERROR: {e}")
+#         return False
