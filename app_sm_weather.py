@@ -41,7 +41,7 @@ for deviceSn in devices:
         continue
     epochs.append(epoch)
 if not epochs:
-    logger.warning(f"No epochs for weather devices found to process {df_weather_devices["device_sn"]}")
+    logger.warning(f'No epochs for weather devices found to process {df_weather_devices["device_sn"]}')
     exit(1)
 epoch = min(epochs)
 epoch_now = int(time.time())
