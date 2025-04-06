@@ -484,7 +484,7 @@ FROM insert_attempt;
         return None, e
     finally:
         conn.close()
-    logger.info(f"{serial} {df["ts"].min()} {df["ts"].max()} In: {inserted_count}, Up: {updated_count} ✅ {msg}")
+    logger.info(f'{serial} {df["ts"].min()} {df["ts"].max()} In: {inserted_count}, Up: {updated_count} ✅ {msg}')
     return [inserted_count, updated_count], None
 
 
