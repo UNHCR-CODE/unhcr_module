@@ -30,9 +30,12 @@ if const.LOCAL:
 eng = db.set_local_defaultdb_engine()
 epochs = []
 
-df_weather_devices = api_solarman.db_get_devices_site_sn_id(
-    eng, dev_type="WEATHER_STATION"
-)
+
+
+df_weather_devices, err = api_solarman.db_get_devices_site_sn_id(eng, dev_type="WEATHER_STATION")
+if err:
+    logger.error(f'sm_weather db_get_devices_site_sn_id ERROR: {err}')
+    exit(1)
 devices = df_weather_devices["device_sn"].tolist()
 for deviceSn in devices:
     epoch, err = api_solarman.db_get_sm_weather_max_epoch(eng, deviceSn)

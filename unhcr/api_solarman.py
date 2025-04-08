@@ -259,7 +259,7 @@ def db_get_sm_weather_max_epoch(db_eng, device_sn):
 
 
 
-def db_get_devices_site_sn_id(eng, dev_type=None, site_key=''):
+def db_get_devices_site_sn_id(eng, dev_type='%', site_key='%'):
     sql = """
         WITH site_devices AS (
             SELECT s."name", dsh.station_id, dsh.device_sn, dsh.device_id, d.device_type 
@@ -267,26 +267,21 @@ def db_get_devices_site_sn_id(eng, dev_type=None, site_key=''):
             JOIN solarman.stations s ON s.id = dsh.station_id
             JOIN solarman.devices d ON dsh.device_sn = d.device_sn
             WHERE dsh.end_time IS NULL 
-        ), 
-        device_sns AS (
-            SELECT device_sn FROM site_devices
         )
-        select * from site_devices where device_type = 'DEV_TYPE';
-        -- SELECT * FROM solarman.inverter_data 
-        -- WHERE device_sn IN (SELECT device_sn FROM site_devices SITE_KEY)
-        -- order by ts, device_id;
-    """.replace("DEV_TYPE", dev_type)
-    if site_key:
-        sql = sql.replace("SITE_KEY", f"WHERE name LIKE '%SITE_KEY%'")
-    else:
-        sql = sql.replace("SITE_KEY", "")
-    if dev_type:
-        sql = sql.replace("DEV_TYPE", dev_type)
-    else:
-        sql = sql.replace("'DEV_TYPE'", "")
-    df = pd.read_sql(sql, eng)
-    return df
+        SELECT * FROM site_devices
+        WHERE  device_type ILIKE :dev_type AND name ILIKE :site_key
+    """
 
+    params = {
+        "dev_type": dev_type,
+        "site_key": site_key
+    }
+    print(sql, params)
+    df, err = db.sql_execute(sql, eng, data=params)
+    if err:
+        logger.error(f"db_get_devices_site_sn_id ERROR: {err}")
+        return None, err
+    return pd.DataFrame(df), None
 
 def camel_to_snake(name):
     """Converts a camelCase string to snake_case."""

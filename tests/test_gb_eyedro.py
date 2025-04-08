@@ -23,16 +23,16 @@ def test_db_create_tables_success(mock_dependencies):
     mock_requests, mock_logger, mock_err_handler, mock_db = mock_dependencies
     # Correct in-memory Postgres engine creation
     mock_engine = create_engine("postgresql:///?host=localhost&port=5431", creator=lambda _: psycopg2.connect(database="testdb", user="postgres", password="postgres", host="localhost", port=5431))
-    with mock_engine.connect() as conn:
+    with mock_engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS eyedro.gb_test_123 cascade"))
         conn.execute(text("DROP TABLE IF EXISTS eyedro.gb_test_321 cascade"))
-        conn.commit()
-    result, err = gb_eyedro.db_create_tables(["gb_test_123"], mock_engine)
+        
+    result, err = gb_eyedro.db_create_tables_2(["gb_test_123"], mock_engine)
 
     assert result == 'All good Houston'
     assert err is None
     # Check if the table was created (replace with appropriate check for your schema)
-    with mock_engine.connect() as conn:
+    with mock_engine.begin() as conn:
         result = conn.execute(text("SELECT 1")) # Replace with a check relevant to your table structure
         assert result.fetchone() is not None
         
@@ -42,12 +42,12 @@ def test_db_hyper_gb_gaps_success(mock_dependencies):
     # Correct in-memory Postgres engine creation
     mock_engine = create_engine("postgresql:///?host=localhost&port=5431", creator=lambda _: psycopg2.connect(database="testdb", user="postgres", password="postgres", host="localhost", port=5431))
     # Create a dummy table and insert some data
-    with mock_engine.connect() as conn:
+    with mock_engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS eyedro.gb_test_123 cascade"))
-        conn.commit()
+        
         conn.execute(text("CREATE TABLE IF NOT EXISTS eyedro.gb_test_123 (epoch_secs INTEGER, ts TIMESTAMP)"))
         conn.execute(text("INSERT INTO eyedro.gb_test_123 (epoch_secs, ts) VALUES (1, '2023-01-01 00:00:00'), (2, '2023-01-01 00:01:00'), (4, '2023-01-01 00:03:00')"))
-        conn.commit()
+        
 
     result = gb_eyedro.db_hyper_gb_gaps("gb_test_123", mock_engine)
     assert len(result) == 2
@@ -66,15 +66,15 @@ def test_hyper_gb_gaps_concur_success(mock_dependencies):
     # Correct in-memory Postgres engine creation
     mock_engine = create_engine("postgresql:///?host=localhost&port=5431", creator=lambda _: psycopg2.connect(database="testdb", user="postgres", password="postgres", host="localhost", port=5431))
     # Create a dummy table and insert some data
-    with mock_engine.connect() as conn:
+    with mock_engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS eyedro.gb_test_123 cascade"))
         conn.execute(text("DROP TABLE IF EXISTS eyedro.gb_test_321 cascade"))
-        conn.commit()
+        
         conn.execute(text("CREATE TABLE IF NOT EXISTS eyedro.gb_test_123 (epoch_secs INTEGER, ts TIMESTAMP)"))
         conn.execute(text("INSERT INTO eyedro.gb_test_123 (epoch_secs, ts) VALUES (1, '2023-01-01 00:00:00'), (2, '2023-01-01 00:01:00'), (4, '2023-01-01 00:03:00')"))
         conn.execute(text("CREATE TABLE IF NOT EXISTS eyedro.gb_test_321 (epoch_secs INTEGER, ts TIMESTAMP)"))
         conn.execute(text("INSERT INTO eyedro.gb_test_321 (epoch_secs, ts) VALUES (1, '2023-01-01 00:00:00'), (2, '2023-01-01 00:01:00'), (4, '2023-01-01 00:03:00')"))
-        conn.commit()
+        
 
     ht_names = [("gb_test_123",), ("gb_test_321",)]
     result = gb_eyedro.hyper_gb_gaps_concur(ht_names=ht_names, chunks=2, db_eng=mock_engine)
@@ -352,7 +352,7 @@ def test_db_create_tables_db_error(mock_dependencies):
     mock_engine = create_engine("postgresql:///?host=localhost&port=5431", creator=lambda _: psycopg2.connect(database="testdb", user="postgres", password="postgres", host="localhost", port=5431))
     # Simulate a database error by trying to create a table with an invalid name
     ###with pytest.raises(psycopg2.errors.SyntaxError):
-    res, err = gb_eyedro.db_create_tables(["z.gb_test_123;"], mock_engine)
+    res, err = gb_eyedro.db_create_tables_2(["z.gb_test_123;"], mock_engine)
     str(err.orig.pgerror).startswith("ERROR:  syntax error at or near") is True
 
 
@@ -372,16 +372,16 @@ def test_db_create_tables_missing_index(mock_dependencies):
     mock_requests, mock_logger, mock_err_handler, mock_db = mock_dependencies
     # Create an in-memory Postgres engine for testing
     mock_engine = create_engine("postgresql:///?host=localhost&port=5431", creator=lambda _: psycopg2.connect(database="testdb", user="postgres", password="postgres", host="localhost", port=5431))
-    with mock_engine.connect() as conn:
+    with mock_engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS eyedro.gb_test_123 cascade"))
         conn.execute(text("DROP TABLE IF EXISTS eyedro.gb_test_321 cascade"))
-        conn.commit()
-    result, err = gb_eyedro.db_create_tables(["gb_test_123"], mock_engine)
+        
+    result, err = gb_eyedro.db_create_tables_2(["gb_test_123"], mock_engine)
 
     assert result == 'All good Houston'
     assert err is None
     # Check if the table was created
-    with mock_engine.connect() as conn:
+    with mock_engine.begin() as conn:
         result = conn.execute(text("SELECT 1"))
         assert result.fetchone() is not None
 

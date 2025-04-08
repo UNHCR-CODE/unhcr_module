@@ -65,7 +65,7 @@ def db_engine():
     """Set up a real SQLite engine for testing"""
     engine = create_engine("sqlite:///:memory:")
     # Create test tables
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS TAKUM_LEONICS_API_RAW (
                 datetimeserver DATETIME PRIMARY KEY,
@@ -105,7 +105,7 @@ def db_engine():
             INSERT INTO eyedro.gb_12345 (epoch_secs)
             VALUES (1628000000)
         """)
-        conn.commit()
+        
     yield engine
 
 
@@ -423,7 +423,7 @@ def mock_request(monkeypatch):
 def db_engine():
     """Fixture to set up the in-memory database engine."""
     engine = sqlalchemy.create_engine("sqlite:///:memory:")
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text(
                 """
@@ -434,7 +434,7 @@ def db_engine():
         """
             )
         )
-        conn.commit()
+        
     return engine
 
 

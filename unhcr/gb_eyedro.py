@@ -216,7 +216,7 @@ def api_get_user_info_as_df():
     return all_serials_df, None
 
 
-def db_create_tables(serials, db_eng=db.set_local_defaultdb_engine()):
+def db_create_tables_1(serials, db_eng=db.set_local_defaultdb_engine()):
     res = True
     err = None
     conn = db_eng.raw_connection()  # Get raw psycopg2 connection
@@ -365,6 +365,154 @@ def db_create_tables(serials, db_eng=db.set_local_defaultdb_engine()):
         conn.close()  # ✅ Always close the connection
 
     return res, err
+
+def db_create_tables_2(serials, db_eng=db.set_local_defaultdb_engine()):
+    res = True
+    err = None
+    conn = db_eng.raw_connection()  # Get raw psycopg2 connection
+    try:
+        conn = db_eng.connect()
+
+        for serial in serials:
+            with conn.begin():
+                serial = serial.replace("gb_", "").lower()
+                print(serial)
+                sql = f"""
+        ------------ !!!!!! DROP TABLE IF EXISTS eyedro.gb_{serial} CASCADE;
+        CREATE TABLE IF NOT EXISTS eyedro.gb_{serial} (
+        epoch_secs BIGINT NOT NULL,
+        ts timestamp not NULL,
+        a_p1 float8 NULL,
+        a_p2 float8 NULL,
+        a_p3 float8 NULL,
+        v_p1 float8 NULL,
+        v_p2 float8 NULL,
+        v_p3 float8 NULL,
+        pf_p1 float8 NULL,
+        pf_p2 float8 NULL,
+        pf_p3 float8 NULL,
+        wh_p1 float8 NULL,
+        wh_p2 float8 NULL,
+        wh_p3 float8 NULL,
+        CONSTRAINT gb_{serial}_pkey PRIMARY KEY (ts, epoch_secs)
+    );
+
+    SELECT create_hypertable('eyedro.gb_{serial}', 'ts', if_not_exists => TRUE, migrate_data => true);
+
+    DROP MATERIALIZED VIEW IF EXISTS eyedro.gb_{serial}_hourly cascade;
+    CREATE MATERIALIZED VIEW eyedro.gb_{serial}_hourly 
+    WITH (timescaledb.continuous) AS
+    SELECT 
+        time_bucket('1h', ts) AS ts_hr,
+
+        -- Power Aggregation (Ensuring No Negative Values)
+        AVG(ABS(a_p1)) FILTER (WHERE a_p1 IS NOT NULL AND a_p1::TEXT <> 'NaN') AS avg_amps_p1,
+        MIN(ABS(a_p1)) FILTER (WHERE a_p1 IS NOT NULL AND a_p1::TEXT <> 'NaN') AS min_amps_p1,
+        MAX(ABS(a_p1)) FILTER (WHERE a_p1 IS NOT NULL AND a_p1::TEXT <> 'NaN') AS max_amps_p1,
+
+        AVG(ABS(a_p2)) FILTER (WHERE a_p2 IS NOT NULL AND a_p2::TEXT <> 'NaN') AS avg_amps_p2,
+        MIN(ABS(a_p2)) FILTER (WHERE a_p2 IS NOT NULL AND a_p2::TEXT <> 'NaN') AS min_amps_p2,
+        MAX(ABS(a_p2)) FILTER (WHERE a_p2 IS NOT NULL AND a_p2::TEXT <> 'NaN') AS max_amps_p2,
+
+        AVG(ABS(a_p3)) FILTER (WHERE a_p3 IS NOT NULL AND a_p3::TEXT <> 'NaN') AS avg_amps_p3,
+        MIN(ABS(a_p3)) FILTER (WHERE a_p3 IS NOT NULL AND a_p3::TEXT <> 'NaN') AS min_amps_p3,
+        MAX(ABS(a_p3)) FILTER (WHERE a_p3 IS NOT NULL AND a_p3::TEXT <> 'NaN') AS max_amps_p3,
+
+        -- Voltage Aggregation
+        AVG(ABS(v_p1)) FILTER (WHERE v_p1 IS NOT NULL AND v_p1::TEXT <> 'NaN') AS avg_volts_p1,
+        MIN(ABS(v_p1)) FILTER (WHERE v_p1 IS NOT NULL AND v_p1::TEXT <> 'NaN') AS min_volts_p1,
+        MAX(ABS(v_p1)) FILTER (WHERE v_p1 IS NOT NULL AND v_p1::TEXT <> 'NaN') AS max_volts_p1,
+
+        AVG(ABS(v_p2)) FILTER (WHERE v_p2 IS NOT NULL AND v_p2::TEXT <> 'NaN') AS avg_volts_p2,
+        MIN(ABS(v_p2)) FILTER (WHERE v_p2 IS NOT NULL AND v_p2::TEXT <> 'NaN') AS min_volts_p2,
+        MAX(ABS(v_p2)) FILTER (WHERE v_p2 IS NOT NULL AND v_p2::TEXT <> 'NaN') AS max_volts_p2,
+
+        AVG(ABS(v_p3)) FILTER (WHERE v_p3 IS NOT NULL AND v_p3::TEXT <> 'NaN') AS avg_volts_p3,
+        MIN(ABS(v_p3)) FILTER (WHERE v_p3 IS NOT NULL AND v_p3::TEXT <> 'NaN') AS min_volts_p3,
+        MAX(ABS(v_p3)) FILTER (WHERE v_p3 IS NOT NULL AND v_p3::TEXT <> 'NaN') AS max_volts_p3,
+
+        -- Power Factor Aggregation (Weighted, Ensuring No Negative Values)
+        ABS(SUM(pf_p1 * a_p1)) / NULLIF(SUM(ABS(a_p1)) FILTER (WHERE a_p1 IS NOT NULL AND a_p1::TEXT <> 'NaN'), 0) AS weighted_pf_p1,
+        MIN(ABS(pf_p1)) FILTER (WHERE pf_p1 IS NOT NULL AND pf_p1::TEXT <> 'NaN') AS min_pf_p1,
+        MAX(ABS(pf_p1)) FILTER (WHERE pf_p1 IS NOT NULL AND pf_p1::TEXT <> 'NaN') AS max_pf_p1,
+
+        ABS(SUM(pf_p2 * a_p2)) / NULLIF(SUM(ABS(a_p2)) FILTER (WHERE a_p2 IS NOT NULL AND a_p2::TEXT <> 'NaN'), 0) AS weighted_pf_p2,
+        MIN(ABS(pf_p2)) FILTER (WHERE pf_p2 IS NOT NULL AND pf_p2::TEXT <> 'NaN') AS min_pf_p2,
+        MAX(ABS(pf_p2)) FILTER (WHERE pf_p2 IS NOT NULL AND pf_p2::TEXT <> 'NaN') AS max_pf_p2,
+
+        ABS(SUM(pf_p3 * a_p3)) / NULLIF(SUM(ABS(a_p3)) FILTER (WHERE a_p3 IS NOT NULL AND a_p3::TEXT <> 'NaN'), 0) AS weighted_pf_p3,
+        MIN(ABS(pf_p3)) FILTER (WHERE pf_p3 IS NOT NULL AND pf_p3::TEXT <> 'NaN') AS min_pf_p3,
+        MAX(ABS(pf_p3)) FILTER (WHERE pf_p3 IS NOT NULL AND pf_p3::TEXT <> 'NaN') AS max_pf_p3,
+
+        -- Energy Aggregation (Wh) Ensuring No Negative Values
+        AVG(ABS(wh_p1)) FILTER (WHERE wh_p1 IS NOT NULL AND wh_p1::TEXT <> 'NaN') AS avg_wh_p1,
+        MIN(ABS(wh_p1)) FILTER (WHERE wh_p1 IS NOT NULL AND wh_p1::TEXT <> 'NaN') AS min_wh_p1,
+        MAX(ABS(wh_p1)) FILTER (WHERE wh_p1 IS NOT NULL AND wh_p1::TEXT <> 'NaN') AS max_wh_p1,
+        SUM(ABS(wh_p1)) FILTER (WHERE wh_p1 IS NOT NULL AND wh_p1::TEXT <> 'NaN') AS ttl_wh_p1,
+
+        AVG(ABS(wh_p2)) FILTER (WHERE wh_p2 IS NOT NULL AND wh_p2::TEXT <> 'NaN') AS avg_wh_p2,
+        MIN(ABS(wh_p2)) FILTER (WHERE wh_p2 IS NOT NULL AND wh_p2::TEXT <> 'NaN') AS min_wh_p2,
+        MAX(ABS(wh_p2)) FILTER (WHERE wh_p2 IS NOT NULL AND wh_p2::TEXT <> 'NaN') AS max_wh_p2,
+        SUM(ABS(wh_p2)) FILTER (WHERE wh_p2 IS NOT NULL AND wh_p2::TEXT <> 'NaN') AS ttl_wh_p2,
+
+        AVG(ABS(wh_p3)) FILTER (WHERE wh_p3 IS NOT NULL AND wh_p3::TEXT <> 'NaN') AS avg_wh_p3,
+        MIN(ABS(wh_p3)) FILTER (WHERE wh_p3 IS NOT NULL AND wh_p3::TEXT <> 'NaN') AS min_wh_p3,
+        MAX(ABS(wh_p3)) FILTER (WHERE wh_p3 IS NOT NULL AND wh_p3::TEXT <> 'NaN') AS max_wh_p3,
+        SUM(ABS(wh_p3)) FILTER (WHERE wh_p3 IS NOT NULL AND wh_p3::TEXT <> 'NaN') AS ttl_wh_p3
+
+    FROM eyedro.gb_{serial}
+    where a_p1 is not null and a_p2 is not null and a_p3 is not null
+    GROUP BY ts_hr
+    WITH NO DATA;
+
+    SELECT add_continuous_aggregate_policy(
+        'eyedro.gb_{serial}_hourly',
+        start_offset => INTERVAL '15 days',
+        end_offset => INTERVAL '1 hour',
+        schedule_interval => INTERVAL '6 hours'
+        );
+    """
+                res = conn.execute(text(sql))
+                sql = f"""
+                SELECT 55 FROM pg_indexes 
+                WHERE schemaname = 'eyedro'
+                AND tablename = 'gb_{serial}' 
+                AND indexname = 'gb_{serial}_ts_idx';
+                """
+                res =  conn.execute(text(sql))
+                cnt = res.rowcount
+                res = res._allrows()
+                print(f"XXXXXX', {serial}, {res}")
+                if cnt != 1 or res[0][0] != 55:
+                    sql = f"""
+                        CREATE INDEX gb_{serial}_ts_idx ON eyedro.gb_{serial} USING btree (ts DESC);
+                        """
+                    res = conn.execute(text(sql))
+                    cnt = res.rowcount
+                    print(f"YYYYYY' {serial} {cnt}  {res}")
+
+            with db_eng.connect().execution_options(isolation_level='AUTOCOMMIT') as procedure_conn:
+
+                # Direct execution of stored procedure 
+                sql = f"CALL refresh_continuous_aggregate('eyedro.gb_{serial}_hourly', NULL, localtimestamp + INTERVAL '2 days')"
+                procedure_sql = text(sql)
+                # Execute in autocommit mode
+                res = procedure_conn.execute(procedure_sql)
+                cnt = res.rowcount
+                print(f"ZZZZZZZ' {serial} {cnt}")
+                pass
+        return 'All good Houston', None
+    except psycopg2.DatabaseError as e:
+        logger.error(f"Database error during table creation: {e}")
+        err = e
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        err = e
+    finally:
+        conn.close()  # ✅ Always close the connection
+
+    return res, err
+
 
 
 def log_gb_errors(errs, logger):

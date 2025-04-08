@@ -719,6 +719,8 @@ def run_gapfilling_by_segments(file_path, plot_individual_gaps=True, min_gap_siz
     ttl_ridge = 0
     max_gap = 7200
     min_gap = 9999999999999999
+    # Apply random clipping between 90% and 100% of the max value of 'wh' for each row
+    np.random.seed(42)  # For reproducibility
     # Process each gap separately to minimize memory usage
     for i, gap_group in enumerate(gap_groups):
         window_size = 0
@@ -805,8 +807,6 @@ def run_gapfilling_by_segments(file_path, plot_individual_gaps=True, min_gap_siz
             # Calculate the max value of the 'wh' column
             max_wh = subset['wh'].max()
 
-            # Apply random clipping between 90% and 100% of the max value of 'wh' for each row
-            np.random.seed(42)  # For reproducibility
             random_percentages = np.random.uniform(0.9, 1.0, size=len(subset))  # Random percentages between 90% and 100%
 
             # Apply the clipping using .iloc on the index
