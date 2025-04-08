@@ -495,41 +495,41 @@ def update_prospect(eng, start_ts=None, local=None):
     """
 
     logger.info(f"Starting update_prospect ts: {start_ts}  local = {local}")
-    try:
-        start_ts = prospect_get_start_ts(local, start_ts)
-        rows, err = sql_execute(
-            f"select * FROM takum_leonics_api_raw where DatetimeServer >= '{start_ts}' order by DatetimeServer  limit 50000;",
-            eng,
-        )
-        assert err is None
+    # try:
+    start_ts = prospect_get_start_ts(local, start_ts)
+    rows, err = sql_execute(
+        f"select * FROM takum_leonics_api_raw where DatetimeServer >= '{start_ts}' order by DatetimeServer  limit 50000;",
+        eng,
+    )
+    assert err is None
 
-        # Convert the result to a Pandas DataFrame
-        columns = columns = list(rows[0]._fields) if rows else []
-        # Get column names
-        df = pd.DataFrame(rows, columns=columns)
-        postfix = "sys_"
-        # if local:
-        #     postfix='raw_'
-        df["external_id"] = df["external_id"].astype(str).apply(lambda x: postfix + x)
+    # Convert the result to a Pandas DataFrame
+    columns = columns = list(rows[0]._fields) if rows else []
+    # Get column names
+    df = pd.DataFrame(rows, columns=columns)
+    postfix = "sys_"
+    # if local:
+    #     postfix='raw_'
+    df["external_id"] = df["external_id"].astype(str).apply(lambda x: postfix + x)
 
-        res = api_prospect.api_in_prospect(df, local)
-        if res is None:
-            logger.error("Prospect API failed")
-            return None, '"Prospect API failed"'
-        logger.info(f"{res.status_code}:  {res.text}")
+    res = api_prospect.api_in_prospect(df, local)
+    if res is None:
+        logger.error("Prospect API failed")
+        return None, '"Prospect API failed"'
+    logger.info(f"{res.status_code}:  {res.text}")
 
-        # Save the DataFrame to a CSV file
-        #####logger = logging.getLogger()
-        if logger.getEffectiveLevel() < logging.INFO:
-            sts = start_ts.replace(" ", "_").replace(":", "HM")
-            df.to_csv(f"sys_pros_{sts}.csv", index=False)
+    # Save the DataFrame to a CSV file
+    #####logger = logging.getLogger()
+    if logger.getEffectiveLevel() < logging.INFO:
+        sts = start_ts.replace(" ", "_").replace(":", "HM")
+        df.to_csv(f"sys_pros_{sts}.csv", index=False)
 
-        logger.info("Data has been saved to 'sys_pros'")
-        return res, None
+    logger.info("Data has been saved to 'sys_pros'")
+    return res, None
 
-    except Exception as e:
-        logger.error(f"PROSPECT Error occurred: {e}")
-        return None, e
+    # except Exception as e:
+    #     logger.error(f"PROSPECT Error occurred: {e}")
+    #     return None, e
 
 
 # WIP

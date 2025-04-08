@@ -276,7 +276,6 @@ def db_get_devices_site_sn_id(eng, dev_type='%', site_key='%'):
         "dev_type": dev_type,
         "site_key": site_key
     }
-    print(sql, params)
     df, err = db.sql_execute(sql, eng, data=params)
     if err:
         logger.error(f"db_get_devices_site_sn_id ERROR: {err}")
