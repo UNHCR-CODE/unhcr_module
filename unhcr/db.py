@@ -139,7 +139,7 @@ def set_db_engine_by_name(ename, local=False):
             "AZURE_TAKUM_LEONICS_API_RAW_CONN_STR", "xxxxxx"
         )
         const.LEONICS_RAW_TABLE = os.getenv("AZURE_LEONICS_RAW_TABLE", "pppppp")
-        if const.is_running_on_azure() or local:
+        if utils.is_running_on_azure() or local:
             const.TAKUM_RAW_CONN_STR = const.TAKUM_RAW_CONN_STR.replace(
                 const.AZURE_URL, "localhost"
             )
@@ -463,7 +463,7 @@ def prospect_get_start_ts(local=None, start_ts=None):
         server = "datetimeserver"
         postfix = "sys_%"
         conn_str = const.PROS_CONN_AZURE_STR
-        if local or const.is_running_on_azure():
+        if local or utils.is_running_on_azure():
             conn_str = const.PROS_CONN_LOCAL_STR
         prospect_engine = set_db_engine(conn_str)
         sql = f"select custom->>'{server}', external_id from data_custom where external_id like '{postfix}' order by custom->>'{server}' desc limit 1"
@@ -909,7 +909,7 @@ def set_db_engines():
     """
 
     engines = []
-    if const.is_running_on_azure():
+    if utils.is_running_on_azure():
         engines = [set_local_defaultdb_engine()]
     else:
         engines = [set_azure_defaultdb_engine()]

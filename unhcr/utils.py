@@ -51,8 +51,9 @@ import glob
 import logging
 import optparse
 import os
-import socket
+import platform
 import requests
+import socket
 import sys
 import tkinter as tk
 from tkinter import messagebox
@@ -60,8 +61,41 @@ from tkinter import messagebox
 # Global variable to store the selected file
 selected_file = None
 log_file = 'unhcr.utils.log'
+log_path = '~/code/logs/'
+log_path = 'E:/_UNHCR/CODE/LOGS'
 
 
+def is_wsl():
+    """Detect if running in Windows Subsystem for Linux (WSL)."""
+    return (
+        "WSL_DISTRO_NAME" in os.environ
+        or "WSL_INTEROP" in os.environ
+        or "microsoft" in platform.uname().release.lower()
+    )
+
+def is_running_on_azure():
+    #!!! for now just detect linux or ubuntu
+    return is_linux() or is_ubuntu()
+    """Detect if running on Azure VM by querying the Azure Instance Metadata Service."""
+    try:
+        response = requests.get(
+            "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
+            headers={"Metadata": "true"},
+            timeout=2,
+        )
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
+
+def is_linux():
+    return platform.system() == "Linux" and not is_wsl()
+
+def is_ubuntu():
+    try:
+        with open("/etc/os-release") as f:
+            return "ubuntu" in f.read().lower()
+    except FileNotFoundError:
+        return False
 
 # Function to display the dropdown populated with file names from a directory
 def show_dropdown_from_directory(directory, file_pattern_filter=None):
@@ -127,13 +161,21 @@ def show_dropdown_from_directory(directory, file_pattern_filter=None):
 # print(res, selected_file)
 
 
-def msgbox_yes_no(title="Confirmation", msg="Are you sure?"):
+def msgbox_yes_no(title="Confirmation", msg="Are you sure?", auto_yes=None):
     # Create a basic Tkinter window (it won't appear)
     root = tk.Tk()
     root.withdraw()  # Hide the root window
 
     # Display a Yes/No prompt
-    return messagebox.askyesno(title=title, message=msg)
+    res = messagebox.askyesno(title=title, message=msg)
+        # If auto_yes is True, simulate pressing the "Enter" key
+    if auto_yes:
+        # Use event_generate to simulate the Enter key press (which selects "Yes")
+        root.event_generate('<Return>')
+        res = True if auto_yes > 0 else False  # Simulate Yes response
+
+    root.destroy()  # Destroy the root window after use
+    return res
 
 
 def config_log_handler(handler, level, formatter, logger):
@@ -166,7 +208,7 @@ def log_setup(log_file, level="INFO", override=False):
     ----------
     level : str, optional
         The desired logging level, by default 'INFO'
-    log_file : str, optional
+    log_file : str
         The name of the log file, by default 'unhcr.module.log'
     override : bool, optional
         If True, it will clear the existing handlers and set up new ones, by default False
@@ -176,25 +218,26 @@ def log_setup(log_file, level="INFO", override=False):
     logging.Logger
         The configured logger
     """
+        # Validate logging level
+    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    if level not in valid_levels:
+        raise ValueError(
+            f"Invalid logging level: {level}. Must be one of {valid_levels}."
+        )
+
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
     logger = logging.getLogger()
     if override:
         logger.handlers.clear()
-
-    if logger.hasHandlers():
+    elif logger.hasHandlers():
         return logger  # Return the logger if it already has handlers
 
     args = create_cmdline_parser(level) if level is None else level.upper()
     level = args
     if os.getenv("DEBUG") == "1":
         level = "DEBUG"
-    # Validate logging level
-    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-    if level not in valid_levels:
-        raise ValueError(
-            f"Invalid logging level: {level}. Must be one of {valid_levels}."
-        )
+
 
     # Create a formatter that outputs the log format
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
@@ -203,7 +246,7 @@ def log_setup(log_file, level="INFO", override=False):
     console_handler = logging.StreamHandler()
     config_log_handler(console_handler, level, formatter, logger)
     # File handler
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler = logging.FileHandler(os.path.join(log_path, log_file), encoding="utf-8")
     config_log_handler(file_handler, level, formatter, logger)
     # Set the overall logging level
     logger.setLevel(getattr(logging, level))
@@ -237,33 +280,43 @@ def ts2Epoch(dt, offset_hrs=0):
     return int(e)
 
 
-def filter_nested_dict(obj, val=-0.999):
+def filter_nested_dict(obj, val=-0.999, remove_empty=False):
     """
-    Recursively remove all entries of a nested dict that have a value equal to val. If the object is a dictionary,
-    it creates a new dictionary containing only key-value pairs where the value is not equal to val. If the object is a list,
-    it creates a new list containing only items that are not equal to val. Otherwise, it returns the object unchanged.
-    The default value for val is -0.999. This function is crucial for cleaning JSON-like data by removing a specific placeholder value
-    representing missing or unwanted data.
-
-    Parameters
-    ----------
-    obj : dict | list
-        The object to be filtered
-    val : any, optional
-        The value to be removed from the object, by default -0.999
-
-    Returns
-    -------
-    dict | list
-        The filtered object
+    Recursively remove all entries from a nested dict or list that have a value equal to `val`.
+    
+    Parameters:
+        obj : dict or list or primitive
+        val : value to remove
+        remove_empty : bool
+            If True, also remove empty dicts/lists after filtering.
+    
+    Returns:
+        Cleaned object with specified values (and optionally empties) removed.
     """
     if isinstance(obj, dict):
-        return {k: filter_nested_dict(v) for k, v in obj.items() if v != val}
+        result = {
+            k: filter_nested_dict(v, val, remove_empty)
+            for k, v in obj.items()
+            if v != val
+        }
+        # Remove entries that ended up empty
+        if remove_empty:
+            result = {k: v for k, v in result.items() if not (v == {} or v == [])}
+        return result
+
     elif isinstance(obj, list):
-        return [filter_nested_dict(item) for item in obj]
+        result = [
+            filter_nested_dict(item, val, remove_empty)
+            for item in obj
+            if item != val
+        ]
+        # Remove empty items
+        if remove_empty:
+            result = [item for item in result if item != {} and item != []]
+        return result
+
     else:
         return obj
-
 
 def create_cmdline_parser(level="INFO"):
     """
@@ -366,7 +419,7 @@ def get_module_version(name="unhcr_module"):
     v_number = None
     err = None
     try:
-        v_number = version("unhcr_module")
+        v_number = version(name)
     except Exception as e:
         err = str(e)
     return v_number, err
@@ -437,14 +490,13 @@ def extract_data(data_list, site=None):
     for key in data_list:
         label = None
         if site is None:
-            if "site" in key:
-                site = data_list[key]
+            if "site" in key and "site" in data_list:
+                site = data_list["site"]
             else:
                 return None, None, None, None
-            table = data_list["table"]
-            fn = data_list["fn"]
-            if "label" in data_list:
-                label = data_list["label"]
+            table = data_list["table"] if "table" in data_list else None
+            fn = data_list["fn"] if "fn" in data_list else None
+            label = data_list["label"] if "label" in data_list else None
             return site, table, fn, label
         elif site == key["site"]:
             table = key["table"]

@@ -32,7 +32,6 @@ import importlib
 import logging
 import optparse
 import os
-import requests
 import sys
 
 from unhcr import utils
@@ -106,20 +105,7 @@ SM_HISTORY_URL = None
 
 environ_path = None
 
-def is_wsl():
-    return "WSL_DISTRO_NAME" in os.environ or "WSL_INTEROP" in os.environ
 
-def is_running_on_azure():
-    try:
-        response = requests.get(
-            "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
-            headers={"Metadata": "true"},
-            timeout=5,
-        )
-        return response.status_code == 200
-    except requests.RequestException:
-        return False
-    
 # sorcery skip
 def set_environ():  # sourcery skip: extract-duplicate-method
     """
@@ -275,9 +261,9 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     LOCAL = os.getenv("LOCAL", "LOCAL missing") == "1" and not PROD
     AZURE_URL = os.getenv("AZURE_URL", "AZURE_URL missing")
     # change in .env file to your path to use local modules
-    if is_running_on_azure():
+    if utils.is_running_on_azure():
         MOD_PATH = os.getenv("MOD_PATH_AZURE", "MOD_PATH_AZURE missing")
-    if is_wsl():
+    if utils.is_wsl():
         MOD_PATH = os.getenv("MOD_PATH_WSL", "MOD_PATH_WSL missing")
     else:
         MOD_PATH = os.getenv("MOD_PATH", "MOD_PATH missing")
@@ -380,7 +366,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     SM_TOKEN_URL = f"{SM_URL}/account/v1.0/token"
     SM_HISTORY_URL = f"{SM_URL}/device/v1.0/historical?language=en"
 
-    if is_running_on_azure():
+    if utils.is_running_on_azure():
         PROS_CONN_AZURE_STR = PROS_CONN_LOCAL_STR.replace(AZURE_URL, "localhost")
         AZURE_FUEL_DB_CONN_STR = AZURE_FUEL_DB_CONN_STR.replace(AZURE_URL, "localhost")
         AZURE_BASE_URL = AZURE_BASE_URL.replace(AZURE_URL, "localhost")
@@ -595,7 +581,7 @@ def add_csv_dt(path, dt=datetime.now().date().isoformat()):
 GB_SN_COLS = ['gb_serial', 'site_label', 'epoch_utc', 'status']
 GB_GATEWAY_PREFIX = ('006-', '803-')
 
-if is_running_on_azure() or is_wsl():
+if utils.is_running_on_azure() or utils.is_wsl():
     TOP20_CSV = os.path.expanduser(r"~/code/DATA/gaps/new_top_20.csv")
     GAPS_CSV_PATH = os.path.expanduser(r"~/code/DATA/gaps/gaps.csv")
     GTB_GAPS_EXCEL = os.path.expanduser(r"~/code/DATA/gaps/gtb_gaps.xlsx")

@@ -127,6 +127,7 @@ psycopg2-binary==2.9.10
 pure_eval==0.2.3
 py4j==0.10.9.7
 pyaml==24.9.0
+pyautogui==0.9.54
 pybase64==1.4.1
 pyflagser==0.4.7
 Pygments==2.18.0
