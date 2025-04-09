@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# */30 * * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash sm_weather.sh" > /dev/null || (/bin/bash sm_weather.sh > /dev/null && echo $(( $(cat run_count_sm_weather.log 2>/dev/null || echo 0) + 1 )) > run_count_sm_weather.log)
-
+# 0 */4 * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash app_gb_1min_data.sh" > /dev/null || (/bin/bash app_gb_1min_data.sh > /dev/null && echo $(( $(cat run_count_app_gb_1min_data.log 2>/dev/null || echo 0) + 1 )) > run_count_app_gb_1min_data.log)
 
 # change to your repo root dir
 cd ~/code/unhcr_module || exit 1
@@ -35,15 +34,16 @@ else
     pip install .
 fi
 
-# Run the sm_weather.py script
-python3 app_sm_weather.py --log INFO 
+
+# Run the update_all.py script
+python3 app_gb_1min_data.py --log INFO 
 EXIT_CODE=$?  # Store the exit code of Python
 
 deactivate
 
 # If Python script fails, log the exit code
 if [ $EXIT_CODE -ne 0 ]; then
-    echo "$(date): app_sm_weather.py FAILED with exit code $EXIT_CODE" >> error_sm_weather.log
+    echo "$(date): update_all.py FAILED with exit code $EXIT_CODE" >> error_app_gb_1min_data.log
 fi
 
 # Exit with the same exit code as Python

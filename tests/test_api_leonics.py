@@ -93,8 +93,8 @@ def test_getAuthToken(dt, expected_payload, monkeypatch):
     monkeypatch.setattr(requests, "post", lambda *args, **kwargs: mock_response)
 
     # Act
-    response = api_leonics.getAuthToken(dt)
-
+    response, err = api_leonics.getAuthToken(dt)
+    print("response ZZZZZ", response, err)
     # Assert
     assert response.status_code == 200
     assert response.text == "KEY: " + TEST_TOKEN  # Check the text directly

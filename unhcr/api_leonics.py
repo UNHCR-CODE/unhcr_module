@@ -1,31 +1,30 @@
 """
 Overview
-    This Python file (api_leonics.py) acts as an API client for interacting with the Leonics system. Its primary functions are handling 
-    authentication, retrieving data within a specified timeframe, and submitting data to a prospect API endpoint. 
+    This Python file (api_leonics.py) acts as an API client for interacting with the Leonics system. Its primary functions are handling
+    authentication, retrieving data within a specified timeframe, and submitting data to a prospect API endpoint.
     The client retrieves an authentication token, validates it, uses it to fetch data, and then sends this data to another system.
 
 Key Components
-    getAuthToken(dt=None): 
-        Retrieves an authentication token from the Leonics system. It takes an optional date parameter (dt) for specifying the current date. 
-        If no date is provided, it defaults to the current date. The function constructs the authentication payload, including system credentials 
+    getAuthToken(dt=None):
+        Retrieves an authentication token from the Leonics system. It takes an optional date parameter (dt) for specifying the current date.
+        If no date is provided, it defaults to the current date. The function constructs the authentication payload, including system credentials
         and the provided date, and sends a POST request to the /auth endpoint.
 
-    checkAuth(dt=None, x=0): 
-        Checks the validity of the authentication token. It attempts to retrieve a token using getAuthToken(). 
-        If successful, it verifies the token against the /check_auth endpoint. 
-        It handles potential date-related issues by recursively calling itself with the next day's date if the token is invalid due to a date mismatch. 
+    checkAuth(dt=None, x=0):
+        Checks the validity of the authentication token. It attempts to retrieve a token using getAuthToken().
+        If successful, it verifies the token against the /check_auth endpoint.
+        It handles potential date-related issues by recursively calling itself with the next day's date if the token is invalid due to a date mismatch.
         Includes a retry mechanism (up to 3 times) to handle potential transient errors.
 
-    getData(start, end, token=None): 
-        Retrieves data from the Leonics system within a specified time range using a valid authentication token. 
-        It constructs the data request URL with start and end times and sends a GET request to the /data endpoint. 
-        The retrieved data is parsed into a Pandas DataFrame and preprocessed to combine date and time columns. 
+    getData(start, end, token=None):
+        Retrieves data from the Leonics system within a specified time range using a valid authentication token.
+        It constructs the data request URL with start and end times and sends a GET request to the /data endpoint.
+        The retrieved data is parsed into a Pandas DataFrame and preprocessed to combine date and time columns.
         It also includes code to send the retrieved data to a prospect API endpoint.
 """
 
 from datetime import datetime, timedelta
 import json
-import logging
 import pandas as pd
 import requests
 from urllib3.exceptions import InsecureRequestWarning
@@ -34,10 +33,15 @@ import urllib3
 # Suppress InsecureRequestWarning
 urllib3.disable_warnings(InsecureRequestWarning)
 
+from unhcr import app_utils
 from unhcr import constants as const
+from unhcr import err_handler
 
+mods = [["app_utils", "app_utils"], ["constants", "const"], ["err_handler", "err_handler"]]
+res = app_utils.app_init(mods=mods, log_file="unhcr.api_leonics.log", version="0.4.7", level="INFO", override=False)
+logger = res[0]
 if const.LOCAL:  # testing with local python files
-    const, *rest = const.import_local_libs(mods=[["constants", "const"]])
+    logger, app_utils, const, err_handler = res
 
 
 def getAuthToken(dt=None):
@@ -58,7 +62,7 @@ def getAuthToken(dt=None):
     """
     if dt is None:
         dt = datetime.now().date()
-    logging.info(f"Getting auth token for date: {dt}")
+    logger.info(f"Getting auth token for date: {dt}")
     # TODO this is not hardcoded --- constants.py gets them from the environ
     payload = {
         "SystemCode": "LEONICS",
@@ -68,13 +72,14 @@ def getAuthToken(dt=None):
         "Key": const.LEONICS_KEY,
     }  # sorcery: skip
     headers = {"Content-Type": "application/json"}
-    return requests.post(
-        f"{const.LEONICS_BASE_URL}/auth",
-        json=payload,
-        headers=headers,
-        verify=const.VERIFY,
+    return err_handler.error_wrapper(
+        lambda: requests.post(
+            f"{const.LEONICS_BASE_URL}/auth",
+            json=payload,
+            headers=headers,
+            verify=const.VERIFY,
+        )
     )
-
 
 def checkAuth(dt=None, x=0):
     # TODO check 2 times as date maybe one day off due to tz
@@ -98,8 +103,8 @@ def checkAuth(dt=None, x=0):
     """
     if x > 2:
         return None
-    res = getAuthToken(dt)
-    if res.status_code != 200:
+    res, err = getAuthToken(dt)
+    if err or res.status_code != 200:
         return None
 
     # TODO if format changes this will break
@@ -165,5 +170,5 @@ def getData(start, end, token=None):
         df = df.drop(columns=["A_DateServer", "A_TimeServer"])
         return df, None
     except Exception as e:
-        logging.error("Leonics getData ERROR:", e)
+        logger.error("Leonics getData ERROR:", e)
         return None, e

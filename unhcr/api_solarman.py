@@ -1,48 +1,62 @@
 """
-   Overview:
-    get_weather_data: Retrieves weather data from the Solarman API.
-    get_devices: Retrieves a list of devices from the Solarman API.
-    get_inverters: Retrieves a list of inverters from the Solarman API.
-    get_realtime_data: Retrieves real-time data from the Solarman API.
-    get_historical_data: Retrieves historical data from the Solarman API.
-    get_energy_data: Retrieves energy-related data from the Solarman API.
-    get_alarm_data: Retrieves alarm-related data from the Solarman API.
-    get_device_info: Retrieves detailed information about a specific device from the Solarman API.
-    get_site_info: Retrieves detailed information about a specific site from the Solarman API.
+Overview:
+ get_weather_data: Retrieves weather data from the Solarman API.
+ get_devices: Retrieves a list of devices from the Solarman API.
+ get_inverters: Retrieves a list of inverters from the Solarman API.
+ get_realtime_data: Retrieves real-time data from the Solarman API.
+ get_historical_data: Retrieves historical data from the Solarman API.
+ get_energy_data: Retrieves energy-related data from the Solarman API.
+ get_alarm_data: Retrieves alarm-related data from the Solarman API.
+ get_device_info: Retrieves detailed information about a specific device from the Solarman API.
+ get_site_info: Retrieves detailed information about a specific site from the Solarman API.
 """
+
 import bisect
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta, timezone
 import json
 import logging
+import time
 import pandas as pd
+import re
 import requests
+from sqlalchemy import text, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session, sessionmaker
 
-from sqlalchemy import text
+from unhcr import app_utils
 from unhcr import constants as const
 from unhcr import utils
+from unhcr import db
+from unhcr import err_handler
+from unhcr import models
 
-# local testing ===================================
+
+mods=[
+    ["app_utils", "app_utils"],
+    ["constants", "const"],
+    ["utils", "utils"],
+    ["db", "db"],
+    ["err_handler", "err_handler"],
+    ["models", "models"],
+]
+
+res = app_utils.app_init(mods=mods, log_file="unhcr.api_solarman.log", version="0.4.7", level="INFO", override=False)
+logger = res[0]
 if const.LOCAL:  # testing with local python files
-    const, utils, db, api_leonics, *rest = const.import_local_libs(
-        mods=[
-            ["constants", "const"],
-            ["utils", "utils"],
-            ["db", "db"],
-            ["api_leonics", "api_leonics"],
-        ]
-    )
+    logger, app_utils, const, utils, db, err_handler, models = res
 
 # Solarman API credentials (replace with your actual credentials)
 APP_ID = const.SM_APP_ID
 APP_SECRET = const.SM_APP_SECRET
 BIZ_ACCESS_TOKEN = const.SM_BIZ_ACCESS_TOKEN
-URL = const.SM_URL
+BASE_URL = const.SM_URL
 TOKEN_URL = const.SM_TOKEN_URL
 HISTORICAL_URL = const.SM_HISTORY_URL
 
 # Constants for the Solarman API TODO: update by calling API
 INVERTERS = [
     {
+        "site": "ABUJA",
         "ABUJA": [
             {"deviceSn": "2309184208", "deviceId": 240031597},
             {"deviceSn": "2309200109", "deviceId": 240030990},
@@ -51,39 +65,48 @@ INVERTERS = [
             {"deviceSn": "2306296090", "deviceId": 240030831},
             {"deviceSn": "2309182126", "deviceId": 240031338},
             {"deviceSn": "2309200154", "deviceId": 240030917},
-        ]
+        ],
+        "table": "fuel_kwh_abuja",
+        "fn": "ABUJA_OFFICE_DG1_and_DG2_TANK.csv",
+        "label": "BIOHENRY - UNHCR ABUJA OFFICE DG1 and DG2",
     },
     {
+        "site": "OGOJA_GH",
         "OGOJA_GH": [
             {"deviceSn": "2309182179", "deviceId": 240480864},
             {"deviceSn": "2309198004", "deviceId": 240481013},
             {"deviceSn": "2309188195", "deviceId": 240481631},
             {"deviceSn": "2309208178", "deviceId": 240481437},
             {"deviceSn": "2309200145", "deviceId": 240481716},
-        ]
+        ],
+        "table": "fuel_kwh_ogoja_gh",
+        "fn": "OGOJA_GH_DG1_and_DG2_TANK.csv",
+        "label": "BIOHENRY - UNHCR OGOJA GUEST HOUSE DG1 AND DG2",
     },
     {
+        "site": "OGOJA",
         "OGOJA": [
             {"deviceSn": "2309194019", "deviceId": 240321506},  # not in current API
-            {
-                "deviceSn": "2408202575",
-                "deviceId": 240897791,
-            },
+            {"deviceSn": "2408202575", "deviceId": 240897791},
             {"deviceSn": "2405052283", "deviceId": 240844835},
             {"deviceSn": "2309188295", "deviceId": 240295039},
             {"deviceSn": "2309188310", "deviceId": 240294993},
             {"deviceSn": "2309188199", "deviceId": 240321874},
-        ]
+        ],
+        "table": "fuel_kwh_ogoja",
+        "fn": "OGOJA_OFFICE_DG1_and_DG2_TANK.csv",
+        "label": "BIOHENRY – UNHCR OGOJA OFFICE DG1 and DG2",
     },
     {
+        "site": "LAGOS",
         "LAGOS": [
-            {
-                "deviceSn": "2401110046",
-                "deviceId": 240033551,
-            },
+            {"deviceSn": "2401110046", "deviceId": 240033551},
             {"deviceSn": "2306296095", "deviceId": 240033630},
             {"deviceSn": "2306290070", "deviceId": 240033712},
-        ]
+        ],
+        "table": "fuel_kwh_lagos_office",
+        "fn": "LAGOS_OFFICE_DG1_and_DG2_TANK.csv",
+        "label": "BIOHENRY -UNHCR LAGOS OFFICE DG1 and DG2",
     },
 ]
 
@@ -202,11 +225,11 @@ SITE_LIST = [
 ]
 
 WEATHER = {
-        "ABUJA": {"deviceSn": "002502255400-001", "deviceId": 240093462},
-        "LAGOS": {"deviceSn": "002502325494-001", "deviceId": 240355934},
-        "OGOJA": {"deviceSn": "002502705488-001", "deviceId": 240464333},
-        "OGOJA_GH": {"deviceSn": "002502295492-001", "deviceId": 240482343},
-    }
+    "ABUJA": {"deviceSn": "002502255400-001", "deviceId": 240093462},
+    "LAGOS": {"deviceSn": "002502325494-001", "deviceId": 240355934},
+    "OGOJA": {"deviceSn": "002502705488-001", "deviceId": 240464333},
+    "OGOJA_GH": {"deviceSn": "002502295492-001", "deviceId": 240482343},
+}
 
 WEATHER_MAPPING = {
     "Environment Temp": ("temp_c", utils.str_to_float_or_zero),
@@ -217,7 +240,178 @@ WEATHER_MAPPING = {
     "Daily Irradiance": ("daily_irr", str),
 }
 
-def get_weather_data(date_str, devices):
+def db_get_sm_weather_max_epoch(db_eng, device_sn):
+    """
+    Retrieves the latest timestamp from the database. If the database is empty or an error occurs,
+    returns None and the error.
+    Args:
+        device_id (int): The device ID to query the database for.
+        engine (sqlalchemy.engine.Engine): The connection engine to use.
+    Returns:
+        tuple: A tuple containing the latest timestamp as an integer, and None if the query was successful, or an error message if it was not.
+    """
+    sql = f"select max(org_epoch) FROM solarman.weather where device_sn = '{device_sn}'"
+    val, err = db.sql_execute(sql, db_eng)
+    if err is not None:
+        return None, err
+    epoch = val[0][0]
+    return epoch, None
+
+
+
+def db_get_devices_site_sn_id(eng, dev_type='%', site_key='%'):
+    sql = """
+        WITH site_devices AS (
+            SELECT s."name", dsh.station_id, dsh.device_sn, dsh.device_id, d.device_type 
+            FROM solarman.device_site_history dsh
+            JOIN solarman.stations s ON s.id = dsh.station_id
+            JOIN solarman.devices d ON dsh.device_sn = d.device_sn
+            WHERE dsh.end_time IS NULL 
+        )
+        SELECT * FROM site_devices
+        WHERE  device_type ILIKE :dev_type AND name ILIKE :site_key
+    """
+
+    params = {
+        "dev_type": dev_type,
+        "site_key": site_key
+    }
+    df, err = db.sql_execute(sql, eng, data=params)
+    if err:
+        logger.error(f"db_get_devices_site_sn_id ERROR: {err}")
+        return None, err
+    return pd.DataFrame(df), None
+
+def camel_to_snake(name):
+    """Converts a camelCase string to snake_case."""
+    name = re.sub(r"(?<=[a-z])(?=[A-Z])", "_", name)
+    return name.lower()
+
+
+def convert_keys_to_snake_case(data):
+    """Converts keys in a list of dictionaries from camelCase to snake_case."""
+    snake_case_data = []
+    for item in data:
+        snake_case_item = {}
+        for key, value in item.items():
+            snake_case_key = camel_to_snake(key)
+            snake_case_item[snake_case_key] = value
+        snake_case_data.append(
+            {**snake_case_item, "site_id": item.get("site_id")}
+        )  # make sure to keep site_id
+    return snake_case_data
+
+
+def round_to_nearest_5_minutes(dt):
+    # Round minutes to nearest 5-minute interval
+    rounded_minutes = (dt.minute // 5) * 5
+    if dt.minute % 5 >= 3:
+        rounded_minutes += 5  # Round up if remainder is 3 or more
+
+    # Create a new datetime object to handle overflow safely
+    new_dt = dt.replace(minute=0, second=0, microsecond=0) + timedelta(minutes=rounded_minutes)
+
+    # If rounding pushed time to next hour or day, handle it with timedelta
+    if new_dt.hour != dt.hour or new_dt.day != dt.day:
+        return new_dt
+
+    return dt.replace(minute=rounded_minutes, second=0, microsecond=0)
+
+
+def db_all_site_ids(eng):
+    with Session(eng) as session:
+        # Construct the SELECT statement
+        stmt = select(models.Station.id)
+
+        # Execute the query and fetch the results
+        results = session.execute(stmt).scalars().all()
+
+        return results
+
+
+def db_get_inverter_sns(eng):
+    with Session(eng) as session:
+        # Construct the SELECT statement
+        stmt = select(models.Device.device_sn).where(
+            models.Device.device_type == "INVERTER"
+        )
+
+        # Execute the query and fetch the results
+        results = session.execute(stmt).scalars().all()
+
+        return results
+
+
+def db_insert_devices(eng, records=None):
+    """
+    Inserts records into the devices table in the database.
+
+    Parameters
+    ----------
+    eng : Engine
+        The SQLAlchemy engine to use for the database connection.
+    records : list of dict
+        The list of records to insert into the table.
+
+    Returns
+    -------
+    None
+    """
+
+    with Session(eng) as session:
+        # Process each item
+        for item in records:
+            record = models.Device(
+                device_sn=item["device_sn"],
+                device_id=item["device_id"],
+                device_type=item["device_type"],
+                connect_status=item["connect_status"],
+                collection_time=int(item["collection_time"]),
+            )
+
+            # data = session.query(StationData).all()
+
+            # Add and commit record
+            session.merge(record)  # Uses upsert behavior
+            # x = str(session.query(StationData).filter(StationData.station_id == record.station_id).statement)
+            session.commit()
+
+    print("Data inserted successfully!")
+
+
+def api_get_devices(site_id, eng=None):
+    url = BASE_URL + "/station/v1.0/device?language=en"
+
+    payload = json.dumps(
+        {
+            "stationId": site_id,
+        }
+    )
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "UNHCR_STEVE",
+        "Authorization": f"Bearer {BIZ_ACCESS_TOKEN}",
+    }
+
+    response = requests.request("POST", url, headers=headers, data=payload)
+
+    res = response.json()
+    if "success" not in res or res["success"] != True:
+        return None, "API call not successful"
+    data = res["deviceListItems"]
+    data = convert_keys_to_snake_case(data)
+    data = [{**item, "site_id": site_id} for item in data]
+    err = None
+    if eng:
+        ######res, err = err_handler.error_wrapper(lambda: insert_station_data_daily(eng, data))
+        db_insert_devices(eng, data)
+    pass
+    if err:
+        return None, err
+    return data, None
+
+
+def api_get_weather_data(date_str, devices):
     """
     Retrieves weather data for specified devices and date.
 
@@ -227,7 +421,7 @@ def get_weather_data(date_str, devices):
 
     Parameters:
     date_str (str): The start date for data retrieval in 'YYYY-MM-DD' format.
-    devices (list): A list of dictionaries, each containing 'deviceSn' and 'deviceId' keys.
+    devices (list): A list of dictionaries, each containing 'station_id', 'deviceSn' and 'deviceId' keys.
 
     Returns:
     pd.DataFrame: A DataFrame containing the weather data, or None if no data is retrieved.
@@ -237,19 +431,20 @@ def get_weather_data(date_str, devices):
     data = []
     first = True
     x = -1
-    for device in devices:
+    for device in devices.itertuples(index=False):
         x += 1
         if x > 0:
             epoch_values = [item["epoch"] for item in data]
             first = False
 
         last_epoch = None
-        logging.info(f"Device ID: {device}")
+        logging.info(f"Device: {device}")
 
         payload = json.dumps(
             {
-                "deviceSn": device["deviceSn"],
-                "deviceId": device["deviceId"],
+                "station_id": device.station_id,
+                "deviceSn": device.device_sn,
+                "deviceId": device.device_id,
                 "startTime": date_str,
                 "endTime": "2099-01-01",
                 "timeType": 1,
@@ -273,6 +468,8 @@ def get_weather_data(date_str, devices):
                     continue
                 last_epoch = e
                 info = {
+                    "station_id": device.station_id,
+                    "device_sn": str(j["deviceSn"]),
                     "device_id": str(j["deviceId"]),
                     "org_epoch": item["collectTime"],
                     "epoch": e,  # item["collectTime"]
@@ -286,7 +483,7 @@ def get_weather_data(date_str, devices):
                         item["sn"] = d["value"]
                         dt = datetime.fromtimestamp(
                             e, UTC
-                        )  # depriciated datetime.utcfromtimestamp(e).strftime('%Y-%m-%d %H:%M')
+                        )
                         info["ts"] = dt
                     elif d["name"] in WEATHER_MAPPING:
                         field, converter = WEATHER_MAPPING[d["name"]]
@@ -300,24 +497,27 @@ def get_weather_data(date_str, devices):
                     data.insert(index, info)
                     epoch_values = [item["epoch"] for item in data]
         else:
-            logging.error(f"get_weather_data ERROR: {response.status_code} {response.text}")
+            logging.error(
+                f"get_weather_data ERROR: {response.status_code} {response.text}"
+            )
             continue
     if not data:
         return None
     df = pd.DataFrame(data)
 
-    #df["ts"] = df["ts"].dt.tz_localize(None)
+    # df["ts"] = df["ts"].dt.tz_localize(None)
     # # If the datetime index has timezone information
     # if isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
     #     df.index = df.index.tz_localize(None)
     return df
 
-def update_weather_db(df, epoch, engine):
+
+def db_update_weather(df, epoch, engine):
     """
     Updates the weather database with new data.
 
     This function processes a DataFrame of weather data, adjusts data types, and inserts
-    the data into the `solarman.weather` table. If any rows conflict on the primary key 
+    the data into the `solarman.weather` table. If any rows conflict on the primary key
     (device_id, ts), it updates the existing records with new values.
 
     Parameters:
@@ -329,6 +529,8 @@ def update_weather_db(df, epoch, engine):
     """
 
     try:
+        df["station_id"] = df["station_id"].astype("int32")
+        # df["device_sn"] = df["device_sn"]
         df["device_id"] = df["device_id"].astype("int32")  # int4
         df["org_epoch"] = df["org_epoch"].astype("int32")  # int4
         df["epoch"] = df["epoch"].astype("int32")  # int4
@@ -342,14 +544,19 @@ def update_weather_db(df, epoch, engine):
 
         df = df[df["org_epoch"] >= epoch]
 
-        df.to_sql("temp_weather", engine, schema="solarman", if_exists="replace", index=False)
+        df.to_sql(
+            "temp_weather", engine, schema="solarman", if_exists="replace", index=False
+        )
 
         with engine.begin() as conn:
-            conn.execute(text("""
-                INSERT INTO solarman.weather (device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr)
-                SELECT device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr FROM solarman.temp_weather
-                ON CONFLICT (device_id, ts) DO UPDATE 
-                SET org_epoch = EXCLUDED.org_epoch,
+            conn.execute(
+                text(
+                    """
+                INSERT INTO solarman.weather (station_id, device_sn, device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr)
+                SELECT station_id, device_sn, device_id, org_epoch, epoch, ts, temp_c, panel_temp, humidity, rainfall, irr, daily_irr FROM solarman.temp_weather
+                ON CONFLICT (device_sn, ts) DO UPDATE 
+                SET device_id = EXCLUDED.device_id,
+                    org_epoch = EXCLUDED.org_epoch,
                     epoch = EXCLUDED.epoch,
                     temp_c = EXCLUDED.temp_c,
                     panel_temp = EXCLUDED.panel_temp,
@@ -357,8 +564,413 @@ def update_weather_db(df, epoch, engine):
                     rainfall = EXCLUDED.rainfall,
                     irr = EXCLUDED.irr,
                     daily_irr = EXCLUDED.daily_irr;
-            """))
+            """
+                )
+            )
             conn.commit()
             return len(df), None
     except Exception as e:
-        return None, f"update_weather_db ERROR: {e}"
+        return None, f"db_update_weather ERROR: {e}"
+
+
+def get_station_daily_data(
+    id, start_date="2025-03-01", end_date="2025-03-31", type=2, eng=None
+):
+    url = HISTORICAL_URL.replace("/device/", "/station/").replace(
+        "/historical", "/history"
+    )
+
+    payload = json.dumps(
+        {
+            "stationId": id,
+            "startTime": start_date,  # "2025-03-01",
+            "endTime": end_date,  # "2025-03-26",
+            "timeType": type,  # 2
+        }
+    )
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "UNHCR_STEVE",
+        "Authorization": f"Bearer {BIZ_ACCESS_TOKEN}",
+    }
+
+    response = requests.request("POST", url, headers=headers, data=payload)
+
+    res = response.json()
+    if "success" not in res or res["success"] != True:
+        return None, "API call not successful"
+    data = res["stationDataItems"]
+    data = [{**item, "site": id} for item in data]
+    err = None
+    if eng:
+        ######res, err = err_handler.error_wrapper(lambda: insert_station_data_daily(eng, data))
+        insert_station_data_daily(eng, data)
+    pass
+    if err:
+        return None, err
+    return data, None
+
+
+def insert_station_data_daily(eng, records=None):
+    """
+    Inserts records into the station_data_daily table in the database.
+
+    Parameters
+    ----------
+    eng : Engine
+        The SQLAlchemy engine to use for the database connection.
+    records : list of dict
+        The list of records to insert into the table.
+
+    Returns
+    -------
+    None
+    """
+
+    Session = sessionmaker(bind=eng)
+    session = Session()
+
+    # Process each item
+    for item in records:
+        date_time = datetime(item["year"], item["month"], item["day"])
+
+        record = models.StationData(
+            station_id=int(item["site"]),
+            ts=date_time,
+            year=item["year"],
+            month=item["month"],
+            day=item["day"],
+            generation_power=item.get("generationPower"),
+            use_power=item.get("usePower"),
+            grid_power=item.get("gridPower"),
+            purchase_power=item.get("purchasePower"),
+            wire_power=item.get("wirePower"),
+            charge_power=item.get("chargePower"),
+            discharge_power=item.get("dischargePower"),
+            battery_power=item.get("batteryPower"),
+            battery_soc=item.get("batterySoc"),
+            irradiate_intensity=item.get("irradiateIntensity"),
+            generation_value=item.get("generationValue"),
+            generation_ratio=item.get("generationRatio"),
+            grid_ratio=item.get("gridRatio"),
+            charge_ratio=item.get("chargeRatio"),
+            use_value=item.get("useValue"),
+            use_ratio=item.get("useRatio"),
+            buy_ratio=item.get("buyRatio"),
+            use_discharge_ratio=item.get("useDischargeRatio"),
+            grid_value=item.get("gridValue"),
+            buy_value=item.get("buyValue"),
+            charge_value=item.get("chargeValue"),
+            discharge_value=item.get("dischargeValue"),
+            full_power_hours=item.get("fullPowerHours"),
+            irradiate=item.get("irradiate"),
+            theoretical_generation=item.get("theoreticalGeneration"),
+            pr=item.get("pr"),
+            cpr=item.get("cpr"),
+        )
+
+        # data = session.query(StationData).all()
+
+        # Add and commit record
+        session.merge(record)  # Uses upsert behavior
+        # x = str(session.query(StationData).filter(StationData.station_id == record.station_id).statement)
+        session.commit()
+
+    print("Data inserted successfully!")
+
+
+def insert_inverter_data(eng=None, json_data={}):
+    if eng is None:
+        eng = db.set_local_defaultdb_engine()
+
+    # Define the expected keys
+    EXPECTED_KEYS = {
+        "SN1": "device_sn",
+        "INV_MOD1": "inverter_type",
+        "Pi_LV1": "output_power_level",
+        "Pr1": "rated_power",
+        "P_INF": "parallel_information",
+        "Dev_Ty1": "device_type",
+        "SYSTIM1": "system_time",
+        "PTCv1": "protocol_version",
+        "MAIN": "main_data",
+        "HMI": "hmi",
+        "LBVN": "lithium_battery_version_number",
+        "CBAVM": "control_board_activator_version_number",
+        "CBAMSV": "control_board_assisted_microcontroller_version_number",
+        "A_B_F_V": "arc_board_firmware_version",
+        "DV1": "dc_voltage_pv1",
+        "DV2": "dc_voltage_pv2",
+        "DV3": "dc_voltage_pv3",
+        "DV4": "dc_voltage_pv4",
+        "DC1": "dc_current_pv1",
+        "DC2": "dc_current_pv2",
+        "DC3": "dc_current_pv3",
+        "DC4": "dc_current_pv4",
+        "DP1": "dc_power_pv1",
+        "DP2": "dc_power_pv2",
+        "DP3": "dc_power_pv3",
+        "DP4": "dc_power_pv4",
+        "P_T_A": "total_production_active",
+        "AV1": "ac_voltage_r_u_a",
+        "AV2": "ac_voltage_s_v_b",
+        "AV3": "ac_voltage_t_w_c",
+        "AC1": "ac_current_r_u_a",
+        "AC2": "ac_current_s_v_b",
+        "AC3": "ac_current_t_w_c",
+        "A_Fo1": "ac_output_frequency_r",
+        "Et_ge0": "cumulative_production_active",
+        "Etdy_ge1": "daily_production_active",
+        "INV_O_P_L1": "inverter_output_power_l1",
+        "INV_O_P_L2": "inverter_output_power_l2",
+        "INV_O_P_L3": "inverter_output_power_l3",
+        "INV_O_P_T": "total_inverter_output_power",
+        "S_P_T": "total_solar_power",
+        "G_V_L1": "grid_voltage_l1",
+        "G_C_L1": "grid_current_l1",
+        "G_P_L1": "grid_power_l1",
+        "G_V_L2": "grid_voltage_l2",
+        "G_C_L2": "grid_current_l2",
+        "G_P_L2": "grid_power_l2",
+        "G_V_L3": "grid_voltage_l3",
+        "G_C_L3": "grid_current_l3",
+        "G_P_L3": "grid_power_l3",
+        "ST_PG1": "grid_status",
+        "CT1_P_E": "external_ct1_power",
+        "CT2_P_E": "external_ct2_power",
+        "CT3_P_E": "external_ct3_power",
+        "CT_T_E": "total_external_ct_power",
+        "PG_F1": "grid_frequency",
+        "PG_Pt1": "total_grid_power",
+        "G16": "total_grid_reactive_power",
+        "E_B_D": "daily_energy_buy",
+        "E_S_D": "daily_energy_sell",
+        "E_B_TO": "total_energy_buy",
+        "E_S_TO": "total_energy_sell",
+        "GS_A": "internal_l1_power",
+        "GS_B": "internal_l2_power",
+        "GS_C": "internal_l3_power",
+        "GS_T": "internal_power",
+        "A_RP_INV": "inverter_a_phase_reactive_power",
+        "B_RP_INV": "inverter_b_phase_reactive_power",
+        "C_RP_INV": "inverter_c_phase_reactive_power",
+        "MPPT_N": "mppt_number_of_routes_and_phases",
+        "C_V_L1": "load_voltage_l1",
+        "C_V_L2": "load_voltage_l2",
+        "C_V_L3": "load_voltage_l3",
+        "C_P_L1": "load_power_l1",
+        "C_P_L2": "load_power_l2",
+        "C_P_L3": "load_power_l3",
+        "E_Puse_t1": "total_consumption_power",
+        "E_Suse_t1": "total_consumption_apparent_power",
+        "Etdy_use1": "daily_consumption",
+        "E_C_T": "total_consumption",
+        "L_F": "load_frequency",
+        "LPP_A": "load_phase_power_a",
+        "LPP_B": "load_phase_power_b",
+        "LPP_C": "load_phase_power_c",
+        "B_ST1": "battery_status",
+        "B_V1": "battery_voltage",
+        "B_P_1": "battery_power1",
+        "BATC1": "battery_current1",
+        "B_C2": "battery_current2",
+        "B_P1": "battery_power",
+        "B_left_cap1": "soc",
+        "t_cg_n1": "total_charging_energy",
+        "t_dcg_n1": "total_discharging_energy",
+        "Etdy_cg1": "daily_charging_energy",
+        "Etdy_dcg1": "daily_discharging_energy",
+        "BRC": "battery_rated_capacity",
+        "B_TYP1": "battery_type",
+        "Batt_ME1": "battery_mode",
+        "BAT_FAC": "battery_factory",
+        "B_1S": "battery_1_status",
+        "B_CT": "battery_total_current",
+        "B_2S": "battery_2_status",
+        "BMS_B_V1": "bms_voltage",
+        "BMS_B_C1": "bms_current",
+        "BMST": "bms_temperature",
+        "BMS_C_V": "bms_charge_voltage",
+        "BMS_D_V": "bms_discharge_voltage",
+        "BMS_C_C_L": "charge_current_limit",
+        "BMS_D_C_L": "discharge_current_limit",
+        "BMS_SOC": "bms_soc",
+        "BMS_CC1": "bms_charging_max_current",
+        "BMS_DC1": "bms_discharging_max_current",
+        "Li_bf": "li_bat_flag",
+        "B_T1": "temperature_battery",
+        "AC_T": "ac_temperature",
+        "yr1": "year",
+        "mon1": "month",
+        "tdy1": "day",
+        "hou1": "hour",
+        "min1": "minute",
+        "sec1": "second",
+        "Inver_Ara": "inverter_algebra",
+        "Inver_Sd": "inverter_series_distinction",
+        "GS_A1": "gs_a1",
+        "GS_B1": "gs_b1",
+        "GS_C1": "gs_c1",
+        "GS_T1": "gs_t1",
+        "GRID_RELAY_ST1": "grid_relay_status",
+        "I_P_G_S": "inverter_power_generation_status",
+        "GEN_P_L1": "gen_power_l1",
+        "GEN_P_L2": "gen_power_l2",
+        "GEN_P_L3": "gen_power_l3",
+        "GEN_V_L1": "gen_voltage_l1",
+        "GEN_V_L2": "gen_voltage_l2",
+        "GEN_V_L3": "gen_voltage_l3",
+        "R_T_D": "gen_daily_run_time",
+        "EG_P_CT1": "generator_active_power",
+        "GEN_P_T": "total_gen_power",
+        "GEN_P_D": "daily_production_generator",
+        "GEN_P_TO": "total_production_generator",
+    }
+
+    # Initialize a dictionary to hold the mapped data
+    inverter_instances = []
+    # Iterate over each dictionary in 'dataList'
+    for item in json_data:
+        mapped_data = {}
+        for items in item["dataList"]:
+            if items["key"] in EXPECTED_KEYS:
+                # Map the key to the corresponding column name
+                if "value" in items:
+                    mapped_data[EXPECTED_KEYS[items["key"]]] = items["value"]
+
+        # Check for missing keys
+        missing_keys = [key for key in EXPECTED_KEYS if key not in mapped_data]
+
+        # if missing_keys:
+        #     raise ValueError(f"Missing keys in JSON data: {', '.join(missing_keys)}")
+
+        # Prepare the model with the expected values using the key mapping
+        dt = datetime.fromtimestamp(int(item["collectTime"]), tz=timezone.utc)
+        data = models.InverterData(ts=round_to_nearest_5_minutes(dt), **mapped_data)
+        if data.system_time:
+            if data.system_time.startswith("00-00-00"):
+                data.system_time = None
+            else:
+                data.system_time = ("20" + data.system_time)[:16]
+        inverter_instances.append(data)
+
+    Session = sessionmaker(bind=eng)
+    session = Session()
+    # Merge all instances in the batch at once
+    for inverter_instance in inverter_instances:
+        session.merge(inverter_instance)
+    # Commit the new record to the database
+    session.commit()
+    pass
+
+
+def get_inverter_data(
+    sn=2309200154, start_date=datetime.today().date(), type=1, eng=None
+):
+    """
+    Retrieves inverter data for a given device serial number and date range.
+
+    Args:
+        sn (int, optional): Device serial number. Defaults to 2309200154.
+        start_date (datetime.date, optional): Start date of the date range. Defaults to today.
+        type (int, optional): Time type. Defaults to 1.
+        eng (sqlalchemy.engine.Engine, optional): Engine to use for inserting data into database.
+
+    Returns:
+        tuple: Data and error message. If error, data is None and error message is not None.
+    """
+    time.sleep(1)
+    url = HISTORICAL_URL
+    ###print(url)
+
+    payload = json.dumps(
+        {
+            "deviceSn": sn,  # 2309200154,
+            "startTime": start_date.isoformat(),  # "2024-12-30",
+            "endTime": (start_date + timedelta(days=1)).isoformat(),  # "2024-12-31",
+            "timeType": type,  # 1
+        }
+    )
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "UNHCR_STEVE",
+        "Authorization": f"Bearer {BIZ_ACCESS_TOKEN}",
+    }
+
+    response = requests.request("POST", url, headers=headers, data=payload)
+
+    res = response.json()
+    if "success" not in res or res["success"] != True:
+        return None, "API call not successful"
+    data = res["paramDataList"]
+    err = None
+    if eng:
+        res, err = err_handler.error_wrapper(lambda: insert_inverter_data(eng, data))
+    pass
+    if err:
+        return None, err
+    return data, None
+
+
+def transform_station_data(station):
+    """Convert JSON keys to match DB column names and handle timestamps."""
+    return {
+        "id": station["id"],
+        "name": station["name"],
+        "location_lat": station.get("locationLat"),
+        "location_lng": station.get("locationLng"),
+        "location_address": station.get("locationAddress"),
+        "region_nation_id": station.get("regionNationId"),
+        "region_level1": station.get("regionLevel1"),
+        "region_level2": station.get("regionLevel2"),
+        "region_level3": station.get("regionLevel3"),
+        "region_level4": station.get("regionLevel4"),
+        "region_level5": station.get("regionLevel5"),
+        "region_timezone": station.get("regionTimezone"),
+        "type": station.get("type"),
+        "grid_interconnection_type": station.get("gridInterconnectionType"),
+        "installed_capacity": station.get("installedCapacity"),
+        "start_operating_time": (
+            datetime.utcfromtimestamp(station["startOperatingTime"])
+            if station.get("startOperatingTime")
+            else None
+        ),
+        "station_image": station.get("stationImage"),
+        "created_date": (
+            datetime.utcfromtimestamp(station["createdDate"])
+            if station.get("createdDate")
+            else None
+        ),
+        "battery_soc": station.get("batterySoc"),
+        "network_status": station.get("networkStatus"),
+        "generation_power": station.get("generationPower"),
+        "last_update_time": (
+            datetime.utcfromtimestamp(station["lastUpdateTime"])
+            if station.get("lastUpdateTime")
+            else None
+        ),
+        "contact_phone": station.get("contactPhone"),
+        "owner_name": station.get("ownerName"),
+    }
+
+
+def upsert_stations(stations_data, eng=None):
+    if eng is None:
+        eng = db.set_local_defaultdb_engine()
+    transformed_data = [transform_station_data(st) for st in stations_data]
+
+    stmt = insert(models.Station).values(transformed_data)
+
+    update_columns = {
+        col.name: getattr(stmt.excluded, col.name)
+        for col in models.Station.__table__.columns
+        # if col.name not in ("id",)  # Exclude primary key
+    }
+
+    upsert_stmt = stmt.on_conflict_do_update(
+        index_elements=["name"], set_=update_columns  # Unique constraint field
+    )
+    # Session = sessionmaker(bind=eng)
+    session = Session(eng)
+    session.execute(upsert_stmt)
+    session.commit()

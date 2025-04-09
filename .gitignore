@@ -7,3 +7,17 @@ tests/__pycache__/
 __pycache__/
 .venvl/
 venvl/
+vfedot/
+
+# Ignore .log files
+*.log
+
+# Ignore Python-related files and directories
+Python-3.11.8/
+Python-3.11.8.tgz
+
+# Ignore NUL file (if it is not needed)
+NUL
+.coverage
+unhcr/alembic copy/
+unhcr/alembix/

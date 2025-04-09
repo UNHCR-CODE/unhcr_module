@@ -25,15 +25,15 @@ Initialization:
     The load_env and set_environ functions load the environment variables and populate the constants, respectively. 
     The env_cmdline_parser function allows specifying a different .env file via command-line arguments.
 """
+
+from datetime import datetime
+from dotenv import find_dotenv, load_dotenv
+import importlib
+import logging
 import optparse
 import os
 import sys
-import importlib
-import logging
 
-from dotenv import find_dotenv, load_dotenv
-
-import requests
 from unhcr import utils
 
 # Define constants
@@ -42,7 +42,6 @@ DEBUG = None
 LOCAL = None
 AZURE_URL = None
 MOD_PATH = None
-
 
 # Leonics API
 LEONICS_BASE_URL = None
@@ -76,6 +75,13 @@ SECRET_KEY = None
 BUCKET_NAME = None
 FOLDER_NAME = None
 
+# Eyedro API
+GB_API_V1_API_BASE_URL=None
+GB_API_V1_GET_DATA=None
+GB_API_V1_EMPTY_KEY=None
+GB_API_V1_GET_DEVICE_LIST=None
+GB_API_V1_USER_KEY=None
+
 # Prospect API
 BASE_URL = None
 API_IN_KEY = None
@@ -99,20 +105,7 @@ SM_HISTORY_URL = None
 
 environ_path = None
 
-def is_wsl():
-    return "WSL_DISTRO_NAME" in os.environ or "WSL_INTEROP" in os.environ
 
-def is_running_on_azure():
-    try:
-        response = requests.get(
-            "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
-            headers={"Metadata": "true"},
-            timeout=5,
-        )
-        return response.status_code == 200
-    except requests.RequestException:
-        return False
-    
 # sorcery skip
 def set_environ():  # sourcery skip: extract-duplicate-method
     """
@@ -172,6 +165,16 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         S3 bucket name for Eyedro.
     FOLDER_NAME : str
         S3 folder name for Eyedro.
+    GB_API_V1_API_BASE_URL : str
+        Base URL for GB API v1.
+    GB_API_V1_GET_DATA : str
+        Endpoint for getting data from GB API v1.
+    GB_API_V1_EMPTY_KEY : str
+        Empty key for GB API v1.
+    GB_API_V1_GET_DEVICE_LIST : str
+        Endpoint for getting device list from GB API v1.
+    GB_API_V1_USER_KEY : str
+        User key for GB API v1.
     BASE_URL : str
         Base URL for Prospect API.
     API_IN_KEY : str
@@ -229,6 +232,12 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     global SECRET_KEY
     global BUCKET_NAME
     global FOLDER_NAME
+    
+    global GB_API_V1_API_BASE_URL
+    global GB_API_V1_GET_DATA
+    global GB_API_V1_EMPTY_KEY
+    global GB_API_V1_GET_DEVICE_LIST
+    global GB_API_V1_USER_KEY
 
     global BASE_URL
     global API_IN_KEY
@@ -252,7 +261,9 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     LOCAL = os.getenv("LOCAL", "LOCAL missing") == "1" and not PROD
     AZURE_URL = os.getenv("AZURE_URL", "AZURE_URL missing")
     # change in .env file to your path to use local modules
-    if is_wsl():
+    if utils.is_running_on_azure():
+        MOD_PATH = os.getenv("MOD_PATH_AZURE", "MOD_PATH_AZURE missing")
+    if utils.is_wsl():
         MOD_PATH = os.getenv("MOD_PATH_WSL", "MOD_PATH_WSL missing")
     else:
         MOD_PATH = os.getenv("MOD_PATH", "MOD_PATH missing")
@@ -317,6 +328,13 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     SECRET_KEY = os.getenv("GB_AWS_SECRET_KEY", "GB_AWS_SECRET_KEY missing")
     BUCKET_NAME = os.getenv("GB_AWS_BUCKET_NAME", "GB_AWS_BUCKET_NAME missing")
     FOLDER_NAME = os.getenv("GB_AWS_FOLDER_NAME", "GB_AWS_FOLDER_NAME missing")
+    
+    # Eyedro API
+    GB_API_V1_API_BASE_URL = os.getenv("GB_API_V1_API_BASE_URL", "GB_API_V1_API_BASE_URL missing")
+    GB_API_V1_GET_DATA = os.getenv("GB_API_V1_GET_DATA", "GB_API_V1_GET_DATA missing")
+    GB_API_V1_EMPTY_KEY = os.getenv("GB_API_V1_EMPTY_KEY", "GB_API_V1_EMPTY_KEY missing")
+    GB_API_V1_GET_DEVICE_LIST = os.getenv("GB_API_V1_GET_DEVICE_LIST", "GB_API_V1_GET_DEVICE_LIST missing")
+    GB_API_V1_USER_KEY = os.getenv("GB_API_V1_USER_KEY", "GB_API_V1_USER_KEY missing")
 
     # Prospect API
     BASE_URL = os.getenv("PROS_BASE_URL", "PROS_BASE_URL missing")
@@ -348,7 +366,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     SM_TOKEN_URL = f"{SM_URL}/account/v1.0/token"
     SM_HISTORY_URL = f"{SM_URL}/device/v1.0/historical?language=en"
 
-    if is_running_on_azure():
+    if utils.is_running_on_azure():
         PROS_CONN_AZURE_STR = PROS_CONN_LOCAL_STR.replace(AZURE_URL, "localhost")
         AZURE_FUEL_DB_CONN_STR = AZURE_FUEL_DB_CONN_STR.replace(AZURE_URL, "localhost")
         AZURE_BASE_URL = AZURE_BASE_URL.replace(AZURE_URL, "localhost")
@@ -459,7 +477,6 @@ def env_cmdline_parser():
         return None
 
 
-utils.log_setup(override=True)
 # loads environment variables and sets constants
 args = utils.create_cmdline_parser()
 if args is None:
@@ -470,39 +487,51 @@ if res is None:
     exit(999)
 
 MODULES = [
+    ["models", "models"],
+    ["err_handler", "err_handler"],
+    ["app_utils", "app_utils"],
     ["utils", "utils"],
     ["constants", "const"],
     ["db", "db"],
     ["api_leonics", "api_leonics"],
     ["api_prospect", "api_prospect"],
-    ["nigeria_sm_fuel", "sm_fuel"],
+    ["galooli_sm_fuel", "sm_fuel"],
+    ["gb_eyedro", "gb_eyedro"],
     ["s3", "s3"],
 ]
 
 
-def import_local_libs(mpath=MOD_PATH, mods=MODULES):
+def import_local_libs(mods=MODULES, mpath=MOD_PATH,  logger=None):
     """
     Dynamically imports local modules from the specified local directory, allowing their functions and variables to be accessed globally by assigning them to the globals() dictionary.
 
     Parameters
     ----------
+    mods : list of lists, optional
+        A list of lists where each inner list contains two strings: the module's file name (without '.py') and the name to assign the loaded module in globals().
     mpath : str, optional
         The directory path where the modules are located, by default MOD_PATH.
-    mods : list of lists
-        A list of lists where each inner list contains two strings: the module's file name (without '.py') and the name to assign the loaded module in globals().
+    logger : logging.Logger, optional
+        A logger object to use for logging errors during module loading, by default None (which will create a logger with the name "import_local_libs").
 
     Returns
     -------
-    list
-        A list of loaded modules.
+    tuple
+        A tuple where the first element is the logger used and the second element is a list of loaded modules.
 
     Notes
     -----
     This function dynamically imports modules from the specified local directory, allowing their functions and variables to be accessed globally by assigning them to the globals() dictionary.
     """
     loaded_modules = []
+    if not logger:
+        logger = utils.log_setup('unhcr.constants.log')
+    loaded_modules.append(logger)
+
     for mod in mods:
         module_name, global_name = mod
+        if module_name == 'models':
+            pass
         if module_name in sys.modules:
             # Use the already loaded module
             loaded_modules.append(sys.modules[module_name])
@@ -512,7 +541,7 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
             continue
 
         # Construct the full path to the module file
-        module_path = os.path.join(mpath, f"{module_name}.py")
+        module_path = os.path.join(os.path.expanduser(mpath), f"{module_name}.py")
         if not os.path.exists(module_path):
             print(f"Module file not found: {module_path}")
             continue
@@ -524,6 +553,101 @@ def import_local_libs(mpath=MOD_PATH, mods=MODULES):
             spec.loader.exec_module(loaded_mod)
             loaded_modules.append(loaded_mod)
         except Exception as e:
+            logging.info(f"Failed to load module {module_name}: {e}")
             print(f"Failed to load module {module_name}: {e}")
 
     return tuple(loaded_modules)
+
+
+def add_xlsx_dt(path, dt=datetime.now().date().isoformat()):
+    return path.replace(
+    ".xlsx", f"_{dt}.xlsx"
+)
+def add_csv_dt(path, dt=datetime.now().date().isoformat()):
+    return path.replace(
+    ".csv", f"_{dt}.csv"
+)
+
+# Eyedro GB constants
+"""
+196	006-	Gateway      emv2	5VDC
+6	803-	GateWay      emv5	5VDC
+540	009-	GEN 4        emv2	5VDC
+17	B12-	GEN 5        emv5	6VAC
+2	B14-	GEN 5        emv5   6VAC  Ethernet
+1	918-	Inline       ilmv1	230 - 120 VAC
+
+"""
+GB_SN_COLS = ['gb_serial', 'site_label', 'epoch_utc', 'status']
+GB_GATEWAY_PREFIX = ('006-', '803-')
+
+if utils.is_running_on_azure() or utils.is_wsl():
+    TOP20_CSV = os.path.expanduser(r"~/code/DATA/gaps/new_top_20.csv")
+    GAPS_CSV_PATH = os.path.expanduser(r"~/code/DATA/gaps/gaps.csv")
+    GTB_GAPS_EXCEL = os.path.expanduser(r"~/code/DATA/gaps/gtb_gaps.xlsx")
+    ALL_API_GBS_CSV_PATH = os.path.expanduser(r"~/code/DATA/all_api_gbs.csv")
+    UNIFIER_CSV = os.path.expanduser(r"~/code/DATA/unifier.csv")
+    GB_MERGED_EXCEL_PATH = os.path.expanduser(r"~/code/DATA/gaps/merged.xlsx")
+    GB_GAPS_DATA_DIR = os.path.expanduser(r'~code\DATA\gaps\gap_csv')
+    GB_GAPS_CSV= os.path.expanduser(r'~code\DATA\gaps\eyedro_data_gaps.csv')
+    TOP20_ONEDRIVE_PATH =  os.path.expanduser(r'~/code\DATA')
+    DATA_DIR_PATH =  os.path.expanduser(r'~/code\DATA')
+else:
+    DATA_DIR_PATH = r"E:\_UNHCR\CODE\DATA"
+    TOP20_CSV = r"E:\_UNHCR\CODE\DATA\gaps\new_top_20.csv"
+    GAPS_CSV_PATH = r"E:\_UNHCR\CODE\DATA\gaps\gaps.csv"
+    GTB_GAPS_EXCEL = r"E:\_UNHCR\CODE\DATA\gaps\gtb_gaps.xlsx"
+    ALL_API_GBS_CSV_PATH = r"E:\_UNHCR\CODE\DATA\all_api_gbs.csv"
+    UNIFIER_CSV = r"E:\_UNHCR\CODE\DATA\unifier.csv"
+    GB_MERGED_EXCEL_PATH = r"E:\_UNHCR\CODE\DATA\gaps\gb_merged_.xlsx"
+    GB_GAPS_DATA_DIR = r'E:\_UNHCR\CODE\DATA\gaps\gap_csv'
+    GB_GAPS_CSV= r'E:\_UNHCR\CODE\DATA\gaps\eyedro_data_gaps.csv'
+    TOP20_ONEDRIVE_PATH = r"E:\UNHCR\OneDrive - UNHCR\Green Data Team\07 Greenbox Management\Green Box daily tracing sheet 2025.xlsx"
+
+GB_GAPS_TABLE = "eyedro.gb_1min_gaps"
+
+SQL_GB_GAPS_DELETE = f"""
+        DELETE FROM {GB_GAPS_TABLE} t1
+        USING {GB_GAPS_TABLE} t2
+        WHERE 
+            t1.hypertable_name = t2.hypertable_name
+            AND t1.epoch_secs = t2.epoch_secs
+            AND t1.prev_epoch = t2.prev_epoch
+            AND t1.diff_seconds = t2.diff_seconds
+            AND t1.days = t2.days
+            AND t1.deleted = TRUE  -- Only delete where deleted is TRUE
+            AND t2.deleted = FALSE;  -- Keep where deleted is FALSE;
+            update {GB_GAPS_TABLE} set deleted = TRUE;
+            select count(*) from {GB_GAPS_TABLE};
+        """
+SQL_GB_GAPS_TABLE = f"""
+        CREATE TABLE IF NOT EXISTS {GB_GAPS_TABLE} (
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ DEFAULT now(),
+            hypertable_name TEXT,
+            epoch_secs BIGINT,
+            prev_epoch BIGINT,
+            diff_seconds INT,
+            days varchar(10),
+            start_ts TIMESTAMPTZ,
+            end_ts TIMESTAMPTZ,
+            deleted boolean DEFAULT false,
+            CONSTRAINT gb_gaps_epoch_secs_prev_epoch_key UNIQUE (hypertable_name, epoch_secs, prev_epoch, deleted)
+        );
+        CREATE OR REPLACE FUNCTION {GB_GAPS_TABLE}()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.updated_at = now();
+            NEW.start_ts = to_timestamp(NEW.prev_epoch::BIGINT);
+            NEW.end_ts = to_timestamp(NEW.epoch_secs::BIGINT);
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        CREATE TRIGGER trigger_{GB_GAPS_TABLE.replace("eyedro.", "_")}
+        BEFORE INSERT OR UPDATE ON {GB_GAPS_TABLE}
+        FOR EACH ROW
+        EXECUTE FUNCTION {GB_GAPS_TABLE}();
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_name = '{GB_GAPS_TABLE}';
+    """

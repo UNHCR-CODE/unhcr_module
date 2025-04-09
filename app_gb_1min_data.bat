@@ -20,7 +20,7 @@ REM pip install --upgrade pip
 
 REM any commandline vars, install unhcr module
 IF "%1"=="" (
-    %VENV_DIR%\Scripts\python.exe -c "import unhcr" 2>NUL
+    venv\Scripts\python.exe -c "import unhcr" 2>NUL
     if %errorlevel% equ 0 (
         echo Module 'unhcr' is installed.
     ) else (
@@ -30,8 +30,8 @@ IF "%1"=="" (
 ) ELSE (
     %VENV_DIR%\Scripts\pip install -r fedotreqs.txt
     %VENV_DIR%\Scripts\pip install .
-)   
+)
 
 REM changed python path to make it work in Windows scheduler -- was running a different python
-%VENV_DIR%\Scripts\python.exe app_sm_weather.py --log INFO
+%VENV_DIR%\Scripts\python.exe app_gb_1min_data.py --log INFO
 deactivate

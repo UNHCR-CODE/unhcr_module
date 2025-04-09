@@ -5,8 +5,12 @@ from unhcr import api_leonics
 from unhcr import api_prospect
 from unhcr import db
 from unhcr import s3
-from unhcr import nigeria_sm_fuel
+from unhcr import galooli_sm_fuel
 from unhcr import api_solarman
+from unhcr import err_handler
+from unhcr import app_utils
+from unhcr import gb_eyedro
+from unhcr import models
 
 ##############################
 # Hey there - I've reviewed your changes - here's some feedback:

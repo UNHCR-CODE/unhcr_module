@@ -43,14 +43,139 @@ Key Components
         matching dictionary.
 """
 
+import csv
 from datetime import datetime, timedelta
 from importlib.metadata import version
-import csv
+import fnmatch
 import glob
 import logging
 import optparse
 import os
+import platform
+import requests
+import socket
 import sys
+import tkinter as tk
+from tkinter import messagebox
+
+# Global variable to store the selected file
+selected_file = None
+log_file = 'unhcr.utils.log'
+log_path = '~/code/logs/'
+log_path = 'E:/_UNHCR/CODE/LOGS'
+
+
+def is_wsl():
+    """Detect if running in Windows Subsystem for Linux (WSL)."""
+    return (
+        "WSL_DISTRO_NAME" in os.environ
+        or "WSL_INTEROP" in os.environ
+        or "microsoft" in platform.uname().release.lower()
+    )
+
+def is_running_on_azure():
+    #!!! for now just detect linux or ubuntu
+    return is_linux() or is_ubuntu()
+    """Detect if running on Azure VM by querying the Azure Instance Metadata Service."""
+    try:
+        response = requests.get(
+            "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
+            headers={"Metadata": "true"},
+            timeout=2,
+        )
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
+
+def is_linux():
+    return platform.system() == "Linux" and not is_wsl()
+
+def is_ubuntu():
+    try:
+        with open("/etc/os-release") as f:
+            return "ubuntu" in f.read().lower()
+    except FileNotFoundError:
+        return False
+
+# Function to display the dropdown populated with file names from a directory
+def show_dropdown_from_directory(directory, file_pattern_filter=None):
+    global selected_file 
+    selected_file = None  # Local variable to store selected file
+
+    def on_submit():
+        global selected_file
+        selected_value = combo.get()  # Get the selected file name from the dropdown
+        if selected_value:
+            selected_file = os.path.join(directory, selected_value)
+        else:
+            selected_file = None
+        top.quit()  # Stop the Tkinter event loop
+
+    def on_cancel():
+        global selected_file
+        selected_file = None
+        top.quit()  # Stop the Tkinter event loop
+
+    # Validate directory existence
+    if not os.path.isdir(directory):
+        messagebox.showerror("Error", "Invalid directory")
+        return None
+
+    # Get the list of matching files
+    files = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+    if file_pattern_filter:
+        files = [f for f in files if fnmatch.fnmatch(f, file_pattern_filter)]
+
+    if not files:
+        messagebox.showerror("Error", f"No files found matching '{file_pattern_filter}' in '{directory}'.")
+        return None
+
+    # Create the top-level window
+    top = tk.Toplevel()
+    top.title(f"Select a File ({directory})")
+    top.geometry("600x300") 
+
+    tk.Label(top, text="Select a file:").pack(padx=20, pady=10)
+
+    # Create a dropdown (ComboBox)
+    combo = tk.StringVar()
+    dropdown = tk.OptionMenu(top, combo, *files)
+    dropdown.pack(padx=20, pady=10)
+    combo.set(files[0])  # Default to first file
+
+    # Add buttons
+    tk.Button(top, text="Submit", command=on_submit).pack(padx=20, pady=5)
+    tk.Button(top, text="Cancel", command=on_cancel).pack(padx=20, pady=5)
+
+    top.grab_set()  # Make modal
+    top.focus_set()
+
+    top.mainloop()  # Start event loop
+
+    top.destroy()  # Destroy window after loop ends
+    return selected_file  # Return selected file
+
+
+# # Directory containing the files (change this to your desired directory)
+# res = show_dropdown_from_directory(r'E:\_UNHCR\CODE\DATA','unifier_gb*.csv')
+# print(res, selected_file)
+
+
+def msgbox_yes_no(title="Confirmation", msg="Are you sure?", auto_yes=None):
+    # Create a basic Tkinter window (it won't appear)
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
+
+    # Display a Yes/No prompt
+    res = messagebox.askyesno(title=title, message=msg)
+        # If auto_yes is True, simulate pressing the "Enter" key
+    if auto_yes:
+        # Use event_generate to simulate the Enter key press (which selects "Yes")
+        root.event_generate('<Return>')
+        res = True if auto_yes > 0 else False  # Simulate Yes response
+
+    root.destroy()  # Destroy the root window after use
+    return res
 
 
 def config_log_handler(handler, level, formatter, logger):
@@ -73,7 +198,7 @@ def config_log_handler(handler, level, formatter, logger):
     logger.addHandler(handler)
 
 
-def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
+def log_setup(log_file, level="INFO", override=False):
     # Check if the logger already has handlers to prevent adding duplicates
     """
     Configure the logging for the module. If level is None, it will look for a command-line argument --log followed by the desired level, e.g., INFO, DEBUG, etc.
@@ -83,7 +208,7 @@ def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
     ----------
     level : str, optional
         The desired logging level, by default 'INFO'
-    log_file : str, optional
+    log_file : str
         The name of the log file, by default 'unhcr.module.log'
     override : bool, optional
         If True, it will clear the existing handlers and set up new ones, by default False
@@ -93,23 +218,26 @@ def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
     logging.Logger
         The configured logger
     """
+        # Validate logging level
+    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    if level not in valid_levels:
+        raise ValueError(
+            f"Invalid logging level: {level}. Must be one of {valid_levels}."
+        )
+
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
     logger = logging.getLogger()
     if override:
         logger.handlers.clear()
-
-    if logger.hasHandlers():
+    elif logger.hasHandlers():
         return logger  # Return the logger if it already has handlers
 
     args = create_cmdline_parser(level) if level is None else level.upper()
     level = args
     if os.getenv("DEBUG") == "1":
         level = "DEBUG"
-    # Validate logging level
-    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-    if level not in valid_levels:
-        raise ValueError(
-            f"Invalid logging level: {level}. Must be one of {valid_levels}."
-        )
+
 
     # Create a formatter that outputs the log format
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
@@ -118,7 +246,7 @@ def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
     console_handler = logging.StreamHandler()
     config_log_handler(console_handler, level, formatter, logger)
     # File handler
-    file_handler = logging.FileHandler(log_file)
+    file_handler = logging.FileHandler(os.path.join(log_path, log_file), encoding="utf-8")
     config_log_handler(file_handler, level, formatter, logger)
     # Set the overall logging level
     logger.setLevel(getattr(logging, level))
@@ -127,7 +255,7 @@ def log_setup(level="INFO", log_file="unhcr.module.log", override=False):
 
 
 # init logging
-log_setup(override=True)
+log_setup(log_file)
 
 
 def ts2Epoch(dt, offset_hrs=0):
@@ -152,33 +280,43 @@ def ts2Epoch(dt, offset_hrs=0):
     return int(e)
 
 
-def filter_nested_dict(obj, val=-0.999):
+def filter_nested_dict(obj, val=-0.999, remove_empty=False):
     """
-    Recursively remove all entries of a nested dict that have a value equal to val. If the object is a dictionary,
-    it creates a new dictionary containing only key-value pairs where the value is not equal to val. If the object is a list,
-    it creates a new list containing only items that are not equal to val. Otherwise, it returns the object unchanged.
-    The default value for val is -0.999. This function is crucial for cleaning JSON-like data by removing a specific placeholder value
-    representing missing or unwanted data.
-
-    Parameters
-    ----------
-    obj : dict | list
-        The object to be filtered
-    val : any, optional
-        The value to be removed from the object, by default -0.999
-
-    Returns
-    -------
-    dict | list
-        The filtered object
+    Recursively remove all entries from a nested dict or list that have a value equal to `val`.
+    
+    Parameters:
+        obj : dict or list or primitive
+        val : value to remove
+        remove_empty : bool
+            If True, also remove empty dicts/lists after filtering.
+    
+    Returns:
+        Cleaned object with specified values (and optionally empties) removed.
     """
     if isinstance(obj, dict):
-        return {k: filter_nested_dict(v) for k, v in obj.items() if v != val}
+        result = {
+            k: filter_nested_dict(v, val, remove_empty)
+            for k, v in obj.items()
+            if v != val
+        }
+        # Remove entries that ended up empty
+        if remove_empty:
+            result = {k: v for k, v in result.items() if not (v == {} or v == [])}
+        return result
+
     elif isinstance(obj, list):
-        return [filter_nested_dict(item) for item in obj]
+        result = [
+            filter_nested_dict(item, val, remove_empty)
+            for item in obj
+            if item != val
+        ]
+        # Remove empty items
+        if remove_empty:
+            result = [item for item in result if item != {} and item != []]
+        return result
+
     else:
         return obj
-
 
 def create_cmdline_parser(level="INFO"):
     """
@@ -243,7 +381,7 @@ def create_cmdline_parser(level="INFO"):
 
         return options
     except Exception as e:
-        print(f"ERROR: {e}")
+        logging.error(f"create_cmdline_parser ERROR: {e}")
         return None
 
 
@@ -281,7 +419,7 @@ def get_module_version(name="unhcr_module"):
     v_number = None
     err = None
     try:
-        v_number = version("unhcr_module")
+        v_number = version(name)
     except Exception as e:
         err = str(e)
     return v_number, err
@@ -316,7 +454,7 @@ def is_version_greater_or_equal(ver):
     parts2 = list(map(int, version.split(".")))
 
     # Compare each component: major, minor, patch
-    return parts1 >= parts2
+    return parts1 <= parts2
 
 
 def extract_data(data_list, site=None):
@@ -350,15 +488,15 @@ def extract_data(data_list, site=None):
     """
     label = None
     for key in data_list:
+        label = None
         if site is None:
-            if "site" in key:
-                site = key["site"]
+            if "site" in key and "site" in data_list:
+                site = data_list["site"]
             else:
                 return None, None, None, None
-            table = key["table"]
-            fn = key["fn"]
-            if "label" in key:
-                label = key["label"]
+            table = data_list["table"] if "table" in data_list else None
+            fn = data_list["fn"] if "fn" in data_list else None
+            label = data_list["label"] if "label" in data_list else None
             return site, table, fn, label
         elif site == key["site"]:
             table = key["table"]
@@ -404,10 +542,57 @@ def concat_csv_files(input_file, output_file, append=True):
 
                 writer.writerows(reader)  # Append rows
 
-    print("CSV files merged and appended if existing!")
+    logging.debug("CSV files merged and appended if existing!")
     # Rename processed files
     for file in csv_files:
         # Extract the directory and filename separately
         directory, filename = os.path.split(file)
         new_name = os.path.join(directory, f"processed_{filename}")
         os.rename(file, new_name)
+
+
+def is_port_in_use(port, host='127.0.0.1'):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        return s.connect_ex((host, port)) == 0
+
+
+def prospect_running():
+    ports = [3000, 3001]
+    in_use = []
+    err = ''
+    for port in ports:
+        if is_port_in_use(port):
+            in_use.append(port) #print(f"Port {port} is in use ✅")
+        else:
+            err += f"Port {port} is free ❌\n"
+    if err == '':
+        err = None
+    return in_use, err
+
+
+# def prospect_running(url="http://localhost:3000"):
+#     """
+#     Check if the docker container is running by sending a GET request to the server URL.
+
+#     Parameters
+#     ----------
+#     url : str, optional
+#         The URL of the server, by default "http://localhost:3000"
+
+#     Returns
+#     -------
+#     bool
+#         True if the server is running, False otherwise
+#     """
+    
+#     try:
+#         response = requests.get(url, timeout=(5, 10))
+#         if response.status_code > 205:
+#             logging.info(f"Server at {url} responded with status code: {response.status_code}")
+#             return False
+#         else:
+#             return True
+#     except requests.exceptions.RequestException as e:
+#         logging.error(f"Server at {url} is not responding. ERROR: {e}")
+#         return False

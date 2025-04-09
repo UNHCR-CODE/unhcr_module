@@ -15,18 +15,18 @@ Key Components
     constants import: 
         This file imports necessary credentials (ACCESS_KEY, SECRET_KEY) and S3 location information (BUCKET_NAME, FOLDER_NAME) 
         from a separate constants module. This separation of credentials from the main code is a good security practice.
-    Logging: 
-        The code uses the logging module to provide information about the files found or any errors encountered. 
-        This is crucial for monitoring and debugging.
 """
 
 import boto3
-import logging
 
+from unhcr import app_utils
 from unhcr import constants as const
 
+mods=[["app_utils", "app_utils"],["constants", "const"]]
+res = app_utils.app_init(mods=mods, log_file="unhcr.s3.log", version="0.4.7", level="INFO", override=False)
+logger = res[0]
 if const.LOCAL:  # testing with local python files
-    const, *rest = const.import_local_libs(mods=[["constants", "const"]])
+    logger, app_utils, const = res
 
 # from unhcr import constants as const
 
@@ -51,8 +51,8 @@ def list_files_in_folder(bucket_name, folder_name):
         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=folder_name)
         if "Contents" in response:
             for item in response["Contents"]:
-                logging.info(f"Item: {item['Key']}, Size: {item['Size']} bytes")
+                logger.info(f"Item: {item['Key']}, Size: {item['Size']} bytes")
         else:
-            logging.info(f"No files found in folder '{folder_name}'.")
+            logger.info(f"No files found in folder '{folder_name}'.")
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logger.error(f"Error: {e}")
