@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# */30 * * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash sm_weather.sh" > /dev/null || (/bin/bash sm_weather.sh > /dev/null && echo $(( $(cat run_count_sm_weather.log 2>/dev/null || echo 0) + 1 )) > run_count_sm_weather.log)
+# 0 */6 * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash sm_weather.sh" > /dev/null || (/bin/bash sm_weather.sh > /dev/null && echo $(( $(cat ~/code/logs/run_count_sm_weather.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_sm_weather.log)
 
 
 # change to your repo root dir
@@ -43,7 +43,7 @@ deactivate
 
 # If Python script fails, log the exit code
 if [ $EXIT_CODE -ne 0 ]; then
-    echo "$(date): app_sm_weather.py FAILED with exit code $EXIT_CODE" >> error_sm_weather.log
+    echo "$(date): app_sm_weather.py FAILED with exit code $EXIT_CODE" >> ~/code/logs/error_sm_weather.log
 fi
 
 # Exit with the same exit code as Python

@@ -17,8 +17,8 @@ mods = [
 
 res = app_utils.app_init(
     mods=mods,
-    log_file="unhcr.sm_weather.log",
-    version="0.4.6",
+    log_file="unhcr.app_sm_weather.log",
+    version="0.4.7",
     level="INFO",
     override=True,
     quiet=False,

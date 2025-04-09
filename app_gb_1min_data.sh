@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 0 */4 * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash app_gb_1min_data.sh" > /dev/null || (/bin/bash app_gb_1min_data.sh > /dev/null && echo $(( $(cat run_count_app_gb_1min_data.log 2>/dev/null || echo 0) + 1 )) > run_count_app_gb_1min_data.log)
+# 0 */4 * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash app_gb_1min_data.sh" > /dev/null || (/bin/bash app_gb_1min_data.sh > /dev/null && echo $(( $(cat ~/code/logs/run_count_app_gb_1min_data.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_app_gb_1min_data.log)
 
 # change to your repo root dir
 cd ~/code/unhcr_module || exit 1
@@ -43,7 +43,7 @@ deactivate
 
 # If Python script fails, log the exit code
 if [ $EXIT_CODE -ne 0 ]; then
-    echo "$(date): update_all.py FAILED with exit code $EXIT_CODE" >> error_app_gb_1min_data.log
+    echo "$(date): app_gb_1min_data.py FAILED with exit code $EXIT_CODE" >> ~code/logs/error_app_gb_1min_data.log
 fi
 
 # Exit with the same exit code as Python

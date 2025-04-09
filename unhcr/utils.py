@@ -246,7 +246,9 @@ def log_setup(log_file, level="INFO", override=False):
     # File handler
     # TODO .env setting
     log_path = '~/code/logs/' if is_ubuntu() else 'E:/_UNHCR/CODE/LOGS'
-    file_handler = logging.FileHandler(os.path.join(log_path, log_file), encoding="utf-8")
+    log_path = os.path.expanduser(log_path)  # expands ~ to /home/you or C:\Users\you
+    log_file_path = os.path.join(log_path, log_file)
+    file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
     config_log_handler(file_handler, level, formatter, logger)
     # Set the overall logging level
     logger.setLevel(getattr(logging, level))
