@@ -61,8 +61,6 @@ from tkinter import messagebox
 # Global variable to store the selected file
 selected_file = None
 log_file = 'unhcr.utils.log'
-log_path = '~/code/logs/'
-log_path = 'E:/_UNHCR/CODE/LOGS'
 
 
 def is_wsl():
@@ -246,6 +244,8 @@ def log_setup(log_file, level="INFO", override=False):
     console_handler = logging.StreamHandler()
     config_log_handler(console_handler, level, formatter, logger)
     # File handler
+    # TODO .env setting
+    log_path = '~/code/logs/' if is_ubuntu() else 'E:/_UNHCR/CODE/LOGS'
     file_handler = logging.FileHandler(os.path.join(log_path, log_file), encoding="utf-8")
     config_log_handler(file_handler, level, formatter, logger)
     # Set the overall logging level
