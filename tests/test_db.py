@@ -158,7 +158,7 @@ def test_set_db_engine():
 
 # Tests for set_db_engine_by_name
 @patch('unhcr.db.set_db_engine')
-@patch('unhcr.constants.is_running_on_azure')
+@patch('unhcr.utils.is_running_on_azure')
 def test_set_db_engine_by_name_postgresql(mock_is_azure, mock_set_engine, setup_environment):
     """Test setting DB engine by name for PostgreSQL"""
     mock_is_azure.return_value = False

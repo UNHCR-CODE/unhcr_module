@@ -35,8 +35,60 @@ def test_db_create_tables_success(mock_dependencies):
     with mock_engine.begin() as conn:
         result = conn.execute(text("SELECT 1")) # Replace with a check relevant to your table structure
         assert result.fetchone() is not None
-        
-        
+
+
+# Existing test case for success scenario remains unchanged
+def test_db_create_tables_success(mock_dependencies):
+    mock_requests, mock_logger, mock_err_handler, mock_db = mock_dependencies
+    # Correct in-memory Postgres engine creation
+    mock_engine = create_engine("postgresql:///?host=localhost&port=5431", creator=lambda _: psycopg2.connect(database="testdb", user="postgres", password="postgres", host="localhost", port=5431))
+    with mock_engine.connect() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS eyedro.gb_test_123 cascade"))
+        conn.execute(text("DROP TABLE IF EXISTS eyedro.gb_test_321 cascade"))
+        conn.commit()
+    result, err = gb_eyedro.db_create_tables_2(["gb_test_123"], mock_engine)
+
+    assert result == 'All good Houston'
+    assert err is None
+    # Check if the table was created (replace with appropriate check for your schema)
+
+# New test case for invalid table name edge case
+def test_db_create_tables_invalid_table_name(mock_dependencies):
+    mock_requests, mock_logger, mock_err_handler, mock_db = mock_dependencies
+    # Use an invalid table name containing special characters
+    invalid_table_name = "gb_test_invalid!@#"
+    mock_engine = create_engine("postgresql:///?host=localhost&port=5431", creator=lambda _: psycopg2.connect(database="testdb", user="postgres", password="postgres", host="localhost", port=5431))
+    result, err = gb_eyedro.db_create_tables_2([invalid_table_name], mock_engine)
+    assert result == True
+    assert err is not None
+
+# New test case for simulating a database connection issue
+@patch('psycopg2.connect')  # Mock psycopg2.connect to simulate a failure
+def test_db_create_tables_connection_issue(mock_connect, mock_dependencies):
+    mock_requests, mock_logger, mock_err_handler, mock_db = mock_dependencies
+    
+    # Mock psycopg2.connect to raise a connection error (OperationalError)
+    mock_connect.side_effect = psycopg2.OperationalError("Connection failed")
+    
+    # Create an engine with incorrect connection details to simulate a connection failure
+    faulty_engine = create_engine("postgresql:///?host=invalidhost&port=1234", 
+                                  creator=lambda _: psycopg2.connect(database="testdb", user="postgres", password="postgres", host="invalidhost", port=1234))
+    
+    # Test the function and expect it to raise an OperationalError
+    with pytest.raises(psycopg2.OperationalError, match="Connection failed"):
+        gb_eyedro.db_create_tables_2(["gb_test_123"], faulty_engine)
+
+# New test case for simulating insufficient permissions
+def test_db_create_tables_insufficient_permissions(mock_dependencies):
+    mock_requests, mock_logger, mock_err_handler, mock_db = mock_dependencies
+    # Simulate insufficient permissions using a user that has read-only access
+    engine_no_permission = create_engine("postgresql:///?host=localhost&port=5431", creator=lambda _: psycopg2.connect(database="testdb", user="readonly", password="readonly", host="localhost", port=5431))
+        # Test the function and expect it to raise an OperationalError
+    with pytest.raises(psycopg2.OperationalError, match="password authentication failed"):
+        gb_eyedro.db_create_tables_2(["gb_test_123"], engine_no_permission)
+
+
+
 def test_db_hyper_gb_gaps_success(mock_dependencies):
     mock_requests, mock_logger, mock_err_handler, mock_db = mock_dependencies
     # Correct in-memory Postgres engine creation

@@ -24,6 +24,7 @@ if %errorlevel% equ 0 (
     %VENV_DIR%\Scripts\pip install ..\
 )
 cd /d E:\_UNHCR\CODE\unhcr_module\tests
+set PYTHONPATH=E:/_UNHCR/CODE/unhcr_module/unhcr
 echo XXXXX %CD%
 pytest -v --cache-clear --cov=.. --cov-report=html --env=E:/_UNHCR/CODE/unhcr_module/.env --log=INFO
 
