@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # every 5 mins
-# */5 * * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash ./scripts/docker_chk.sh" > /dev/null || (/bin/bash ./scripts/docker_chk.sh > /dev/null && echo $(( $(cat ~/code/logs/run_count_docker_chk.sh.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_docker_chk.sh.log)
+# */5 * * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash ./scripts/docker_chk.sh" > /dev/null || (/bin/bash ./scripts/docker_chk.sh | tee -a ~/code/logs/docker_chk.log 2>&1 && echo $(( $(cat ~/code/logs/run_count_docker_chk.sh.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_docker_chk.sh.log)
 
 # Define the working directory containing docker-compose.yml
 COMPOSE_DIR=~/prospect
