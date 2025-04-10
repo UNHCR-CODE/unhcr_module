@@ -16,7 +16,7 @@
 
 # Define variables
 LOGROTATE_CONF="/etc/logrotate.conf"
-SOURCE_LOG_DIR="/home/code/logs"
+SOURCE_LOG_DIR="/home/unhcr_admin/code/logs"
 DESTINATION_LOG_DIR="/datadrive/logs"
 
 # Run logrotate -- -f to force rotation
@@ -32,12 +32,18 @@ fi
 # Move rotated log files to the destination directory
 # rotate could do this, but not to a different drive, so we do it
 # Assuming rotated files have a .1 extension (you can adjust this as needed)
-sudo mv "$SOURCE_LOG_DIR"/*.1 "$DESTINATION_LOG_DIR"/
+# Check for .gz files in the source directory
+if ls "$SOURCE_LOG_DIR"/*.gz 1> /dev/null 2>&1; then
+    # Move rotated log files to the destination directory
+    mv "$SOURCE_LOG_DIR"/*.gz "$DESTINATION_LOG_DIR"/
 
-# Check if the move was successful
-if [ $? -eq 0 ]; then
-    echo "Moved rotated log files to $DESTINATION_LOG_DIR."
+    # Check if the move was successful
+    if [ $? -eq 0 ]; then
+        echo "Moved rotated log files to $DESTINATION_LOG_DIR."
+    else
+        echo "Failed to move log files."
+    fi
 else
-    echo "Failed to move log files."
+    echo "No .gz files found in $SOURCE_LOG_DIR. Nothing to move."
 fi
 
