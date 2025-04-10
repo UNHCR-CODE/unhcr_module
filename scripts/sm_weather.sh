@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# 0 */6 * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash sm_weather.sh" > /dev/null || (/bin/bash sm_weather.sh > /dev/null && echo $(( $(cat ~/code/logs/run_count_sm_weather.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_sm_weather.log)
+# every 6 hours
+# 0 */6 * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash ./scripts/sm_weather.sh" > /dev/null || (/bin/bash ./scripts/sm_weather.sh > /dev/null && echo $(( $(cat ~/code/logs/run_count_sm_weather.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_sm_weather.log)
 
 
 # change to your repo root dir

@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# */30 * * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash update_leonics.sh" > /dev/null || (/bin/bash update_leonics.sh > /dev/null && echo $(( $(cat ~/code/logs/run_count_update_leonics.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_update_leonics.log)
+# every 30 mins
+# */30 * * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash ./scripts/update_leonics.sh" > /dev/null || (/bin/bash ./scripts/update_leonics.sh > /dev/null && echo $(( $(cat ~/code/logs/run_count_update_leonics.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_update_leonics.log)
 
 # change to your repo root dir
 cd ~/code/unhcr_module || exit 1
