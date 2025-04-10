@@ -25,18 +25,19 @@ sudo logrotate -v "$LOGROTATE_CONF"
 # Check if logrotate was successful
 if [ $? -eq 0 ]; then
     echo "Logrotate completed successfully."
-
-    # Move rotated log files to the destination directory
-    # rotate could do this, but not to a different drive, so we do it
-    # Assuming rotated files have a .1 extension (you can adjust this as needed)
-    sudo mv "$SOURCE_LOG_DIR"/*.1 "$DESTINATION_LOG_DIR"/
-
-    # Check if the move was successful
-    if [ $? -eq 0 ]; then
-        echo "Moved rotated log files to $DESTINATION_LOG_DIR."
-    else
-        echo "Failed to move log files."
-    fi
 else
     echo "Logrotate encountered an error."
 fi
+
+# Move rotated log files to the destination directory
+# rotate could do this, but not to a different drive, so we do it
+# Assuming rotated files have a .1 extension (you can adjust this as needed)
+sudo mv "$SOURCE_LOG_DIR"/*.1 "$DESTINATION_LOG_DIR"/
+
+# Check if the move was successful
+if [ $? -eq 0 ]; then
+    echo "Moved rotated log files to $DESTINATION_LOG_DIR."
+else
+    echo "Failed to move log files."
+fi
+
