@@ -16,7 +16,7 @@
 
 # Define variables
 LOGROTATE_CONF="/etc/logrotate.conf"
-SOURCE_LOG_DIR="/home/unhcr_admin/code/logs"
+SOURCE_LOG_DIR="/home/code/logs"
 DESTINATION_LOG_DIR="/datadrive/logs"
 
 # Run logrotate -- -f to force rotation
