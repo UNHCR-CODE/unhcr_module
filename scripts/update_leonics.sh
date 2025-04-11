@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# */30 * * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash update_all.sh" > /dev/null || (/bin/bash update_all.sh > /dev/null && echo $(( $(cat run_count_update_all.log 2>/dev/null || echo 0) + 1 )) > run_count_update_all.log)
+# every 30 mins
+# */30 * * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash ./scripts/update_leonics.sh" > /dev/null || (/bin/bash ./scripts/update_leonics.sh | tee -a ~/code/logs/update_leonics.log 2>&1 && echo $(( $(cat ~/code/logs/run_count_update_leonics.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_update_leonics.log)
 
 # change to your repo root dir
 cd ~/code/unhcr_module || exit 1
@@ -43,7 +44,7 @@ deactivate
 
 # If Python script fails, log the exit code
 if [ $EXIT_CODE -ne 0 ]; then
-    echo "$(date): update_all.py FAILED with exit code $EXIT_CODE" >> error_update_all.log
+    echo "$(date): app_update_leonics.py FAILED with exit code $EXIT_CODE" >> ~/code/logs/error_app_update_leonics.log
 fi
 
 # Exit with the same exit code as Python
