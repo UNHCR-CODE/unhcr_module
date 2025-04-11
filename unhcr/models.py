@@ -228,7 +228,7 @@ class InverterData(Base):
         # {"schema": "solarman"}  # Schema argument should be a dictionary, placed last
     )
 
-    ts = Column(DateTime, primary_key=True)
+    ts = Column(DateTime, primary_key=True, nullable=False)
     device_sn = Column(String(25), ForeignKey("solarman.devices.device_sn"), primary_key=True, nullable=False)
     device_id = Column(BigInteger)
     inverter_type = Column(String(255))

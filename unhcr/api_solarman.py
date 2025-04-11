@@ -30,9 +30,6 @@ from unhcr import db
 from unhcr import err_handler
 from unhcr import models
 
-from models import InverterData
-
-
 mods=[
     ["app_utils", "app_utils"],
     ["constants", "const"],
@@ -888,7 +885,7 @@ def insert_inverter_data(db_eng=None, json_data={}):
         row.pop('_sa_instance_state', None)
 
     # Build the INSERT statement
-    stmt = insert(InverterData).values(rows)
+    stmt = insert(models.InverterData).values(rows)
     stmt = stmt.on_conflict_do_nothing(index_elements=['ts', 'device_sn'])
     if str(stmt) and rows:
         # Execute
