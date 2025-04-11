@@ -38,7 +38,7 @@ from unhcr import constants as const
 from unhcr import err_handler
 
 mods = [["app_utils", "app_utils"], ["constants", "const"], ["err_handler", "err_handler"]]
-res = app_utils.app_init(mods=mods, log_file="unhcr.api_leonics.log", version="0.4.7", level="INFO", override=False)
+res = app_utils.app_init(mods=mods, log_file="unhcr.api_leonics.log", version="0.4.8", level="INFO", override=False)
 logger = res[0]
 if const.LOCAL:  # testing with local python files
     logger, app_utils, const, err_handler = res

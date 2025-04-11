@@ -481,9 +481,9 @@ def test_get_module_version_failure(mock_version):
 @pytest.mark.parametrize(
     "current_ver_mock, compare_ver, expected",
     [
-        ("0.4.7", "0.4.7", True),
-        ("0.4.7", "0.4.6", True),
-        ("0.4.7", "0.5.0", False),
+        ("0.4.8", "0.4.8", True),
+        ("0.4.8", "0.4.6", True),
+        ("0.4.8", "0.5.0", False),
         ("1.0.0", "0.9.9", True),
         ("1.0.0", "1.0.0", True),
         ("1.0.0", "1.0.1", False),

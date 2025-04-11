@@ -11,7 +11,7 @@ Logging setup:
     and the log file as "unhcr.solar_5min.log".
 
 Version check:
-    Checks if the version of the unhcr module is greater than or equal to "0.4.7", and if not,
+    Checks if the version of the unhcr module is greater than or equal to "0.4.8", and if not,
     logs an error message and exits with an error code.
 
 Database engine setup:
@@ -70,9 +70,9 @@ logger.info(
     f"{sys.argv[0]} Process ID: {os.getpid()}   Log Level: {logging.getLevelName(int(logger.level))}"
 )
 
-if not utils.is_version_greater_or_equal("0.4.7"):
+if not utils.is_version_greater_or_equal("0.4.8"):
     logger.error(
-        "This version of the script requires at least version 0.4.7 of the unhcr module."
+        "This version of the script requires at least version 0.4.8 of the unhcr module."
     )
     exit(47)
 

@@ -47,17 +47,17 @@ from unhcr import utils
 from unhcr import db
 from unhcr import api_leonics
 
-
+mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
+logger, *rest = mods
 if const.LOCAL: # testing with local python files
-    mods = const.import_local_libs(mods=[["utils","utils"], ["constants", "const"], ["db", "db"], ["api_leonics", "api_leonics"]])
-    utils, const, db, api_leonics, *rest = mods
+    logger, utils, const, db, api_leonics, *rest = mods
 
 utils.log_setup(override=True)
-logging.info(f"LEONICS_BACKFILL:  PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
+logger.info(f"LEONICS_BACKFILL:  PROD: {const.PROD}, DEBUG: {const.DEBUG}, LOCAL: {const.LOCAL} {os.getenv('LOCAL')} .env file @: {const.environ_path}")
 
-logging.info(f"Process ID: {os.getpid()}   Log Level: {logging.getLevelName(logging.getLogger().getEffectiveLevel())}")
+logger.info(f"Process ID: {os.getpid()}   Log Level: {logging.getLevelName(int(logger.level))}")
 ver, err = utils.get_module_version()
-logging.info(f"Version: {ver}   Error: {err}")
+logger.info(f"Version: {ver}   Error: {err}")
 
 mysql = True
 pros = True
@@ -85,16 +85,16 @@ if orc:
         with open("orc_sql.txt", "w") as file:
             file.write(oracle_insert)
     except Exception as e:
-        logging.error(f"ORACLE Error occurred: {e}")
+        logger.error(f"ORACLE Error occurred: {e}")
 
-logging.debug('1111111111111111111111111')
+logger.debug('1111111111111111111111111')
 token = None
 if mysql or pros:
-    logging.debug('222222222222222222222')
+    logger.debug('222222222222222222222')
     token = api_leonics.checkAuth()
-    logging.debug('999999999999999999999999')
+    logger.debug('999999999999999999999999')
 
-logging.debug(f'!!!!!!!!!!! {token}')
+logger.debug(f'!!!!!!!!!!! {token}')
 if token:
     if mysql:
         date_str = '2025-01-04'
@@ -105,18 +105,18 @@ if token:
         # ed = ed.replace('-', '')
         df, err = api_leonics.getData(start=st,end=st,token=token)
         if err:
-            logging.error(f"api_leonics.getData Error occurred: {err}")
+            logger.error(f"api_leonics.getData Error occurred: {err}")
             exit(2)
         # Convert the 'datetime_column' to pandas datetime
         df['DateTimeServer'] = pd.to_datetime(df['DateTimeServer'])
         res, err = db.update_mysql(data_dt,df, const.LEONICS_RAW_TABLE)
         if err:
-            logging.error(f"update_mysql Error occurred: {err}")
+            logger.error(f"update_mysql Error occurred: {err}")
             exit(3)
         else:
-            logging.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
+            logger.info(f'ROWS UPDATED: {const.LEONICS_RAW_TABLE}  {res.rowcount}')
 else:
-    logging.info('Failed to get Leonics token, exiting')
+    logger.info('Failed to get Leonics token, exiting')
     exit()
 
 if pros:
@@ -141,7 +141,7 @@ if pros:
 # e:/_UNHCR/CODE/unhcr_module/unhcr/full_test.py:69
 
 # suggestion(testing): Hardcoded test parameters
-# logging.info(f"Version: {ver}   Error: {err}")
+# logger.info(f"Version: {ver}   Error: {err}")
 
 
 # mysql = True
@@ -155,12 +155,12 @@ if pros:
 
 # issue(testing): Missing assertions for `db.update_mysql()`
 
-# logging.debug(f'!!!!!!!!!!! {token}')
+# logger.debug(f'!!!!!!!!!!! {token}')
 # if token:
 #     if mysql:
 #         db.update_mysql(token)
 # else:
-#     logging.info('Failed to get Leonics token, exiting')
+#     logger.info('Failed to get Leonics token, exiting')
 # The test calls db.update_mysql(token) but doesn't assert anything about the result. Add assertions to verify that the MySQL database is updated correctly. For example, check if specific rows are added or modified.
 
 # Resolve
@@ -182,9 +182,9 @@ if pros:
 # issue(testing): Missing test for authentication failure
 # token = None
 # if mysql or pros:
-#     logging.debug('222222222222222222222')
+#     logger.debug('222222222222222222222')
 #     token = api_leonics.checkAuth()
-#     logging.debug('999999999999999999999999')
+#     logger.debug('999999999999999999999999')
 
 # The test assumes api_leonics.checkAuth() will always succeed. Add a test case to simulate an authentication failure and verify that the script handles it gracefully, likely by logging an error and exiting.
 
@@ -216,7 +216,7 @@ if pros:
 #         with open("orc_sql.txt", "w") as file:
 #             file.write(oracle_insert)
 #     except Exception as e:
-#         logging.error(f"ORACLE Error occurred: {e}")
+#         logger.error(f"ORACLE Error occurred: {e}")
 
-# logging.debug('1111111111111111111111111')
+# logger.debug('1111111111111111111111111')
 # The entire if orc block is inactive and seems related to Oracle integration, which is currently disabled. Remove this dead code to improve readability and maintainability.

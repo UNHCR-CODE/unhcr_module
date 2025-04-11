@@ -36,9 +36,9 @@ logger, *rest = mods
 if const.LOCAL: # testing with local python files
     logger, const, db, sm_fuel, utils = mods
 
-if not utils.is_version_greater_or_equal('0.4.7'):
+if not utils.is_version_greater_or_equal('0.4.8'):
     logger.error(
-        "This version of the script requires at least version 0.4.7 of the unhcr module."
+        "This version of the script requires at least version 0.4.8 of the unhcr module."
     )
     exit(47)
 
