@@ -375,7 +375,7 @@ def db_insert_devices(db_eng, records=None):
             # x = str(session.query(StationData).filter(StationData.station_id == record.station_id).statement)
             session.commit()
 
-    print("Data inserted successfully!")
+    logger.info("Data inserted successfully!")
 
 
 def api_get_devices(site_id, db_eng=None):
@@ -675,7 +675,7 @@ def insert_station_data_daily(db_eng, records=None):
         # x = str(session.query(StationData).filter(StationData.station_id == record.station_id).statement)
         session.commit()
 
-    print("Data inserted successfully!")
+    logger.info("Data inserted successfully!")
 
 
 def insert_inverter_data(db_eng=None, json_data={}):
@@ -858,12 +858,12 @@ def insert_inverter_data(db_eng=None, json_data={}):
     session = Session()
     # Merge all instances in the batch at once
     x = time.time()
-    print('!!!!!!!!!!!!!!', z)
+    # TODO: test how slow this is
     # for inverter_instance in inverter_instances:
     #     session.merge(inverter_instance)
     # # Commit the new record to the database
     # session.commit()
-    
+
     def to_plain_dict(obj, exclude_fields=None):
         """Convert SQLAlchemy ORM object to plain dict, excluding listed fields."""
         exclude_fields = set(exclude_fields or [])
@@ -895,9 +895,7 @@ def insert_inverter_data(db_eng=None, json_data={}):
             session.commit()
         except Exception as e:
             session.rollback()
-            print(f"Error inserting data: {e}")
-    print('!!!!!!!!!!!!!!XXXXXX', z, time.time() - x)
-    pass
+            logger.error(f"Error inserting data: {e}")
 
 
 def get_inverter_data(
@@ -915,9 +913,7 @@ def get_inverter_data(
     Returns:
         tuple: Data and error message. If error, data is None and error message is not None.
     """
-    #time.sleep(1)
     url = HISTORICAL_URL
-    ###print(url)
 
     payload = json.dumps(
         {
@@ -933,7 +929,6 @@ def get_inverter_data(
         "Authorization": f"Bearer {BIZ_ACCESS_TOKEN}",
     }
 
-    print('ZZZZZZ', sn)
     z = time.time()
     response = requests.request("POST", url, headers=headers, data=payload)
 
@@ -943,7 +938,6 @@ def get_inverter_data(
     data = res["paramDataList"]
     err = None
     if db_eng:
-        print('ZZZZZZXXXXX', sn, time.time() - z)
         res, err = err_handler.error_wrapper(lambda: insert_inverter_data(db_eng, data))
     if err:
         return None, err

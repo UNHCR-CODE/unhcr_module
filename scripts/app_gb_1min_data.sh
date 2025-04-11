@@ -1,10 +1,13 @@
 #!/bin/bash
 
 # every 4 hours
-# 0 */4 * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash ./scripts/app_gb_1min_data.sh" > /dev/null || (/bin/bash ./scripts/app_gb_1min_data.sh | tee -a ~/code/logs/gb_1min_data.log 2>&1 && echo $(( $(cat ~/code/logs/run_count_app_gb_1min_data.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_app_gb_1min_data.log)
+# 0 */4 * * * cd ~/code/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/app_gb_1min_data.sh" > /dev/null || (sudo /bin/bash ./scripts/app_gb_1min_data.sh | sudo tee -a ~/code/logs/gb_1min_data.log 2>&1 && echo $(( $(sudo cat ~/code/logs/run_count_app_gb_1min_data.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_app_gb_1min_data.log)
+
 
 # change to your repo root dir
-cd ~/code/unhcr_module || exit 1
+cd /home/unhcr_admin/code/unhcr_module || exit 1
+echo "Current directory: $(pwd)"
+echo "Current user: $(whoami)"
 
 # Activate the virtual environment directory
 VENV_DIR="vfedot"

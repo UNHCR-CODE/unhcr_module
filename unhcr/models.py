@@ -228,8 +228,8 @@ class InverterData(Base):
         # {"schema": "solarman"}  # Schema argument should be a dictionary, placed last
     )
 
-    ts = Column(DateTime, primary_key=True, nullable=False)
-    device_sn = Column(String(25), ForeignKey("solarman.devices.device_sn"), primary_key=True, nullable=False)
+    ts = Column(DateTime, primary_key=True, nullable=False, autoincrement=False)
+    device_sn = Column(String(25), ForeignKey("solarman.devices.device_sn"), primary_key=True, nullable=False, autoincrement=False)
     device_id = Column(BigInteger)
     inverter_type = Column(String(255))
     output_power_level = Column(String(255))
@@ -495,7 +495,6 @@ from alembic.script import ScriptDirectory
 from alembic import command
 from sqlalchemy.schema import MetaData
 import os
-print(os.getcwd()) 
 
 def check_db_schema(eng=db.set_local_defaultdb_engine(), alembic_cfg=None):
     err = None
@@ -748,7 +747,6 @@ def db_update_device_history(site_id, eng, utc=datetime(2024, 10, 1, 0, 0, 0, tz
         if str(site_id) not in str(s):
             continue
         site_key = next(iter(s))
-        print(site_key)
         site_devices.append(WEATHER[site_key])
         for i in INVERTERS:
             if i['site'] != site_key:
@@ -756,17 +754,15 @@ def db_update_device_history(site_id, eng, utc=datetime(2024, 10, 1, 0, 0, 0, tz
             site_devices.extend(i[site_key])
             break
         break
-    print(site_devices)
 
     with Session(eng) as session:
         device_sns = [device['deviceSn'] for device in site_devices]
-        print(device_sns)
         # Query all devices
         devices = session.scalars(select(Device).filter(Device.device_sn.in_(device_sns))).all()
 
-        # Print results
+        # Save results
         for device in devices:
-            print(f"Device SN: {device.device_sn}, ID: {device.device_id}, Type: {device.device_type}")
+        #   print(f"Device SN: {device.device_sn}, ID: {device.device_id}, Type: {device.device_type}")
         
     
             new_history = DeviceSiteHistory(

@@ -20,7 +20,7 @@ SOURCE_LOG_DIR="/home/unhcr_admin/code/logs"
 DESTINATION_LOG_DIR="/datadrive/logs"
 
 # Run logrotate -- -f to force rotation
-sudo logrotate -v "$LOGROTATE_CONF"
+sudo logrotate -v -f "$LOGROTATE_CONF"
 
 # Check if logrotate was successful
 if [ $? -eq 0 ]; then
@@ -29,21 +29,22 @@ else
     echo "Logrotate encountered an error."
 fi
 
+#!!!! this is not quite right moves 1.gz files only
 # Move rotated log files to the destination directory
 # rotate could do this, but not to a different drive, so we do it
 # Assuming rotated files have a .1 extension (you can adjust this as needed)
 # Check for .gz files in the source directory
-if ls "$SOURCE_LOG_DIR"/*.gz 1> /dev/null 2>&1; then
-    # Move rotated log files to the destination directory
-    mv "$SOURCE_LOG_DIR"/*.gz "$DESTINATION_LOG_DIR"/
+# if ls "$SOURCE_LOG_DIR"/*.gz 1> /dev/null 2>&1; then
+#     # Move rotated log files to the destination directory
+#     mv "$SOURCE_LOG_DIR"/*.gz "$DESTINATION_LOG_DIR"/
 
-    # Check if the move was successful
-    if [ $? -eq 0 ]; then
-        echo "Moved rotated log files to $DESTINATION_LOG_DIR."
-    else
-        echo "Failed to move log files."
-    fi
-else
-    echo "No .gz files found in $SOURCE_LOG_DIR. Nothing to move."
-fi
+#     # Check if the move was successful
+#     if [ $? -eq 0 ]; then
+#         echo "Moved rotated log files to $DESTINATION_LOG_DIR."
+#     else
+#         echo "Failed to move log files."
+#     fi
+# else
+#     echo "No .gz files found in $SOURCE_LOG_DIR. Nothing to move."
+# fi
 

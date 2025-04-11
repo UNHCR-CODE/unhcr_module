@@ -172,7 +172,7 @@ while x > 0:
     print(f"Elapsed time: {elapsed:.2f} seconds")
     x -= 1
     start_dt -= timedelta(days=1)
-    if start_dt < datetime.strptime('2024-10-01', "%Y-%m-%d").date():
+    if x <= 0 or start_dt < datetime.strptime('2024-10-01', "%Y-%m-%d").date():
         break
     #time.sleep(1)
 

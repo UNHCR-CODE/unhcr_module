@@ -1,17 +1,18 @@
 #!/bin/bash
 
 # every 5 mins
-# */5 * * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash ./scripts/docker_chk.sh" > /dev/null || (/bin/bash ./scripts/docker_chk.sh | tee -a ~/code/logs/docker_chk.log 2>&1 && echo $(( $(cat ~/code/logs/run_count_docker_chk.sh.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_docker_chk.sh.log)
+# cd ~/code/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/docker_chk.sh" > /dev/null || (sudo /bin/bash ./scripts/docker_chk.sh | sudo tee -a /datadrive/logs/docker_chk.log 2>&1 && echo $(( $(sudo cat /datadrive/logs/run_count_docker_chk.sh.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_docker_chk.sh.log)
+
 
 # Define the working directory containing docker-compose.yml
-COMPOSE_DIR=~/prospect
+COMPOSE_DIR=/home/unhcr_admin/prospect
 
 # Define a container name to check (you can change this)
 EXPECTED_CONTAINER="prospect-core-1"
 
 # Function to check if a port is accessible
 check_port() {
-    nc -z -v -w5 $1 $2 > /dev/null 2>&1
+    nc -z -v -w5 "$1" "$2" > /dev/null 2>&1
     return $?
 }
 
