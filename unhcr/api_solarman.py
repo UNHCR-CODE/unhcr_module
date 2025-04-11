@@ -19,7 +19,7 @@ import time
 import pandas as pd
 import re
 import requests
-from sqlalchemy import text, select
+from sqlalchemy import inspect, text, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -29,6 +29,8 @@ from unhcr import utils
 from unhcr import db
 from unhcr import err_handler
 from unhcr import models
+
+from models import InverterData
 
 
 mods=[
@@ -682,7 +684,7 @@ def insert_station_data_daily(db_eng, records=None):
 def insert_inverter_data(db_eng=None, json_data={}):
     if db_eng is None:
         db_eng = db.set_local_defaultdb_engine()
-
+    z = ''
     # Define the expected keys
     EXPECTED_KEYS = {
         "SN1": "device_sn",
@@ -847,6 +849,7 @@ def insert_inverter_data(db_eng=None, json_data={}):
         # Prepare the model with the expected values using the key mapping
         dt = datetime.fromtimestamp(int(item["collectTime"]), tz=timezone.utc)
         data = models.InverterData(ts=round_to_nearest_5_minutes(dt), **mapped_data)
+        z = mapped_data["device_sn"]
         if data.system_time:
             if data.system_time.startswith("00-00-00"):
                 data.system_time = None
@@ -857,10 +860,46 @@ def insert_inverter_data(db_eng=None, json_data={}):
     Session = sessionmaker(bind=db_eng)
     session = Session()
     # Merge all instances in the batch at once
-    for inverter_instance in inverter_instances:
-        session.merge(inverter_instance)
-    # Commit the new record to the database
-    session.commit()
+    x = time.time()
+    print('!!!!!!!!!!!!!!', z)
+    # for inverter_instance in inverter_instances:
+    #     session.merge(inverter_instance)
+    # # Commit the new record to the database
+    # session.commit()
+    
+    def to_plain_dict(obj, exclude_fields=None):
+        """Convert SQLAlchemy ORM object to plain dict, excluding listed fields."""
+        exclude_fields = set(exclude_fields or [])
+        return {
+            c.key: getattr(obj, c.key)
+            for c in inspect(obj).mapper.column_attrs
+            if c.key not in exclude_fields
+        }
+
+    valid_inverters = [
+        obj for obj in inverter_instances
+        if obj.ts is not None #and obj.id is not None  # etc.
+    ]
+
+    rows = [to_plain_dict(obj, exclude_fields=['created', 'updated']) for obj in valid_inverters]
+
+    # Clean up internal SQLAlchemy attributes (like _sa_instance_state)
+    for row in rows:
+        row.pop('_sa_instance_state', None)
+
+    # Build the INSERT statement
+    stmt = insert(InverterData).values(rows)
+    stmt = stmt.on_conflict_do_nothing(index_elements=['ts', 'device_sn'])
+    if str(stmt) and rows:
+        # Execute
+        try:
+            session = Session()
+            session.execute(stmt)
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error inserting data: {e}")
+    print('!!!!!!!!!!!!!!XXXXXX', z, time.time() - x)
     pass
 
 
@@ -879,7 +918,7 @@ def get_inverter_data(
     Returns:
         tuple: Data and error message. If error, data is None and error message is not None.
     """
-    time.sleep(1)
+    #time.sleep(1)
     url = HISTORICAL_URL
     ###print(url)
 
@@ -897,6 +936,8 @@ def get_inverter_data(
         "Authorization": f"Bearer {BIZ_ACCESS_TOKEN}",
     }
 
+    print('ZZZZZZ', sn)
+    z = time.time()
     response = requests.request("POST", url, headers=headers, data=payload)
 
     res = response.json()
@@ -905,8 +946,8 @@ def get_inverter_data(
     data = res["paramDataList"]
     err = None
     if db_eng:
+        print('ZZZZZZXXXXX', sn, time.time() - z)
         res, err = err_handler.error_wrapper(lambda: insert_inverter_data(db_eng, data))
-    pass
     if err:
         return None, err
     return data, None

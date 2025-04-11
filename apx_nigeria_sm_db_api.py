@@ -20,23 +20,21 @@ from unhcr import api_solarman
 from unhcr import app_utils
 from unhcr import constants as const
 from unhcr import db
-from unhcr import models
-from unhcr import utils
+from unhcr import err_handler
 
 mods=[
     ["api_solarman", "api_solarman"],
     ["app_utils", "app_utils"],
     ["constants", "const"],
     ["db", "db"],
-    ["models", "models"],
-    ["utils", "utils"],
+    ["err_handler", "err_handler"],
 ]
 
 res =app_utils.app_init(mods=mods,  log_file="unhcr.app_nigeria_sm_db_api.log", version= '0.4.7', level="INFO", override=True, quiet=False)
 logger = res[0]
 # local testing ===================================
 if const.LOCAL:  # testing with local python files
-    logger, api_solarman, app_utils, const, db, models, utils = res
+    logger, api_solarman, app_utils, const, db, err_handler = res
 
 
 #!!!!!!!!!!!!!!!!!!!!
@@ -105,17 +103,17 @@ if err:
     exit(9)
 
 start_dt = res[0][0]
-num_parts = len(inverters_sn)  # Number of parallel threads (adjust as needed)
-num_parts = 1  # For testing, set to 1 to avoid parallel processing
+num_threads = len(inverters_sn)  # Number of parallel threads (adjust as needed)
+#num_threads = 1  # For testing, set to 1 to avoid parallel processing
 
 # Split inverter list into chunks for parallel processing
-chunks = [list(chunk) for chunk in np.array_split(inverters_sn, num_parts)]  
+chunks = [list(chunk) for chunk in np.array_split(inverters_sn, num_threads)]  
 
 # Thread-safe counters
   # Tracks processed chunks
   # Tracks processed inverters within chunks
 counter_lock = threading.Lock()
-
+api_lock = threading.Lock()
 def process_chunk(chunk, date, engine):
     """Fetch inverter data for a chunk of inverters in parallel."""
     with counter_lock:
@@ -134,12 +132,18 @@ def process_chunk(chunk, date, engine):
 
 
         start_time = time.time()
-        res, err = api_solarman.get_inverter_data(sn=sn, start_date=date, type=1, db_eng=engine)
-        end_time = time.time()
-        print(f"SN: {sn} | Execution time: {((end_time - start_time)):.2f} secs")
-
+        # this blocks till the API call returns. The solarman API server seems to have changed, it used to be async
+        # I used to be able to calls this in parallel, but now it slows down.
+        with api_lock:
+            res, err = api_solarman.get_inverter_data(sn=sn, start_date=date, type=1)
         if err:
             logger.error(f"Error fetching data for SN {sn}: {err}")
+        else:
+            res, err = err_handler.error_wrapper(lambda: api_solarman.insert_inverter_data(db_eng, res))
+            if err:
+                logger.error(f"Error fetching data for SN {sn}: {err}")
+        end_time = time.time()
+        print(f"SN: {sn} | Execution time: {((end_time - start_time)):.2f} secs")
 
         results.append((sn, res, err))
 
@@ -147,7 +151,7 @@ def process_chunk(chunk, date, engine):
 
 # **MAIN PROCESS LOOP**
 ###!!! if getting new data   start_dt = datetime.today().date()
-start_dt = datetime.strptime('2025-12-26', "%Y-%m-%d").date()
+start_dt = datetime.strptime('2025-03-22', "%Y-%m-%d").date()
 start_dt = datetime.today().date() + timedelta(days=1)
 x = 3
 timing = time.time()
@@ -155,7 +159,7 @@ while x > 0:
     global_counter = itertools.count(1)
 
     
-    with ThreadPoolExecutor(max_workers=num_parts) as executor:
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
         results = list(
             executor.map(lambda chunk: process_chunk(chunk, start_dt, db_eng), chunks)
         )
@@ -170,7 +174,7 @@ while x > 0:
     start_dt -= timedelta(days=1)
     if start_dt < datetime.strptime('2024-10-01', "%Y-%m-%d").date():
         break
-    time.sleep(1)
+    #time.sleep(1)
 
 # Flatten results
 final_output = [item for sublist in results for item in sublist]
