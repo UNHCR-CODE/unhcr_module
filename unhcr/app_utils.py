@@ -60,7 +60,7 @@ def app_init(mods, log_file, version, mpath=const.MOD_PATH, level="INFO", overri
 
         if not utils.is_version_greater_or_equal(version):
             logger.error(
-                "This version of the script requires at least version 0.4.6 of the unhcr module."
+                f"This version of the script requires at least version {version} of the unhcr module."
             )
             exit(int(version.replace(".", "")))
 

@@ -30,7 +30,7 @@ mods=[
     ["err_handler", "err_handler"],
 ]
 
-res =app_utils.app_init(mods=mods,  log_file="unhcr.app_nigeria_sm_db_api.log", version= '0.4.7', level="INFO", override=True, quiet=False)
+res =app_utils.app_init(mods=mods,  log_file="unhcr.app_nigeria_sm_db_api.log", version= '0.4.8', level="INFO", override=True, quiet=False)
 logger = res[0]
 # local testing ===================================
 if const.LOCAL:  # testing with local python files
