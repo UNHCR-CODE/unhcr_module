@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# every 4 hours
-# 0 */4 * * * cd /datadrive/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/app_gb_1min_data.sh" > /dev/null || (sudo /bin/bash ./scripts/app_gb_1min_data.sh | sudo tee -a /datadrive/logs/gb_1min_data.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_app_gb_1min_data.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_app_gb_1min_data.log')
-
+# every 30 mins
+# */30 * * * * cd /home/unhcr_admin/code/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/sm_upsert_inverter_data.sh" > /dev/null || (sudo /bin/bash ./scripts/sm_upsert_inverter_data.sh | sudo tee -a /datadrive/logs/sm_upsert_inverter_data.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_sm_upsert_inverter_data.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_sm_upsert_inverter_data.log')
 
 
 # change to your repo root dir
@@ -41,14 +40,14 @@ fi
 
 
 # Run the update_all.py script
-python3 app_gb_1min_data.py --log INFO 
+python3 app_sm_upsert_inverter_data.py --log INFO 
 EXIT_CODE=$?  # Store the exit code of Python
 
 deactivate
 
 # If Python script fails, log the exit code
 if [ $EXIT_CODE -ne 0 ]; then
-    echo "$(date): app_gb_1min_data.py FAILED with exit code $EXIT_CODE" >> /datadrive/logs/error_app_gb_1min_data.log
+    echo "$(date): app_sm_upsert_inverter_data.py FAILED with exit code $EXIT_CODE" >> /datadrive/logs/error_app_sm_upsert_inverter_data.log
 fi
 
 # Exit with the same exit code as Python

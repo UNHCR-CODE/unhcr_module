@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # every 5 mins
-# cd ~/code/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/docker_chk.sh" > /dev/null || (sudo /bin/bash ./scripts/docker_chk.sh | sudo tee -a /datadrive/logs/docker_chk.log 2>&1 && echo $(( $(sudo cat /datadrive/logs/run_count_docker_chk.sh.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_docker_chk.sh.log)
+# */5 * * * * cd /home/unhcr_admin/code/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/docker_chk.sh" > /dev/null || (sudo /bin/bash ./scripts/docker_chk.sh | sudo tee -a /datadrive/logs/docker_chk.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_docker_chk.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_docker_chk.log')
 
 
 # Define the working directory containing docker-compose.yml

@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# 0 6,18 * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash ./scripts/rotate_logs.sh" > /dev/null || (/bin/bash ./scripts/rotate_logs.sh | tee -a ~/code/logs/rotate_logs.log 2>&1 && echo $(( $(cat ~/code/logs/run_count_rotate_logs.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_rotate_logs.log)
+# Optional: uncomment to enable
+# 0 6,18 * * * cd /datadrive/unhcr_module && pgrep -fx "/bin/bash ./scripts/rotate_logs.sh" > /dev/null || (/bin/bash ./scripts/rotate_logs.sh | tee -a /datadrive/logs/rotate_logs.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_rotate_logs.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_rotate_logs.log')
 
 # Logrotate script to rotate logs and move them to a different drive
 # This script is intended to be run as a cron job
