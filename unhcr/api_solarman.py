@@ -259,7 +259,7 @@ def db_get_sm_weather_max_epoch(db_eng, device_sn):
 
 
 
-def db_get_devices_site_sn_id(eng, dev_type='%', site_key='%'):
+def db_get_devices_site_sn_id(db_eng, dev_type='%', site_key='%'):
     sql = """
         WITH site_devices AS (
             SELECT s."name", dsh.station_id, dsh.device_sn, dsh.device_id, d.device_type 
@@ -276,7 +276,7 @@ def db_get_devices_site_sn_id(eng, dev_type='%', site_key='%'):
         "dev_type": dev_type,
         "site_key": site_key
     }
-    df, err = db.sql_execute(sql, eng, data=params)
+    df, err = db.sql_execute(sql, db_eng, data=params)
     if err:
         logger.error(f"db_get_devices_site_sn_id ERROR: {err}")
         return None, err
@@ -318,8 +318,8 @@ def round_to_nearest_5_minutes(dt):
     return dt.replace(minute=rounded_minutes, second=0, microsecond=0)
 
 
-def db_all_site_ids(eng):
-    with Session(eng) as session:
+def db_all_site_ids(db_eng):
+    with Session(db_eng) as session:
         # Construct the SELECT statement
         stmt = select(models.Station.id)
 
@@ -329,8 +329,8 @@ def db_all_site_ids(eng):
         return results
 
 
-def db_get_inverter_sns(eng):
-    with Session(eng) as session:
+def db_get_inverter_sns(db_eng):
+    with Session(db_eng) as session:
         # Construct the SELECT statement
         stmt = select(models.Device.device_sn).where(
             models.Device.device_type == "INVERTER"
@@ -342,13 +342,13 @@ def db_get_inverter_sns(eng):
         return results
 
 
-def db_insert_devices(eng, records=None):
+def db_insert_devices(db_eng, records=None):
     """
     Inserts records into the devices table in the database.
 
     Parameters
     ----------
-    eng : Engine
+    db_eng : Engine
         The SQLAlchemy engine to use for the database connection.
     records : list of dict
         The list of records to insert into the table.
@@ -358,7 +358,7 @@ def db_insert_devices(eng, records=None):
     None
     """
 
-    with Session(eng) as session:
+    with Session(db_eng) as session:
         # Process each item
         for item in records:
             record = models.Device(
@@ -379,7 +379,7 @@ def db_insert_devices(eng, records=None):
     print("Data inserted successfully!")
 
 
-def api_get_devices(site_id, eng=None):
+def api_get_devices(site_id, db_eng=None):
     url = BASE_URL + "/station/v1.0/device?language=en"
 
     payload = json.dumps(
@@ -402,9 +402,9 @@ def api_get_devices(site_id, eng=None):
     data = convert_keys_to_snake_case(data)
     data = [{**item, "site_id": site_id} for item in data]
     err = None
-    if eng:
-        ######res, err = err_handler.error_wrapper(lambda: insert_station_data_daily(eng, data))
-        db_insert_devices(eng, data)
+    if db_eng:
+        ######res, err = err_handler.error_wrapper(lambda: insert_station_data_daily(db_eng, data))
+        db_insert_devices(db_eng, data)
     pass
     if err:
         return None, err
@@ -574,7 +574,7 @@ def db_update_weather(df, epoch, engine):
 
 
 def get_station_daily_data(
-    id, start_date="2025-03-01", end_date="2025-03-31", type=2, eng=None
+    id, start_date="2025-03-01", end_date="2025-03-31", type=2, db_eng=None
 ):
     url = HISTORICAL_URL.replace("/device/", "/station/").replace(
         "/historical", "/history"
@@ -602,22 +602,22 @@ def get_station_daily_data(
     data = res["stationDataItems"]
     data = [{**item, "site": id} for item in data]
     err = None
-    if eng:
-        ######res, err = err_handler.error_wrapper(lambda: insert_station_data_daily(eng, data))
-        insert_station_data_daily(eng, data)
+    if db_eng:
+        ######res, err = err_handler.error_wrapper(lambda: insert_station_data_daily(db_eng, data))
+        insert_station_data_daily(db_eng, data)
     pass
     if err:
         return None, err
     return data, None
 
 
-def insert_station_data_daily(eng, records=None):
+def insert_station_data_daily(db_eng, records=None):
     """
     Inserts records into the station_data_daily table in the database.
 
     Parameters
     ----------
-    eng : Engine
+    db_eng : Engine
         The SQLAlchemy engine to use for the database connection.
     records : list of dict
         The list of records to insert into the table.
@@ -627,7 +627,7 @@ def insert_station_data_daily(eng, records=None):
     None
     """
 
-    Session = sessionmaker(bind=eng)
+    Session = sessionmaker(bind=db_eng)
     session = Session()
 
     # Process each item
@@ -679,9 +679,9 @@ def insert_station_data_daily(eng, records=None):
     print("Data inserted successfully!")
 
 
-def insert_inverter_data(eng=None, json_data={}):
-    if eng is None:
-        eng = db.set_local_defaultdb_engine()
+def insert_inverter_data(db_eng=None, json_data={}):
+    if db_eng is None:
+        db_eng = db.set_local_defaultdb_engine()
 
     # Define the expected keys
     EXPECTED_KEYS = {
@@ -854,7 +854,7 @@ def insert_inverter_data(eng=None, json_data={}):
                 data.system_time = ("20" + data.system_time)[:16]
         inverter_instances.append(data)
 
-    Session = sessionmaker(bind=eng)
+    Session = sessionmaker(bind=db_eng)
     session = Session()
     # Merge all instances in the batch at once
     for inverter_instance in inverter_instances:
@@ -865,7 +865,7 @@ def insert_inverter_data(eng=None, json_data={}):
 
 
 def get_inverter_data(
-    sn=2309200154, start_date=datetime.today().date(), type=1, eng=None
+    sn=2309200154, start_date=datetime.today().date(), type=1, db_eng=None
 ):
     """
     Retrieves inverter data for a given device serial number and date range.
@@ -874,7 +874,7 @@ def get_inverter_data(
         sn (int, optional): Device serial number. Defaults to 2309200154.
         start_date (datetime.date, optional): Start date of the date range. Defaults to today.
         type (int, optional): Time type. Defaults to 1.
-        eng (sqlalchemy.engine.Engine, optional): Engine to use for inserting data into database.
+        db_eng (sqlalchemy.engine.Engine, optional): Engine to use for inserting data into database.
 
     Returns:
         tuple: Data and error message. If error, data is None and error message is not None.
@@ -904,8 +904,8 @@ def get_inverter_data(
         return None, "API call not successful"
     data = res["paramDataList"]
     err = None
-    if eng:
-        res, err = err_handler.error_wrapper(lambda: insert_inverter_data(eng, data))
+    if db_eng:
+        res, err = err_handler.error_wrapper(lambda: insert_inverter_data(db_eng, data))
     pass
     if err:
         return None, err
@@ -954,9 +954,9 @@ def transform_station_data(station):
     }
 
 
-def upsert_stations(stations_data, eng=None):
-    if eng is None:
-        eng = db.set_local_defaultdb_engine()
+def upsert_stations(stations_data, db_eng=None):
+    if db_eng is None:
+        db_eng = db.set_local_defaultdb_engine()
     transformed_data = [transform_station_data(st) for st in stations_data]
 
     stmt = insert(models.Station).values(transformed_data)
@@ -970,7 +970,7 @@ def upsert_stations(stations_data, eng=None):
     upsert_stmt = stmt.on_conflict_do_update(
         index_elements=["name"], set_=update_columns  # Unique constraint field
     )
-    # Session = sessionmaker(bind=eng)
-    session = Session(eng)
+    # Session = sessionmaker(bind=db_eng)
+    session = Session(db_eng)
     session.execute(upsert_stmt)
     session.commit()

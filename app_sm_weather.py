@@ -27,18 +27,18 @@ logger = res[0]
 if const.LOCAL:
     logger, app_utils, const, db, api_solarman, err_handler = res
 
-eng = db.set_local_defaultdb_engine()
+db_eng = db.set_local_defaultdb_engine()
 epochs = []
 
 
 
-df_weather_devices, err = api_solarman.db_get_devices_site_sn_id(eng, dev_type="WEATHER_STATION")
+df_weather_devices, err = api_solarman.db_get_devices_site_sn_id(db_eng, dev_type="WEATHER_STATION")
 if err:
     logger.error(f'sm_weather db_get_devices_site_sn_id ERROR: {err}')
     exit(1)
 devices = df_weather_devices["device_sn"].tolist()
 for deviceSn in devices:
-    epoch, err = api_solarman.db_get_sm_weather_max_epoch(eng, deviceSn)
+    epoch, err = api_solarman.db_get_sm_weather_max_epoch(db_eng, deviceSn)
     if err:
         logger.error(err)
         continue
@@ -59,7 +59,7 @@ while epoch < epoch_now:
     if err:
         logger.error(f"sm_weather db_update_weather (next day) ERROR: {err}")
     else:
-        res, err = api_solarman.db_update_weather(df_data, epoch, eng)
+        res, err = api_solarman.db_update_weather(df_data, epoch, db_eng)
     if err:
         logger.error(f"sm_weather db_update_weather (next day) ERROR: {err}")
 

@@ -52,7 +52,7 @@ def process_chunk_new(chunk, param1, param2, param3, param4):
         print(f"Processing chunk #{chunk_count} item #{current_item_count}")
         msg = f'{chunk_count}:{current_item_count} of {chunk_size}'
         result = gb_eyedro.upsert_gb_data(s_num=item, engine=param1, epoch_cutoff=param2, MAX_EMPTY=param3, msg=msg, logger=logger)  # Apply function to each item
-        #########result = add_constraints(eng=param1, serial=item)
+        #########result = add_constraints(db_eng=param1, serial=item)
         results.append(result)
 
     return results
@@ -92,7 +92,7 @@ else:
 
 sn_array = sorted(filtered_gb_sn_df.str.replace('-', '').tolist())
 
-#sn_array = ['B120045E']
+#!!!!sn_array = ['00980AA3']
 
 num_parts = 10
 chunks = [list(chunk) for chunk in np.array_split(sn_array, num_parts)]  # Ensure list format
@@ -101,18 +101,18 @@ days = 5
 dt_start = datetime.now(timezone.utc)
 cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 epoch_cutoff = app_utils.get_previous_midnight_epoch(int(cutoff.timestamp()))
-eng = db.set_local_defaultdb_engine()
+db_eng = db.set_local_defaultdb_engine()
 MAX_EMPTY = days
 
 
 with ThreadPoolExecutor(max_workers=num_parts) as executor:
     item_counter = itertools.count(0)
-    results = list(executor.map(partial(process_chunk_new, param1=eng, param2=epoch_cutoff, param3=MAX_EMPTY, param4=global_counter), chunks))
+    results = list(executor.map(partial(process_chunk_new, param1=db_eng, param2=epoch_cutoff, param3=MAX_EMPTY, param4=global_counter), chunks))
 
 # epoch_start = gb_eyedro.epoch_2024 + 86400
 # with ThreadPoolExecutor(max_workers=num_parts) as executor:
 #     item_counter = itertools.count(0)
-#     results = list(executor.map(partial(process_chunk_historical, param1=eng, param2=epoch_start, param3=MAX_EMPTY, param4=global_counter), chunks))
+#     results = list(executor.map(partial(process_chunk_historical, param1=db_eng, param2=epoch_start, param3=MAX_EMPTY, param4=global_counter), chunks))
 
 
 # Flatten results
