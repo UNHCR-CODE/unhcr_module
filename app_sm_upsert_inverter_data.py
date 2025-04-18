@@ -78,7 +78,7 @@ def process_chunk(chunk, date, engine):
 
 # **MAIN PROCESS LOOP**
 # start_dt = datetime.strptime('2025-03-22', "%Y-%m-%d").date() # set a specific date
-start_dt = datetime.today().date() + timedelta(days=1)
+start_dt = datetime.today().date() #!!!!!!+ timedelta(days=1)
 days = 3
 timing = time.time()
 while days > 0:

@@ -1,0 +1,510 @@
+{% extends 'admin/master.html' %}
+
+{% block head %}
+    {{ super() }}
+    <link rel="stylesheet" href="{{ url_for('static', filename='datatables.min.css') }}">
+    <style>
+        .filter-container {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+        .filter-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+        .filter-actions {
+            margin-top: 10px;
+        }
+        .column-select {
+            min-width: 200px;
+        }
+        .operator-select {
+            width: 80px;
+        }
+        .filter-value {
+            flex-grow: 1;
+        }
+    </style>
+{% endblock %}
+
+{% block tail %}
+    {{ super() }}
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="{{ url_for('static', filename='datatables.min.js') }}"></script>
+    <script>console.log('DataTables loaded !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')</script>
+{% endblock %}
+
+{% block body %}
+<!-- Page Content -->
+<div class="container-fluid">
+
+    <!-- Column Filter Form -->
+    <div class="card mt-4 mb-4 p-3 filter-container">
+        <h5>Column Filters</h5>
+        <div id="filter-container">
+            <div class="filter-row">
+                <select class="form-control column-select" id="column-select-0">
+                    <option value="">-- Select Column --</option>
+                    {% for column in column_list %}
+                        <option value="{{ column }}">{{ column_labels[column] }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" class="form-control filter-value" id="filter-value-0" placeholder="Enter filter value">
+            </div>
+        </div>
+        <div class="filter-actions">
+            <button type="button" class="btn btn-secondary" id="add-filter">Add Filter</button>
+            <button type="button" class="btn btn-primary" id="apply-filters">Apply Filters</button>
+            <button type="button" class="btn btn-outline-secondary" id="clear-filters">Clear Filters</button>
+        </div>
+    </div>
+
+    <!-- CSV Download Form -->
+    <div class="card mt-4 mb-4 p-3">
+        <form method="POST" action="{{ url_for('download') }}" style="width: 100%;">
+            <input type="hidden" name="schema" id="schema" value="">
+            <input type="hidden" name="table" id="table" value="">
+
+            {% if date_columns %}
+                <div class="d-flex flex-wrap align-items-end gap-2">
+                    <div class="form-group mb-0">
+                        <label for="date_column">Date column</label>
+                        <select name="date_column" id="date_column" class="form-control">
+                            {% for col in date_columns %}
+                                <option value="{{ col }}">{{ col }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label for="start_date">Start date</label>
+                        <input type="date" name="start_date" id="start_date" class="form-control" required>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label for="end_date">End date</label>
+                        <input type="date" name="end_date" id="end_date" class="form-control" required>
+                    </div>
+                    <div class="form-group mb-0">
+                        <button type="submit" class="btn btn-primary mt-4">Download CSV</button>
+                    </div>
+                </div>
+            {% else %}
+                <p><em>No date or datetime columns found in this table.</em></p>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Header and Pagination Controls -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div><strong>Total Rows:</strong> {{ count }}</div>
+        <div class="d-flex flex-wrap align-items-center" style="gap: 1rem;">
+            <label for="jump-amount" class="mb-0">Jump by pages:</label>
+            <input type="number" id="jump-amount" class="form-control" style="width: 100px;" placeholder="number" />
+            <button class="btn btn-primary" onclick="handleJump(this)">Jump</button>
+    
+            {% if pagination.has_prev %}
+                <button class="btn btn-outline-primary" onclick="handleJump(this)">Prev</button>
+            {% else %}
+                <button class="btn btn-outline-primary" onclick="handleJump(this)" disabled>Prev</button>
+            {% endif %}
+    
+            {% if pagination.has_next %}
+                <button class="btn btn-outline-primary" onclick="handleJump(this)">Next</button>
+            {% else %}
+                <button class="btn btn-outline-primary" onclick="handleJump(this)" disabled>Next</button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not pagination.is_large_dataset %}
+        <div class="pagination mb-3">
+            {% if pagination.has_prev %}
+            <button class="btn btn-outline-primary" onclick="handleJump(this)">First</button>
+            {% endif %}
+
+            {% if pagination.start_page > 1 %}
+                <span class="btn btn-light disabled">...</span>
+            {% endif %}
+
+            {% for p in pagination.page_range %}
+                {% if p == pagination.page %}
+                    <span class="btn btn-primary active">{{ p }}</span>
+                {% else %}
+                    <button class="btn btn-light" onclick="handleJump(this)">{{ p }}</button>
+                {% endif %}
+            {% endfor %}
+
+            {% if pagination.end_page < pagination.total_pages %}
+                <span class="btn btn-light disabled">...</span>
+            {% endif %}
+
+            {% if pagination.has_next %}
+                <button class="btn btn-outline-primary" onclick="handleJump(this)">Last</button>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <!-- Data Table -->
+    <table id="data-table" class="table table-striped">
+        <thead>
+            <tr>
+                {% for column in column_list %}
+                    <th>{{ column_labels[column] }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tfoot>
+            <tr>
+                {% for column in column_list %}
+                    <th></th>
+                {% endfor %}
+            </tr>
+        </tfoot>
+        <tbody>
+            {% for row in data %}
+                <tr>
+                    {% for col_name in admin_view.column_list %}
+                        <td>{{ row | attr(col_name) }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <div class="alert alert-info">
+                <ul>
+                    {% for message in messages %}
+                        <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+    {% endwith %}
+
+</div>
+
+
+<script>
+    function getQueryParam(param) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return parseInt(urlParams.get(param)) || 1;
+    }
+
+    function handleJump(el) {
+        const currentPage = parseInt(getQueryParam('page'),10);
+        // Get the text of the button
+        const label = el.textContent.trim();
+
+        // If you use data attributes, grab them like this:
+        // const action = element.dataset.action;
+
+        console.log("Clicked:", label);
+        let jumpValue = null
+        const totalPages = {{ pagination.total_pages }};
+        // Do something based on the button
+        if (!isNaN(label)) {
+            pg = parseInt(label)
+            jumpValue = pg - currentPage
+        } else if (label === "Prev") {
+            jumpValue = -1
+        } else if (label === "Next") {
+            jumpValue = 1
+        } else if (label === "Jump") {
+            jumpValue = parseInt(document.getElementById("jump-amount").value, 10);
+            console.log("Jump by:", jumpValue);
+            if (isNaN(jumpValue) || jumpValue === 0) {
+                alert("Please enter a valid number");
+                document.getElementById('jump-amount').value = 0;
+                return;
+            }
+            localStorage.setItem('lastJumpValue', jumpValue);
+        } else if (label == 'First'){
+            jumpValue = currentPage * -1
+        } else if (label == 'Last'){
+            jumpValue = totalPages - currentPage + 1
+        }
+        
+        let newPage = Math.max(1, Math.min(currentPage + jumpValue, totalPages));
+        
+        // Include any active filters in the URL
+        const baseUrl = "{{ url_for('.index_view') }}";
+        const filterParams = getActiveFilters();
+        const filterQueryString = Object.entries(filterParams)
+            .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+            .join('&');
+            
+        const pageParam = `page=${newPage}`;
+        const url = baseUrl + '?' + pageParam + (filterQueryString ? '&' + filterQueryString : '');
+        
+        window.location.href = url;
+    }
+
+
+// Function to get active filters
+function getActiveFilters() {
+    const filters = {};
+    const filterRows = $('.filter-row');
+    
+    filterRows.each((index, row) => {
+        const $row = $(row);
+        const column = $row.find('.column-select').val();
+        const value = $row.find('.filter-value').val();
+        const operator = index > 0 ? $row.find('.operator-select').val() : null;
+        
+        if (column && value) {
+            filters[`filter_column_${index}`] = column;
+            filters[`filter_value_${index}`] = value;
+            if (operator) {
+                filters[`filter_operator_${index}`] = operator;
+            }
+        }
+    });
+    
+    return filters;
+}
+
+// Apply the filters
+function applyFilters() {
+    const filters = getActiveFilters();
+    console.log("Applying filters:", filters);
+    
+    // Build the URL with filter parameters
+    const baseUrl = "{{ url_for('.index_view') }}";
+    const queryParams = new URLSearchParams();
+    queryParams.set('page', 1); // Reset to first page when applying filters
+    
+    // Add each filter parameter
+    Object.entries(filters).forEach(([key, value]) => {
+        queryParams.set(key, value);
+        console.log(`Setting param: ${key} = ${value}`);
+    });
+    
+    const url = `${baseUrl}?${queryParams.toString()}`;
+    console.log("Navigating to:", url);
+    
+    // Navigate to filtered URL
+    window.location.href = url;
+}
+
+
+    // Handle adding a new filter row
+    function addFilterRow() {
+        const filterCount = $('.filter-row').length;
+        const newRowHtml = `
+            <div class="filter-row">
+                <select class="form-control operator-select" id="operator-select-${filterCount}">
+                    <option value="AND">AND</option>
+                    <option value="OR">OR</option>
+                </select>
+                <select class="form-control column-select" id="column-select-${filterCount}">
+                    <option value="">-- Select Column --</option>
+                    {% for column in column_list %}
+                        <option value="{{ column }}">{{ column_labels[column] }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" class="form-control filter-value" id="filter-value-${filterCount}" placeholder="Enter filter value">
+                <button type="button" class="btn btn-sm btn-outline-danger remove-filter">X</button>
+            </div>
+        `;
+        $('#filter-container').append(newRowHtml);
+    }
+
+    // Apply the filters
+    function applyFilters() {
+        const filters = getActiveFilters();
+        
+        // Build the URL with filter parameters
+        const baseUrl = "{{ url_for('.index_view') }}";
+        const queryParams = new URLSearchParams();
+        queryParams.set('page', 1); // Reset to first page when applying filters
+        
+        // Add each filter parameter
+        Object.entries(filters).forEach(([key, value]) => {
+            queryParams.set(key, value);
+        });
+        
+        // Navigate to filtered URL
+        window.location.href = `${baseUrl}?${queryParams.toString()}`;
+    }
+
+    // Clear all filters
+    function clearFilters() {
+        // Navigate to the base URL without filters
+        window.location.href = "{{ url_for('.index_view') }}";
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const lastJump = localStorage.getItem("lastJumpValue");
+        if (lastJump !== "null") {
+            document.getElementById("jump-amount").value = lastJump;
+        }
+
+        const schema = "{{ session.schema or '' }}";
+        const table = "{{ session.table or '' }}";
+        document.getElementById('schema').value = schema;
+        document.getElementById('table').value = table;
+
+        const dynamicText = schema && table ? `${schema}.${table}` : 'Dynamic Table';
+        const dynamicLink = document.querySelector('a.nav-link[href="/admin/dynamictable/"]');
+        if (dynamicLink) {
+            dynamicLink.textContent = dynamicText;
+        }
+
+        const lastStart = localStorage.getItem("startDateValue");
+        if (lastStart) document.getElementById("start_date").value = lastStart;
+
+        const lastEnd = localStorage.getItem("endDateValue");
+        if (lastEnd) document.getElementById("end_date").value = lastEnd;
+
+        document.getElementById('start_date').addEventListener('change', function () {
+            const val = this.value;
+            if (val) {
+                localStorage.setItem('startDateValue', val);
+                if (!document.getElementById('end_date').value) {
+                    document.getElementById('end_date').value = val;
+                    localStorage.setItem('endDateValue', val);
+                }
+            }
+        });
+
+        document.getElementById('end_date').addEventListener('change', function () {
+            const val = this.value;
+            if (val) {
+                localStorage.setItem('endDateValue', val);
+                if (!document.getElementById('start_date').value) {
+                    document.getElementById('start_date').value = val;
+                    localStorage.setItem('startDateValue', val);
+                }
+            }
+        });
+
+        // Initialize event handlers for filters
+        $('#add-filter').on('click', addFilterRow);
+        $('#apply-filters').on('click', applyFilters);
+        $('#clear-filters').on('click', clearFilters);
+        
+        // Event delegation for remove filter buttons
+        $('#filter-container').on('click', '.remove-filter', function() {
+            $(this).closest('.filter-row').remove();
+        });
+        
+        // Initialize DataTables with server-side processing for column filters
+        $('#data-table').DataTable({
+            initComplete: function () {
+                this.api().columns().every(function () {
+                    const column = this;
+                    const select = $('<select multiple style="width: 100%; margin-top: 5px;"><option value=""></option></select>')
+                        .appendTo($(column.footer()).empty())
+                        .on('change', function () {
+                            const vals = $(this).val() || [];
+                            if (vals.length === 0) {
+                                column.search('', true, false).draw();
+                            } else {
+                                const regex = vals.map(val => `^${val}$`).join('|');
+                                column.search(regex, true, false).draw();
+                            }
+                        });
+                    column.data().unique().sort().each(function (d) {
+                        if (d != null && d !== '') {
+                            select.append(`<option value="${d}">${d}</option>`);
+                        }
+                    });
+                });
+            }
+        });
+
+        restoreFiltersFromUrl();
+
+        document.querySelectorAll('div.dt-length').forEach(el => el.remove());
+        document.querySelectorAll('div.dt-search').forEach(el => el.remove());
+        let rows = document.querySelectorAll('div.dt-layout-row');
+        if (rows.length > 0) {
+        rows[rows.length - 1].remove();
+        }
+        document.querySelectorAll('tfoot').forEach(el => el.remove());
+
+    });
+
+// Function to restore filters from URL parameters
+function restoreFiltersFromUrl() {
+    const queryParams = new URLSearchParams(window.location.search);
+    let hasFilters = false;
+    
+    // Check if there are any filter parameters
+    for (const [key, value] of queryParams.entries()) {
+        if (key.startsWith('filter_')) {
+            hasFilters = true;
+            break;
+        }
+    }
+    
+    if (hasFilters) {
+        // Clear default first filter row
+        $('#filter-container').empty();
+        
+        // Count how many filter rows we need
+        let filterCount = 0;
+        while (queryParams.has(`filter_column_${filterCount}`)) {
+            filterCount++;
+        }
+        
+        // Create each filter row and set values
+        for (let i = 0; i < filterCount; i++) {
+            const column = queryParams.get(`filter_column_${i}`);
+            const value = queryParams.get(`filter_value_${i}`);
+            const operator = queryParams.get(`filter_operator_${i}`);
+            
+            if (column && value) {
+                // Add first row (without operator)
+                if (i === 0) {
+                    const firstRowHtml = `
+                        <div class="filter-row">
+                            <select class="form-control column-select" id="column-select-0">
+                                <option value="">-- Select Column --</option>
+                                {% for column in column_list %}
+                                    <option value="{{ column }}" ${column === '{{ column }}' ? 'selected' : ''}>{{ column_labels[column] }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="text" class="form-control filter-value" id="filter-value-0" placeholder="Enter filter value" value="${value}">
+                        </div>
+                    `;
+                    $('#filter-container').append(firstRowHtml);
+                    $(`#column-select-0`).val(column);
+                } else {
+                    // Add subsequent rows with operator
+                    const rowHtml = `
+                        <div class="filter-row">
+                            <select class="form-control operator-select" id="operator-select-${i}">
+                                <option value="AND" ${operator === 'AND' ? 'selected' : ''}>AND</option>
+                                <option value="OR" ${operator === 'OR' ? 'selected' : ''}>OR</option>
+                            </select>
+                            <select class="form-control column-select" id="column-select-${i}">
+                                <option value="">-- Select Column --</option>
+                                {% for column in column_list %}
+                                    <option value="{{ column }}">{{ column_labels[column] }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="text" class="form-control filter-value" id="filter-value-${i}" placeholder="Enter filter value" value="${value}">
+                            <button type="button" class="btn btn-sm btn-outline-danger remove-filter">X</button>
+                        </div>
+                    `;
+                    $('#filter-container').append(rowHtml);
+                    $(`#column-select-${i}`).val(column);
+                    $(`#operator-select-${i}`).val(operator);
+                }
+            }
+        }
+    }
+}
+
+
+</script>
+
+{% endblock %}
