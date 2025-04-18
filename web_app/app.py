@@ -1,6 +1,7 @@
 import csv
 from datetime import datetime
 import io
+import time
 from types import SimpleNamespace
 from flask import (
     Flask,
@@ -9,7 +10,7 @@ from flask import (
     request,
     redirect,
     flash,
-    send_file,
+    Response,
     session as flask_session,
 )
 from flask_babel import Babel
@@ -17,7 +18,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin, AdminIndexView
 from flask_admin.contrib.sqla import ModelView
 from flask_admin.base import expose
-from requests import Response
 from sqlalchemy import (
     DateTime,
     create_engine,
@@ -31,7 +31,8 @@ from sqlalchemy import (
     String,
     Boolean,
     Date,
-    and_, or_
+    and_, or_,
+    text
 )
 from wtforms import StringField, IntegerField, BooleanField, DateField, SelectField
 from wtforms.validators import DataRequired
@@ -298,10 +299,94 @@ class DynamicTableView(ModelView):
                 else:
                     print(f"DEBUG: Invalid filter column: {column_name}")
         
+        
+        combined_filter = None
+        if has_request_context():
+            for i in range(10):  # Limit to reasonable number of filters
+                column_name = request.args.get(f'filter_column_{i}')
+                filter_value = request.args.get(f'filter_value_{i}')
+                logical_operator = request.args.get(f'filter_operator_{i}', 'AND').upper()
+                comparison_operator = request.args.get(f'filter_op_{i}', '=').lower()
+
+                if not column_name:
+                    continue
+
+                if hasattr(model, column_name):
+                    column = getattr(model, column_name)
+
+                    try:
+                        python_type = getattr(column.type, 'python_type', str)
+
+                        # Handle special operators first
+                        if comparison_operator in ['is null', 'isnone']:
+                            condition = column.is_(None)
+                        elif comparison_operator in ['is not null', 'isnotnone']:
+                            condition = column.isnot(None)
+                        elif comparison_operator in ['in', 'not in']:
+                            if not filter_value:
+                                continue
+                            values = [v.strip() for v in filter_value.split(',')]
+                            # Try to cast if numeric type
+                            if issubclass(python_type, (int, float)):
+                                try:
+                                    values = [python_type(v) for v in values]
+                                except ValueError:
+                                    continue
+                            condition = column.in_(values) if comparison_operator == 'in' else ~column.in_(values)
+                        else:
+                            # For standard comparison operators
+                            if filter_value is None:
+                                continue
+                            if issubclass(python_type, (int, float)):
+                                try:
+                                    filter_value = python_type(filter_value)
+                                except ValueError:
+                                    continue
+                            elif issubclass(python_type, str):
+                                filter_value = str(filter_value)
+
+                            if comparison_operator == '=':
+                                condition = column == filter_value
+                            elif comparison_operator == '!=':
+                                condition = column != filter_value
+                            elif comparison_operator == '>':
+                                condition = column > filter_value
+                            elif comparison_operator == '<':
+                                condition = column < filter_value
+                            elif comparison_operator == '>=':
+                                condition = column >= filter_value
+                            elif comparison_operator == '<=':
+                                condition = column <= filter_value
+                            elif comparison_operator == 'ilike' and issubclass(python_type, str):
+                                condition = column.ilike(f'%{filter_value}%')
+                            else:
+                                print(f"DEBUG: Unsupported operator '{comparison_operator}' for column '{column_name}'")
+                                continue
+
+                        # Combine filters
+                        if combined_filter is None:
+                            combined_filter = condition
+                        elif logical_operator == 'AND':
+                            combined_filter = and_(combined_filter, condition)
+                        elif logical_operator == 'OR':
+                            combined_filter = or_(combined_filter, condition)
+
+                        print(f"DEBUG: Added filter: {column_name} {comparison_operator.upper()} {filter_value} with {logical_operator}")
+                    except Exception as e:
+                        print(f"DEBUG: Error applying filter on {column_name}: {str(e)}")
+                else:
+                    print(f"DEBUG: Invalid filter column: {column_name}")
+        
+        
+        
         # Apply the combined filter if any
         if combined_filter is not None:
             query = query.filter(combined_filter)
-            self.count_query = query.statement.with_only_columns([func.count()]).order_by(None)
+            #! sqlalchemy < v2
+            #self.count_query = query.statement.with_only_columns([func.count()]).order_by(None)
+            #! sqlalchemy >= v2
+            self.count_query = query.statement.with_only_columns(func.count()).order_by(None)
+
             # Get the count with filters applied
             count = self.session.scalar(self.count_query)
         
@@ -602,23 +687,92 @@ def dynamictable_view():
     return redirect("/admin/dynamictable")
 
 
+_query_cache = {}
+CACHE_TTL_SECONDS = 60 * 30  # 30 minutes
+
+def get_tables_with_counts(schema_name):
+    now = time.time()
+
+    # Check cache
+    cache_entry = _query_cache.get(schema_name)
+    if cache_entry:
+        cached_time, cached_data = cache_entry
+        if now - cached_time < CACHE_TTL_SECONDS:
+            return cached_data
+
+    query = text("""
+        SELECT
+            h.hypertable_name AS table_name,
+            SUM(c.reltuples)::BIGINT AS estimated_rows,
+            pg_size_pretty(SUM(pg_total_relation_size(quote_ident(h.chunk_schema) || '.' || quote_ident(h.chunk_name)))) AS total_size
+        FROM
+            timescaledb_information.chunks h
+            JOIN pg_class c ON c.relname = h.chunk_name
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE
+            h.hypertable_schema = :schema
+        GROUP BY h.hypertable_name
+        ORDER BY estimated_rows DESC;
+    """)
+
+    result = db.session.execute(query, {"schema": schema_name})
+    res = [(row.table_name, row.estimated_rows, row.total_size) for row in result]
+
+    query = text("""
+        SELECT
+        c.relname AS table_name,
+        c.reltuples::BIGINT AS estimated_rows,
+        pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size
+        FROM
+        pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE
+        n.nspname = :schema
+        AND c.relkind = 'r'  -- 'r' = regular table
+        ORDER BY
+        pg_total_relation_size(c.oid) DESC;
+    """)
+
+    # Build a quick lookup: table_name -> (estimated_rows, total_size)
+    res_dict = {item[0]: (item[1], item[2]) for item in res}
+
+    result = db.session.execute(query, {"schema": schema_name})
+
+    for row in result:
+        existing = res_dict.get(row.table_name)
+
+        # If not exists OR new row has more estimated rows, update
+        if not existing or row.estimated_rows > existing[0]:
+            res_dict[row.table_name] = (row.estimated_rows, row.total_size)
+
+    # Convert back to list of tuples if needed
+    res = [(table, est_rows, size) for table, (est_rows, size) in res_dict.items()]
+    _query_cache[schema_name] = (now, res)
+    return res
+
 @app.route("/", methods=["GET", "POST"])
 def index():
+    #flask_session.pop("schema", None)
+    #flask_session.pop("table", None)
     schemas = sorted([s for s in inspector.get_schema_names() if s in ALLOWED_SCHEMAS])
-    default_schema = "public"
-    selected_schema = request.form.get("schema", default_schema)
-    selected_table = request.form.get("table")
+    default_schema = "solarman"
+    selected_schema = request.form.get("schema")
+    selected_table = request.form.get("tabledb")
     prev_schema = request.form.get("prev_schema")
+    if selected_schema is None and 'schema' in flask_session:
+        selected_schema = flask_session['schema']
+    if selected_table is None and 'table' in flask_session:
+        selected_table = flask_session['table']
+    if selected_schema is None:
+        selected_schema = default_schema
 
     tables = []
 
-    if prev_schema and prev_schema != selected_schema:
-        selected_table = None
-
-    if selected_schema and selected_schema != "-- choose schema --":
-        tables = sorted(inspector.get_table_names(schema=selected_schema))
-
     if request.method == "POST":
+        if prev_schema != selected_schema:
+            selected_table = None
+            tables = sorted(get_tables_with_counts(selected_schema))
+
         if (
             selected_schema
             and selected_table
@@ -629,20 +783,23 @@ def index():
             flask_session["table"] = selected_table
             return redirect("/admin/dynamictable/")
 
+    if selected_schema and selected_schema != "-- choose schema --":
+            tables = sorted(get_tables_with_counts(selected_schema))
+
     return render_template(
         "index.html",
         schemas=schemas,
         tables=tables,
-        selected_schema=selected_schema,
-        selected_table=selected_table,
+        selected_schema= selected_schema,
+        selected_table= selected_table,
         logs=[],
     )
 
 
 @app.route("/admin")
 def go_admin():
-    flask_session.pop("schema", None)
-    flask_session.pop("table", None)
+    #flask_session.pop("schema", None)
+    #flask_session.pop("table", None)
     return redirect("/")
 
 @app.route("/admin/dynamictable", methods=["GET"])
@@ -701,23 +858,6 @@ def index_view():
         date_columns=date_columns,
         filter_params=filter_params
     )
-    
-
-# def index_view():
-#     page = request.args.get('page', 1, type=int)  # Get the page number from the query parameters
-
-#     # Create an instance of your DynamicTableView
-#     table_view = DynamicTableView(session=db.session)  # Use your actual session or other constructor args here
-    
-#     # Call get_list to get count and rows
-#     count, rows = table_view.get_list(page=page, sort_column=None, sort_desc=None, search=None, filters=None)
-
-#     # Generate pagination data
-#     pagination_data = table_view.get_pagination_data(page, count, table_view.page_size)
-    
-#     # Pass the data to the template
-#     return render_template('admin/custom_list.html', data=rows, count=count, pagination=pagination_data)
-
 
 @app.route("/download", methods=["POST"])
 def download():
@@ -750,7 +890,7 @@ def download():
                 SELECT * FROM "{fd.schema}"."{fd.table}"
                 WHERE "{fd.date_column}"::date BETWEEN '{start}' AND '{end}'
             """
-            result = db.session.execute(query)
+            result = db.session.execute(text(query))
 
             # Streaming generator
             def generate_csv():
@@ -759,12 +899,21 @@ def download():
                     yield ",".join(str(item) if item is not None else "" for item in row) + "\n"
 
             # Return a streaming response
-            filename = f"{fd.schema}_{fd.table}_{fd.start}_to_{fd.end}.csv"
-            return Response(
-                generate_csv(),
-                mimetype="text/csv",
-                headers={"Content-Disposition": f"attachment; filename={filename}"}
+            filename = f"{fd.schema}_{fd.table}_{fd.start_date}_to_{fd.end_date}.csv"
+            response = Response(
+                response=generate_csv(),
+                headers={
+                    "Content-Type": "text/csv",
+                    "Content-Disposition": f"attachment; filename={filename}"
+                }
             )
+            return response
+
+        else:
+            flash(f"Error during download: Missing date range, or column", "error")
+            return redirect(request.referrer or "/")
+
+
     except Exception as e:
         flash(f"Error during download: {str(e)}", "error")
         return redirect(request.referrer or "/")

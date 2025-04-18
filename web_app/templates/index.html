@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <title>Select Schema and Table</title>
   <style>
+    .error-border {
+      border: 2px solid #e74c3c !important;
+      background-color: #fef0f0;
+    }
     body {
       font-family: 'Segoe UI', sans-serif;
       background-color: #f9f9f9;
@@ -81,6 +85,42 @@
     .flash-messages li {
       margin-bottom: 0.5rem;
     }
+
+    .table-info {
+      font-size: 0.9rem;
+      color: #555;
+    }
+
+  .splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 2rem;
+    z-index: 9999;
+  }
+
+  .spinner {
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin-left: 10px;
+  }
+
+  /* Spinner animation */
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
   </style>
 </head>
 <body>
@@ -98,27 +138,34 @@
   </div>
   {% endif %}
 
-  <form method="POST">
+  <form method="POST" onsubmit="return validateFormAndSave()">
     <input type="hidden" name="prev_schema" value="{{ selected_schema }}">
-
+  
     <label for="schema">Select Schema:</label>
-    <select name="schema" id="schema" onchange="this.form.submit()" autofocus>
+    <select name="schema" id="schema" onchange="saveSchema(); this.form.submit();" autofocus>
       <option value="">-- choose schema --</option>
       {% for schema in schemas %}
-        <option value="{{ schema }}" {% if schema == selected_schema %}selected{% endif %}>{{ schema }}</option>
+        <option value="{{ schema }}">{{ schema }}</option>
       {% endfor %}
     </select>
-
+  
     <label for="table">Select Table:</label>
-    <select name="table" id="table">
+    <select name="tabledb" id="tabledb" onchange="saveTable(); removeErrorHighlight(this);">
       <option value="">-- choose table --</option>
-      {% for table in tables %}
-        <option value="{{ table }}" {% if table == selected_table %}selected{% endif %}>{{ table }}</option>
+      {% for table, row_count, size in tables %}
+        <option value="{{ table }}">
+          {{ table }} 
+          (Rows: {{ row_count }} | Size: {{ size }})
+        </option>
       {% endfor %}
     </select>
-
+  
     <button type="submit">Open</button>
   </form>
+
+<div class="splash-screen" id="splash-screen" style="display: flex;">
+  Processing... <div class="spinner"></div>
+</div>
 
   {% with messages = get_flashed_messages() %}
   {% if messages %}
@@ -130,5 +177,59 @@
   {% endif %}
   {% endwith %}
 
+<script>
+  // Restore selections on page load
+  window.addEventListener("DOMContentLoaded", function () {
+    document.getElementById('splash-screen').style.display = 'none';
+    const schema = localStorage.getItem("selected_schema");
+    const table = localStorage.getItem("selected_table");
+
+    if (schema) document.getElementById("schema").value = schema;
+    if (table) document.getElementById("tabledb").value = table;
+  });
+
+  function saveSchema() {
+    const schema = document.getElementById('schema').value;
+    localStorage.setItem('selected_schema', schema);
+    document.getElementById('splash-screen').style.display = 'flex';
+  }
+
+  function saveTable() {
+    const table = document.getElementById('tabledb').value;
+    localStorage.setItem('selected_table', table);
+  }
+
+  function removeErrorHighlight(el) {
+    el.classList.remove('error-border');
+  }
+
+  function validateFormAndSave() {
+    const schemaEl = document.getElementById('schema');
+    const tableEl = document.getElementById('tabledb');
+    let isValid = true;
+
+    if (!schemaEl.value) {
+      schemaEl.classList.add('error-border');
+      isValid = false;
+    } else
+      saveSchema();
+
+    if (!tableEl.value) {
+      tableEl.classList.add('error-border');
+      isValid = false;
+    } else
+      saveTable();
+
+    if (!isValid) {
+      return false;
+    }
+
+    return true;
+  }
+
+  window.addEventListener("pagehide", function () {
+    document.getElementById('splash-screen').style.display = 'flex';
+  });
+</script>
 </body>
 </html>

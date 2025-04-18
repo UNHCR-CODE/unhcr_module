@@ -46,25 +46,131 @@
     <!-- Column Filter Form -->
     <div class="card mt-4 mb-4 p-3 filter-container">
         <h5>Column Filters</h5>
+      
         <div id="filter-container">
-            <div class="filter-row">
-                <select class="form-control column-select" id="column-select-0">
+          <!-- Initial filter row -->
+          <div class="filter-row row g-2 align-items-center mb-2" id="filter-row-0">
+            <div class="col">
+              <select class="form-control column-select" name="filter_column_0">
+                <option value="">-- Select Column --</option>
+                {% for column in column_list %}
+                  <option value="{{ column }}">{{ column_labels[column] }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col">
+              <select class="form-control operator-select" name="filter_op_0">
+                <option value="=">=</option>
+                <option value="!=">!=</option>
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+                <option value=">=">&gt;=</option>
+                <option value="<=">&lt;=</option>
+                <option value="ilike">contains</option>
+                <option value="in">in</option>
+                <option value="not in">not in</option>
+                <option value="is null">is null</option>
+                <option value="is not null">is not null</option>
+              </select>
+            </div>
+            <div class="col">
+              <input type="text" class="form-control filter-value" name="filter_value_0" placeholder="Enter filter value">
+            </div>
+          </div>
+        </div>
+      
+        <!-- Filter actions -->
+        <div class="filter-actions mt-3">
+          <button type="button" class="btn btn-secondary" id="add-filter">Add Filter</button>
+          <button type="button" class="btn btn-primary" id="apply-filters">Apply Filters</button>
+          <button type="button" class="btn btn-outline-secondary" id="clear-filters">Clear Filters</button>
+        </div>
+      </div>
+      
+      <!-- Hidden filter row template for JS to clone -->
+      <div id="filter-template" class="d-none">
+        <div class="filter-row row g-2 align-items-center mb-2">
+          <div class="col-auto">
+            <select class="form-control logical-operator">
+              <option value="AND">AND</option>
+              <option value="OR">OR</option>
+            </select>
+          </div>
+          <div class="col">
+            <select class="form-control column-select">
+              <option value="">-- Select Column --</option>
+              {% for column in column_list %}
+                <option value="{{ column }}">{{ column_labels[column] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col">
+            <select class="form-control operator-select">
+              <option value="=">=</option>
+              <option value="!=">!=</option>
+              <option value=">">&gt;</option>
+              <option value="<">&lt;</option>
+              <option value=">=">&gt;=</option>
+              <option value="<=">&lt;=</option>
+              <option value="ilike">contains</option>
+              <option value="in">in</option>
+              <option value="not in">not in</option>
+              <option value="is null">is null</option>
+              <option value="is not null">is not null</option>
+            </select>
+          </div>
+          <div class="col">
+            <input type="text" class="form-control filter-value" placeholder="Enter filter value">
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-sm btn-outline-danger remove-filter">X</button>
+          </div>
+        </div>
+      </div>
+      
+    <!-- Hidden filter template -->
+    <template id="filter-template">
+        <div class="filter-row row g-2 align-items-center mb-2">
+            <div class="col-auto">
+                <select class="form-control logical-operator">
+                    <option value="AND">AND</option>
+                    <option value="OR">OR</option>
+                </select>
+            </div>
+            <div class="col">
+                <select class="form-control column-select">
                     <option value="">-- Select Column --</option>
                     {% for column in column_list %}
                         <option value="{{ column }}">{{ column_labels[column] }}</option>
                     {% endfor %}
                 </select>
-                <input type="text" class="form-control filter-value" id="filter-value-0" placeholder="Enter filter value">
+            </div>
+            <div class="col">
+                <select class="form-control operator-select">
+                    <option value="=">=</option>
+                    <option value="!=">!=</option>
+                    <option value=">">&gt;</option>
+                    <option value="<">&lt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="ilike">contains</option>
+                    <option value="in">in</option>
+                    <option value="not in">not in</option>
+                    <option value="is null">is null</option>
+                    <option value="is not null">is not null</option>
+                </select>
+            </div>
+            <div class="col">
+                <input type="text" class="form-control filter-value" placeholder="Enter filter value">
+            </div>
+            <div class="col-auto">
+                <button type="button" class="btn btn-outline-danger btn-sm remove-filter">×</button>
             </div>
         </div>
-        <div class="filter-actions">
-            <button type="button" class="btn btn-secondary" id="add-filter">Add Filter</button>
-            <button type="button" class="btn btn-primary" id="apply-filters">Apply Filters</button>
-            <button type="button" class="btn btn-outline-secondary" id="clear-filters">Clear Filters</button>
-        </div>
-    </div>
+    </template>
 
-    <!-- CSV Download Form -->
+    
+      <!-- CSV Download Form -->
     <div class="card mt-4 mb-4 p-3">
         <form method="POST" action="{{ url_for('download') }}" style="width: 100%;">
             <input type="hidden" name="schema" id="schema" value="">
@@ -250,88 +356,37 @@
 // Function to get active filters
 function getActiveFilters() {
     const filters = {};
-    const filterRows = $('.filter-row');
-    
-    filterRows.each((index, row) => {
+    let filterIndex = 0;
+
+    $('.filter-row').each((_, row) => {
         const $row = $(row);
-        const column = $row.find('.column-select').val();
-        const value = $row.find('.filter-value').val();
-        const operator = index > 0 ? $row.find('.operator-select').val() : null;
-        
+        const column = $row.find('.column-select').val()?.trim();
+        const value = $row.find('.filter-value').val()?.trim();
+        const operator = $row.find('.operator-select').val()?.trim();
+
+        // Skip rows with missing column or value
         if (column && value) {
-            filters[`filter_column_${index}`] = column;
-            filters[`filter_value_${index}`] = value;
-            if (operator) {
-                filters[`filter_operator_${index}`] = operator;
+            filters[`filter_column_${filterIndex}`] = column;
+            filters[`filter_value_${filterIndex}`] = value;
+
+            if (filterIndex > 0 && operator) {
+                filters[`filter_operator_${filterIndex}`] = operator;
             }
+
+            filterIndex++;
         }
     });
-    
-    return filters;
-}
 
-// Apply the filters
-function applyFilters() {
-    const filters = getActiveFilters();
-    console.log("Applying filters:", filters);
-    
-    // Build the URL with filter parameters
-    const baseUrl = "{{ url_for('.index_view') }}";
-    const queryParams = new URLSearchParams();
-    queryParams.set('page', 1); // Reset to first page when applying filters
-    
-    // Add each filter parameter
-    Object.entries(filters).forEach(([key, value]) => {
-        queryParams.set(key, value);
-        console.log(`Setting param: ${key} = ${value}`);
-    });
-    
-    const url = `${baseUrl}?${queryParams.toString()}`;
-    console.log("Navigating to:", url);
-    
-    // Navigate to filtered URL
-    window.location.href = url;
+    return filters;
 }
 
 
     // Handle adding a new filter row
     function addFilterRow() {
-        const filterCount = $('.filter-row').length;
-        const newRowHtml = `
-            <div class="filter-row">
-                <select class="form-control operator-select" id="operator-select-${filterCount}">
-                    <option value="AND">AND</option>
-                    <option value="OR">OR</option>
-                </select>
-                <select class="form-control column-select" id="column-select-${filterCount}">
-                    <option value="">-- Select Column --</option>
-                    {% for column in column_list %}
-                        <option value="{{ column }}">{{ column_labels[column] }}</option>
-                    {% endfor %}
-                </select>
-                <input type="text" class="form-control filter-value" id="filter-value-${filterCount}" placeholder="Enter filter value">
-                <button type="button" class="btn btn-sm btn-outline-danger remove-filter">X</button>
-            </div>
-        `;
-        $('#filter-container').append(newRowHtml);
-    }
-
-    // Apply the filters
-    function applyFilters() {
-        const filters = getActiveFilters();
-        
-        // Build the URL with filter parameters
-        const baseUrl = "{{ url_for('.index_view') }}";
-        const queryParams = new URLSearchParams();
-        queryParams.set('page', 1); // Reset to first page when applying filters
-        
-        // Add each filter parameter
-        Object.entries(filters).forEach(([key, value]) => {
-            queryParams.set(key, value);
-        });
-        
-        // Navigate to filtered URL
-        window.location.href = `${baseUrl}?${queryParams.toString()}`;
+        const $template = $('#filter-template').html();
+        const $row = $($template);
+    
+        $('#filter-container').append($row);
     }
 
     // Clear all filters
@@ -391,9 +446,25 @@ function applyFilters() {
         $('#clear-filters').on('click', clearFilters);
         
         // Event delegation for remove filter buttons
-        $('#filter-container').on('click', '.remove-filter', function() {
-            $(this).closest('.filter-row').remove();
+// Handle delete button click for filters
+$('#filter-container').on('click', '.remove-filter', function() {
+    // Get the current filter row
+    const $filterRow = $(this).closest('.filter-row');
+    const index = $filterRow.index(); // Get the index of the row
+
+    // Remove the filter row
+    $filterRow.remove();
+
+    // Adjust the logical operators for the remaining filters
+    $('#filter-container .filter-row').each(function(i) {
+            // If it's the first filter row, remove the logical operator
+            if (i === 0) {
+                $(this).find('.logical-operator').remove();  // Remove on first filter
+            } else {
+                $(this).find('.logical-operator').val('AND');  // Default to 'AND' for other filters
+            }
         });
+    });
         
         // Initialize DataTables with server-side processing for column filters
         $('#data-table').DataTable({
@@ -433,76 +504,110 @@ function applyFilters() {
     });
 
 // Function to restore filters from URL parameters
+
+
+// To restore filters with the correct logical operator, update restoreFiltersFromUrl function:
 function restoreFiltersFromUrl() {
     const queryParams = new URLSearchParams(window.location.search);
-    let hasFilters = false;
+    let filterCount = 0;
     
-    // Check if there are any filter parameters
-    for (const [key, value] of queryParams.entries()) {
-        if (key.startsWith('filter_')) {
-            hasFilters = true;
-            break;
-        }
+    // Check how many filter rows there are in the query params
+    while (queryParams.has(`filter_column_${filterCount}`)) {
+        filterCount++;
     }
-    
-    if (hasFilters) {
-        // Clear default first filter row
-        $('#filter-container').empty();
-        
-        // Count how many filter rows we need
-        let filterCount = 0;
-        while (queryParams.has(`filter_column_${filterCount}`)) {
-            filterCount++;
+
+    // Clear the existing filter rows
+    $('#filter-container').empty();
+
+    for (let i = 0; i < filterCount; i++) {
+        const column = queryParams.get(`filter_column_${i}`);
+        const value = queryParams.get(`filter_value_${i}`);
+        const comparisonOp = queryParams.get(`filter_operator_${i}`);  // e.g. "="
+        const logicalOp = queryParams.get(`filter_logical_${i}`);      // e.g. "AND"
+
+        // Clone the filter template row
+        const $row = $($('#filter-template').html());
+
+        // Only show logical operator from second row onwards
+        if (i === 0) {
+            $row.find('.logical-operator').remove(); // Remove on first row
+        } else {
+            $row.find('.logical-operator').val(logicalOp || 'AND');
         }
-        
-        // Create each filter row and set values
-        for (let i = 0; i < filterCount; i++) {
-            const column = queryParams.get(`filter_column_${i}`);
-            const value = queryParams.get(`filter_value_${i}`);
-            const operator = queryParams.get(`filter_operator_${i}`);
-            
-            if (column && value) {
-                // Add first row (without operator)
-                if (i === 0) {
-                    const firstRowHtml = `
-                        <div class="filter-row">
-                            <select class="form-control column-select" id="column-select-0">
-                                <option value="">-- Select Column --</option>
-                                {% for column in column_list %}
-                                    <option value="{{ column }}" ${column === '{{ column }}' ? 'selected' : ''}>{{ column_labels[column] }}</option>
-                                {% endfor %}
-                            </select>
-                            <input type="text" class="form-control filter-value" id="filter-value-0" placeholder="Enter filter value" value="${value}">
-                        </div>
-                    `;
-                    $('#filter-container').append(firstRowHtml);
-                    $(`#column-select-0`).val(column);
-                } else {
-                    // Add subsequent rows with operator
-                    const rowHtml = `
-                        <div class="filter-row">
-                            <select class="form-control operator-select" id="operator-select-${i}">
-                                <option value="AND" ${operator === 'AND' ? 'selected' : ''}>AND</option>
-                                <option value="OR" ${operator === 'OR' ? 'selected' : ''}>OR</option>
-                            </select>
-                            <select class="form-control column-select" id="column-select-${i}">
-                                <option value="">-- Select Column --</option>
-                                {% for column in column_list %}
-                                    <option value="{{ column }}">{{ column_labels[column] }}</option>
-                                {% endfor %}
-                            </select>
-                            <input type="text" class="form-control filter-value" id="filter-value-${i}" placeholder="Enter filter value" value="${value}">
-                            <button type="button" class="btn btn-sm btn-outline-danger remove-filter">X</button>
-                        </div>
-                    `;
-                    $('#filter-container').append(rowHtml);
-                    $(`#column-select-${i}`).val(column);
-                    $(`#operator-select-${i}`).val(operator);
-                }
-            }
-        }
+
+        // Set values for column select, operator select, and filter value input
+        $row.find('.column-select').val(column);
+        $row.find('.operator-select').val(comparisonOp || '=');  // Default to "=" if no comparison operator found
+        $row.find('.filter-value').val(value);
+
+        // Append the row to the filter container
+        $('#filter-container').append($row);
     }
 }
+
+// Add this to your applyFilters function:
+function applyFilters() {
+    const filters = getActiveFilters();
+    console.log("Applying filters:", filters);
+
+    // Build the URL with filter parameters
+    const baseUrl = "{{ url_for('.index_view') }}";
+    const queryParams = new URLSearchParams();
+    queryParams.set('page', 1); // Reset to first page when applying filters
+
+    // Add each filter parameter
+    Object.entries(filters).forEach(([key, value]) => {
+        queryParams.set(key, value);
+        console.log(`Setting param: ${key} = ${value}`);
+    });
+
+    // Set logical operator
+    $('.logical-operator').each(function(index, operator) {
+        queryParams.set(`filter_logical_${index}`, $(operator).val());
+    });
+
+    // Set comparison operator
+    $('.operator-select').each(function(index, operator) {
+        queryParams.set(`filter_operator_${index}`, $(operator).val());
+    });
+
+    const url = `${baseUrl}?${queryParams.toString()}`;
+    console.log("Navigating to:", url);
+
+    // Navigate to filtered URL
+    window.location.href = url;
+}
+
+
+
+function generateFilterRows(filters) {
+    // Clear the current filter container
+    $('#filter-container').empty();
+
+    filters.forEach((filter, i) => {
+        const { column, value, comparisonOp, logicalOp } = filter;
+        
+        // Clone the template for each row
+        const $row = $($('#filter-template').html());
+
+        // If it's the first filter, set the default comparison operator to "="
+        if (i === 0) {
+            $row.find('.operator-select').val(comparisonOp || '='); // Default comparison operator
+            $row.find('.logical-operator').remove(); // No logical operator for the first filter
+        } else {
+            $row.find('.logical-operator').val(logicalOp || 'AND'); // Default to AND for subsequent filters
+            $row.find('.operator-select').val(comparisonOp || '='); // Use the comparison operator from the filter or default to "="
+        }
+
+        // Set the values for the column and filter value
+        $row.find('.column-select').val(column);
+        $row.find('.filter-value').val(value);
+
+        // Append the row to the container
+        $('#filter-container').append($row);
+    });
+}
+
 
 
 </script>

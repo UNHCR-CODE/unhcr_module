@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # every 30 mins
-# */30 * * * * cd /home/unhcr_admin/code/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/sm_upsert_inverter_data.sh" > /dev/null || (sudo /bin/bash ./scripts/sm_upsert_inverter_data.sh | sudo tee -a /datadrive/logs/sm_upsert_inverter_data.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_sm_upsert_inverter_data.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_sm_upsert_inverter_data.log')
+# 0 */2 * * * cd /home/unhcr_admin/code/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/sm_upsert_inverter_data.sh" > /dev/null || (sudo /bin/bash ./scripts/sm_upsert_inverter_data.sh | sudo tee -a /datadrive/logs/sm_upsert_inverter_data.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_sm_upsert_inverter_data.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_sm_upsert_inverter_data.log')
 
 
 # change to your repo root dir

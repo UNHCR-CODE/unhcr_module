@@ -21,3 +21,6 @@ NUL
 .coverage
 unhcr/alembic copy/
 unhcr/alembix/
+temp/
+web_app copy/
+web_app copy 2/
