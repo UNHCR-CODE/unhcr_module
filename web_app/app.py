@@ -205,43 +205,213 @@ class DynamicTableView(ModelView):
             flash(f"Error loading table: {str(e)}")
             return None
 
+    def parse_date(self, date_str):
+        # Common date formats to try
+        formats = [
+            "%Y-%m-%d",       # YYYY-MM-DD
+            "%m/%d/%Y",       # MM/DD/YYYY
+            "%d-%m-%Y"        # DD-MM-YYYY
+        ]
+        
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str, fmt)
+            except ValueError:
+                continue
+        return None
+
+    def get_filters_from_request(self, model):
+        # Apply filters from request parameters
+        combined_filter = None
+        start_dt = request.args.get('start_date')
+        end_dt = request.args.get('end_date')
+        date_col = request.args.get('date_column')
+        column_name = date_col
+        if hasattr(model, column_name):
+            column = getattr(model, column_name)
+            if hasattr(column.type, 'python_type'):
+                python_type = column.type.python_type
+                column = getattr(model, column_name)
+                if issubclass(python_type, (datetime, str)):
+                    start_date = self.parse_date(start_dt)
+                    end_date = self.parse_date(end_dt)
+                    condition = column.cast(Date).between(start_date, end_date)
+                else: # assume str
+                    print(f"Date column type: {python_type} not date or str")
+                combined_filter = condition
+            else:
+                print("Date column type not found")
+        else:
+            print("Date column not found")
+
+        for i in range(10):  # Limit to reasonable number of filters
+            column_name = request.args.get(f'filter_column_{i}')
+            filter_value = request.args.get(f'filter_value_{i}')
+            comparison_op = request.args.get(f'filter_operator_{i}', '=')  # This is =, !=, >, <, etc.
+            logical_op = request.args.get(f'filter_logical_{i}', 'AND')  # This is AND or OR
+
+            # Break if no more filters
+            if not column_name or filter_value is None:
+                break
+
+            # Check if column exists in model
+            if hasattr(model, column_name):
+                column = getattr(model, column_name)
+                # Create filter condition based on operator
+                try:
+                    # Handle NULL and NOT NULL cases
+                    if comparison_op == 'is null':
+                        condition = column.is_(None)
+                    elif comparison_op == 'is not null':
+                        condition = column.isnot(None)
+                    else:
+                        # Type conversion for non-null operators
+                        if hasattr(column.type, 'python_type'):
+                            python_type = column.type.python_type
+                            # Handle different operators based on data type
+                            if issubclass(python_type, (int, float, datetime)):
+                                if issubclass(python_type, (datetime)):
+                                    dt = self.parse_date(filter_value)
+                                    if dt:
+                                        filter_value = dt
+                                    else:
+                                        print(f"DEBUG: Invalid date format {filter_value}")
+                                        continue
+                                try:
+                                    filter_value = python_type(filter_value)
+                                    if comparison_op == '=':
+                                        condition = column == filter_value
+                                    elif comparison_op == '!=':
+                                        condition = column != filter_value
+                                    elif comparison_op == '>':
+                                        condition = column > filter_value
+                                    elif comparison_op == '<':
+                                        condition = column < filter_value
+                                    elif comparison_op == '>=':
+                                        condition = column >= filter_value
+                                    elif comparison_op == '<=':
+                                        condition = column <= filter_value
+                                    else:
+                                        # Default to equality
+                                        condition = column == filter_value
+                                except ValueError:
+                                    print(f"DEBUG: Value conversion error for {filter_value}")
+                                    continue
+                            elif issubclass(python_type, str):
+                                if comparison_op == 'ilike':
+                                    condition = column.ilike(f'%{filter_value}%')
+                                elif comparison_op == '=':
+                                    condition = column == filter_value
+                                elif comparison_op == '!=':
+                                    condition = column != filter_value
+                                elif comparison_op == 'in':
+                                    # Split comma-separated values and strip whitespace
+                                    values = [v.strip() for v in filter_value.split(',')]
+                                    condition = column.in_(values)
+                                elif comparison_op == 'not in':
+                                    values = [v.strip() for v in filter_value.split(',')]
+                                    condition = ~column.in_(values)
+                                else:
+                                    # Default to contains for string
+                                    condition = column.ilike(f'%{filter_value}%')
+                            else:
+                                # For other types, use basic operators
+                                if comparison_op == '=':
+                                    condition = column == filter_value
+                                elif comparison_op == '!=':
+                                    condition = column != filter_value
+                                else:
+                                    # Default to equality
+                                    condition = column == filter_value
+                        else:
+                            # For columns without specific type info, default to ilike for strings
+                            if comparison_op == 'ilike':
+                                condition = column.ilike(f'%{filter_value}%')
+                            elif comparison_op == '=':
+                                condition = column == filter_value
+                            elif comparison_op == '!=':
+                                condition = column != filter_value
+                            else:
+                                # Default behavior
+                                condition = column.ilike(f'%{filter_value}%')
+
+                    # Build combined filter condition
+                    if combined_filter is None:
+                        combined_filter = condition
+                    elif i > 0 and logical_op == 'OR':
+                        combined_filter = or_(combined_filter, condition)
+                    else:  # Default to AND
+                        combined_filter = and_(combined_filter, condition)
+                    print(f"DEBUG: Added filter: {column_name} {comparison_op} {filter_value} with logical operator {logical_op if i > 0 else 'FIRST'}")
+                except Exception as e:
+                    print(f"DEBUG: Error applying filter: {str(e)}")
+            else:
+                print(f"DEBUG: Invalid filter column: {column_name}")
+
+        return combined_filter
+
+
     # def get_list(self, page, sort_column, sort_desc, search, filters, execute=True, page_size=None):
-    #     """Get rows for the table with pagination."""
+    #     """Overridden get_list method with filter support."""
     #     model = self.get_model()
     #     if not model:
     #         return 0, []  # Return an empty list if no model is found.
 
-    #     # Query to get the rows
-    #     query = self.get_query(page, model)
-        
-    #     # Apply pagination
+    #     # Initialize queries
+    #     query = self.session.query(model)
+    #     self.count_query = self.session.query(func.count()).select_from(model)
+    #     count = self.count_query.scalar()
+
+    #     if has_request_context():
+    #         combined_filter = self.get_filters_from_request(model)
+    #     # Apply the combined filter to both queries 
+    #     if combined_filter is not None:
+    #         query = query.filter(combined_filter)
+    #         self.count_query = self.count_query.filter(combined_filter)
+    #         filtered_count = self.count_query.scalar()
+    #         print(f"DEBUG: Applied filters. Original count: {count}, Filtered count: {filtered_count}")
+
+    #     # # Apply the combined filter if any 'SELECT public.gb_gb_unifier.building_code AS public_gb_gb_unifier_building_code, public.gb_gb_unifier.brand AS public_gb_gb_unifier_brand, public.gb_gb_unifier.stat_unifier AS public_gb_gb_unifier_stat_unifier, public.gb_gb_unifier.gauge_meter_uom AS public_gb_gb_unifier_gauge_meter_uom, public.gb_gb_unifier.supplier AS public_gb_gb_unifier_supplier, public.gb_gb_unifier.model AS public_gb_gb_unifier_model, public.gb_gb_unifier.asset_type AS public_gb_gb_unifier_asset_type, public.gb_gb_unifier.manufacturer AS public_gb_gb_unifier_manufacturer, public.gb_gb_unifier.model_1 AS public_gb_gb_unifier_model_1, public.gb_gb_unifier.sensor_type AS public_gb_gb_unifier_sensor_type, public.gb_gb_unifier.installation_date AS public_gb_gb_unifier_installation_date, public.gb_gb_unifier.serial_number AS public_gb_gb_unifier_serial_number, public.gb_gb_unifier.latest_reading AS public_gb_gb_unifier_latest_reading, public.gb_gb_unifier.asset_id AS public_gb_gb_unifier_asset_id, public.gb_gb_unifier.de_activation_date AS public_gb_gb_unifier_de_activation_date, public.gb_gb_unifier.activation_date AS public_gb_gb_unifier_activation_date, public.gb_gb_unifier.country_name AS public_gb_gb_unifier_country_name, public.gb_gb_unifier.building_name AS public_gb_gb_unifier_building_name, public.gb_gb_unifier.idx AS public_gb_gb_unifier_idx \nFROM public.gb_gb_unifier \nWHERE public.gb_gb_unifier.installation_date ILIKE %(installation_date_1)s AND public.gb_gb_unifier.installation_date ILIKE %(installation_date_1)s'
+    #     #'SELECT eyedro.gb_b12005e9.epoch_secs AS eyedro_gb_b12005e9_epoch_secs, eyedro.gb_b12005e9.ts AS eyedro_gb_b12005e9_ts, eyedro.gb_b12005e9.a_p1 AS eyedro_gb_b12005e9_a_p1, eyedro.gb_b12005e9.a_p2 AS eyedro_gb_b12005e9_a_p2, eyedro.gb_b12005e9.a_p3 AS eyedro_gb_b12005e9_a_p3, eyedro.gb_b12005e9.v_p1 AS eyedro_gb_b12005e9_v_p1, eyedro.gb_b12005e9.v_p2 AS eyedro_gb_b12005e9_v_p2, eyedro.gb_b12005e9.v_p3 AS eyedro_gb_b12005e9_v_p3, eyedro.gb_b12005e9.pf_p1 AS eyedro_gb_b12005e9_pf_p1, eyedro.gb_b12005e9.pf_p2 AS eyedro_gb_b12005e9_pf_p2, eyedro.gb_b12005e9.pf_p3 AS eyedro_gb_b12005e9_pf_p3, eyedro.gb_b12005e9.wh_p1 AS eyedro_gb_b12005e9_wh_p1, eyedro.gb_b12005e9.wh_p2 AS eyedro_gb_b12005e9_wh_p2, eyedro.gb_b12005e9.wh_p3 AS eyedro_gb_b12005e9_wh_p3, eyedro.gb_b12005e9.api_flag AS eyedro_gb_b12005e9_api_flag \nFROM eyedro.gb_b12005e9 \nWHERE eyedro.gb_b12005e9.a_p1 < %(a_p1_1)s AND eyedro.gb_b12005e9.a_p1 < %(a_p1_1)s'
+    #     # if combined_filter is not None:
+    #     #     query = query.filter(combined_filter)
+    #     #     #! sqlalchemy < v2
+    #     #     #self.count_query = query.statement.with_only_columns([func.count()]).order_by(None)
+    #     #     #! sqlalchemy >= v2
+    #     #     self.count_query = query.statement.with_only_columns(func.count()).order_by(None)
+
+    #         # Get the count with filters applied
+    #         count = self.session.scalar(self.count_query)
+
+    #     # Apply pagination at the database level
     #     page_size = page_size or self.page_size
     #     offset = (page - 1) * page_size if page else 0
+    #     # Get primary key for consistent ordering
+    #     if model.__table__.primary_key.columns:
+    #         pk_column = next(iter(model.__table__.primary_key.columns))
+    #         query = query.order_by(pk_column)
 
-    #     # Get total count
-    #     count_query = self.get_count_query(model)
-    #     count = count_query.scalar()
-
-    #     # Fetch rows
+    #     # Get rows with pagination
     #     rows = query.limit(page_size).offset(offset).all()
-
     #     # Process the rows
     #     processed_rows = []
-    #     for row in rows:
-    #         model_instance, row_number = row
+    #     for idx, row in enumerate(rows):
+    #         row_number = offset + idx + 1
     #         row_data = {
-    #             col.name: getattr(model_instance, col.name)
+    #             col.name: getattr(row, col.name)
     #             for col in model.__table__.columns
     #         }
     #         row_data["row_number"] = row_number
     #         processed_rows.append(DynamicRowModel(row_data, row_number))
 
-    #     count = count_query.scalar()
-    #     rows = query.limit(page_size).offset(offset).all()
+    #     # Print debug info
+    #     print(f"DEBUG: Query returned {count} total rows")
+    #     print(f"DEBUG: Returning {len(processed_rows)} rows for page {page}")
+    #     print(f"DEBUG: Query SQL: {query.statement.compile(dialect=engine.dialect, compile_kwargs={'literal_binds': True})}")
 
-    #     print("Column List:", self.column_list)
-    #     print("Column Labels:", self.column_labels)
     #     return count, processed_rows
+
+
 
     def get_list(self, page, sort_column, sort_desc, search, filters, execute=True, page_size=None):
         """Overridden get_list method with filter support."""
@@ -255,6 +425,30 @@ class DynamicTableView(ModelView):
         count = self.count_query.scalar()
         # Apply filters from request parameters
         combined_filter = None
+        start_dt = request.args.get('start_date')
+        end_dt = request.args.get('end_date')
+        date_col = request.args.get('date_column')
+        column_name = date_col
+        if column_name and hasattr(model, column_name):
+            column = getattr(model, column_name)
+            if hasattr(column.type, 'python_type'):
+                python_type = column.type.python_type
+                if issubclass(python_type, (datetime, str)):
+                    start_date = self.parse_date(start_dt)
+                    end_date = self.parse_date(end_dt)
+                    condition = column.cast(Date).between(start_date, end_date)
+                else: # assume str
+                    print(f"Date column type: {python_type} not date or str")
+                combined_filter = condition
+            else:
+                print("Date column type not found")
+        else:
+            print("Date column not found")
+        
+        
+        
+        
+        
         if has_request_context():
             for i in range(10):  # Limit to reasonable number of filters
                 column_name = request.args.get(f'filter_column_{i}')
@@ -300,7 +494,7 @@ class DynamicTableView(ModelView):
                     print(f"DEBUG: Invalid filter column: {column_name}")
         
         
-        combined_filter = None
+        #####combined_filter = None
         if has_request_context():
             for i in range(10):  # Limit to reasonable number of filters
                 column_name = request.args.get(f'filter_column_{i}')
@@ -422,6 +616,7 @@ class DynamicTableView(ModelView):
         print(f"DEBUG: Query SQL: {query.statement.compile(dialect=engine.dialect, compile_kwargs={'literal_binds': True})}")
         
         return count, processed_rows
+
 
     def get_query(self, page, model):
         """Alternative approach to construct the query with filters."""

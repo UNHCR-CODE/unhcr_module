@@ -1,158 +1,344 @@
 {% extends 'admin/master.html' %}
-
 {% block head %}
-    {{ super() }}
-    <link rel="stylesheet" href="{{ url_for('static', filename='datatables.min.css') }}">
-    <style>
-        .filter-container {
-            margin-bottom: 15px;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: #f8f9fa;
-        }
-        .filter-row {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-            gap: 10px;
-        }
-        .filter-actions {
-            margin-top: 10px;
-        }
-        .column-select {
-            min-width: 200px;
-        }
-        .operator-select {
-            width: 80px;
-        }
-        .filter-value {
-            flex-grow: 1;
-        }
-    </style>
+{{ super() }}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='datatables.min.css') }}"
+/>
+<style>
+.card {
+    padding: 0.5rem !important;
+    display: inline-block;
+    overflow-x: visible; /* Allow horizontal scrolling if content overflows */
+}
+      
+.filter-container {
+    top: -25px;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.9rem; /* slightly smaller overall */
+    width: 99%
+}
+
+.filter-value {
+    width: 450px
+}
+      
+#total-rows-display {
+    white-space: nowrap; /* Prevents text wrapping */
+    display: grid;
+    width: 200px;
+    position: absolute;
+    top: 2px;
+    right: 119px;
+    z-index: 1000;
+}
+      
+.d-flex.align-items-center {
+    flex-wrap: nowrap !important;
+    white-space: nowrap;
+}
+      
+.form-select-sm,
+.form-control-sm {
+    padding: 0.25rem 0.5rem !important; /* Compact padding */
+    margin: 4px;
+}
+      
+.btn-sm {
+    padding: 0.25rem 0.5rem !important; /* Compact button padding */
+    margin: 4px;
+}
+      
+label {
+    margin-right: 0.5rem !important; /* Small spacing for labels */
+    font-weight: bold !important;
+}
+      
+p.mb-0 {
+    margin-right: 0.5rem !important; /* Spacing for no-columns message */
+}
+
+body.dark-mode {
+    background-color: #121212;
+    color: #e0e0e0;
+}
+
+body.dark-mode .card,
+body.dark-mode .filter-container {
+    background-color: #1e1e1e;
+    border-color: #444;
+}
+
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode .form-control,
+body.dark-mode .btn {
+    background-color: #2c2c2c;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+body.dark-mode .btn-primary {
+    background-color: #3a3a3a;
+    border-color: #666;
+}
+
+body.dark-mode .table {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+}
+
+body.dark-mode .table thead th {
+    background-color: #2c2c2c;
+}
+
+body.dark-mode .btn-outline-secondary {
+    color: #ccc;
+    border-color: #666;
+}
+
+body.dark-mode .alert-info {
+    background-color: #2a2a2a;
+    border-color: #555;
+    color: #ddd;
+}
+
+body.dark-mode .btn-outline-primary {
+    color: #aaa;
+    border-color: #666;
+}
+
+.filter-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 10px;
+    font-size: 0.875rem; /* smaller text in rows */
+}
+
+.filter-actions {
+    margin-top: 10px;
+    font-size: 0.875rem; /* smaller buttons and input font */
+}
+
+.column-select {
+    min-width: 200px;
+    font-size: 0.875rem;
+}
+
+.operator-select {
+    width: 80px;
+    font-size: 0.875rem;
+}
+
+.form-control,
+.btn {
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem; /* smaller padding for compactness */
+}
+
+/* Tooltip Styles */
+[data-tooltip] {
+    position: relative;
+    cursor: pointer;
+}
+
+[data-tooltip]:hover:after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 5px;
+}
+
+[data-tooltip]:hover:before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #333;
+    margin-bottom: 0;
+}
+
+body.dark-mode [data-tooltip]:hover:after {
+    background-color: #555;
+    color: #e0e0e0;
+}
+
+body.dark-mode [data-tooltip]:hover:before {
+    border-top-color: #555;
+}
+
+.splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 2rem;
+    z-index: 9999;
+  }
+
+  .spinner {
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin-left: 10px;
+  }
+
+  /* Spinner animation */
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+</style>
 {% endblock %}
 
 {% block tail %}
-    {{ super() }}
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="{{ url_for('static', filename='datatables.min.js') }}"></script>
-    <script>console.log('DataTables loaded !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')</script>
+{{ super() }}
+<script src="{{ url_for('static', filename='datatables.min.js') }}"></script>
 {% endblock %}
 
 {% block body %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
 <!-- Page Content -->
 <div class="container-fluid">
+    <div id="total-rows-display">
+        <button id="theme-toggle" class="btn btn-outline-secondary" style="height: 29px;" data-tooltip="Toggle between light and dark mode">
+            🌙 Dark Mode
+        </button>
+        <strong style="color: white;" data-tooltip="Total number of rows in the table">Total Rows: {{ count }}</strong>
+    </div>
+    <div class="filter-actions d-flex justify-content-between align-items-center mb-3">
+        <!-- Dropdown for selecting saved filters -->
+        <select class="form-control w-auto me-2" id="filter-names-dropdown" data-tooltip="Select a previously saved filter set">
+            <option value="">Select Saved Filter</option>
+        </select>
+
+        <!-- Input for naming the filter -->
+        <input
+            type="text"
+            id="filter-name"
+            class="form-control w-auto me-2"
+            placeholder="Enter filter name"
+            style="min-width: 200px"
+            data-tooltip="Enter a name to save the current filter set"
+        />
+
+        <button type="button" class="btn btn-secondary me-2" id="add-filter" data-tooltip="Add a new filter row">
+            Add Filter
+        </button>
+
+        <!-- Apply and Clear buttons -->
+        <button type="button" class="btn btn-primary me-2" id="apply-filters" data-tooltip="Apply the current filter set">
+            Apply Filters
+        </button>
+        <button
+            type="button"
+            class="btn btn-outline-secondary me-2"
+            id="clear-filters"
+            data-tooltip="Clear all filters and reset the table"
+        >
+            Clear Filters
+        </button>
+
+        <!-- Save filter button -->
+        <button
+            type="button"
+            class="btn btn-secondary"
+            onclick="saveFiltersWithName($('#filter-name').val())"
+            data-tooltip="Save the current filter set with the specified name"
+        >
+            Save Filter
+        </button>
+    </div>
 
     <!-- Column Filter Form -->
     <div class="card mt-4 mb-4 p-3 filter-container">
-        <h5>Column Filters</h5>
-      
-        <div id="filter-container">
-          <!-- Initial filter row -->
-          <div class="filter-row row g-2 align-items-center mb-2" id="filter-row-0">
-            <div class="col">
-              <select class="form-control column-select" name="filter_column_0">
-                <option value="">-- Select Column --</option>
-                {% for column in column_list %}
-                  <option value="{{ column }}">{{ column_labels[column] }}</option>
-                {% endfor %}
-              </select>
+        <div id="filter-container" class="filter-container">
+            <!-- Initial filter row -->
+            <div class="filter-row row g-2 align-items-center mb-2" id="filter-row-0">
+                <div class="col">
+                    <select class="form-control column-select" name="filter_column_0" data-tooltip="Select a column to filter">
+                        <option value="">-- Select Column --</option>
+                        {% for column in column_list %}
+                        <option value="{{ column }}">{{ column_labels[column] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <select class="form-control operator-select" name="filter_op_0" data-tooltip="Select the filter operator">
+                        <option value="=">=</option>
+                        <option value="!=">!=</option>
+                        <option value=">">></option>
+                        <option value="<"><</option>
+                        <option value=">=">>=</option>
+                        <option value="<="><=</option>
+                        <option value="ilike">contains</option>
+                        <option value="in">in</option>
+                        <option value="not in">not in</option>
+                        <option value="is null">is null</option>
+                        <option value="is not null">is not null</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <input
+                        type="text"
+                        class="form-control filter-value"
+                        name="filter_value_0"
+                        placeholder="Enter filter value"
+                        data-tooltip="Enter the value to filter by"
+                    />
+                </div>
             </div>
-            <div class="col">
-              <select class="form-control operator-select" name="filter_op_0">
-                <option value="=">=</option>
-                <option value="!=">!=</option>
-                <option value=">">&gt;</option>
-                <option value="<">&lt;</option>
-                <option value=">=">&gt;=</option>
-                <option value="<=">&lt;=</option>
-                <option value="ilike">contains</option>
-                <option value="in">in</option>
-                <option value="not in">not in</option>
-                <option value="is null">is null</option>
-                <option value="is not null">is not null</option>
-              </select>
-            </div>
-            <div class="col">
-              <input type="text" class="form-control filter-value" name="filter_value_0" placeholder="Enter filter value">
-            </div>
-          </div>
         </div>
-      
-        <!-- Filter actions -->
-        <div class="filter-actions mt-3">
-          <button type="button" class="btn btn-secondary" id="add-filter">Add Filter</button>
-          <button type="button" class="btn btn-primary" id="apply-filters">Apply Filters</button>
-          <button type="button" class="btn btn-outline-secondary" id="clear-filters">Clear Filters</button>
-        </div>
-      </div>
-      
-      <!-- Hidden filter row template for JS to clone -->
-      <div id="filter-template" class="d-none">
-        <div class="filter-row row g-2 align-items-center mb-2">
-          <div class="col-auto">
-            <select class="form-control logical-operator">
-              <option value="AND">AND</option>
-              <option value="OR">OR</option>
-            </select>
-          </div>
-          <div class="col">
-            <select class="form-control column-select">
-              <option value="">-- Select Column --</option>
-              {% for column in column_list %}
-                <option value="{{ column }}">{{ column_labels[column] }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col">
-            <select class="form-control operator-select">
-              <option value="=">=</option>
-              <option value="!=">!=</option>
-              <option value=">">&gt;</option>
-              <option value="<">&lt;</option>
-              <option value=">=">&gt;=</option>
-              <option value="<=">&lt;=</option>
-              <option value="ilike">contains</option>
-              <option value="in">in</option>
-              <option value="not in">not in</option>
-              <option value="is null">is null</option>
-              <option value="is not null">is not null</option>
-            </select>
-          </div>
-          <div class="col">
-            <input type="text" class="form-control filter-value" placeholder="Enter filter value">
-          </div>
-          <div class="col-auto">
-            <button type="button" class="btn btn-sm btn-outline-danger remove-filter">X</button>
-          </div>
-        </div>
-      </div>
-      
-    <!-- Hidden filter template -->
-    <template id="filter-template">
+    </div>
+
+    <!-- Hidden filter row template for JS to clone -->
+    <div id="filter-template" class="d-none">
         <div class="filter-row row g-2 align-items-center mb-2">
             <div class="col-auto">
-                <select class="form-control logical-operator">
+                <select class="form-control logical-operator" data-tooltip="Select logical operator (AND/OR)">
                     <option value="AND">AND</option>
                     <option value="OR">OR</option>
                 </select>
             </div>
             <div class="col">
-                <select class="form-control column-select">
+                <select class="form-control column-select" data-tooltip="Select a column to filter">
                     <option value="">-- Select Column --</option>
                     {% for column in column_list %}
-                        <option value="{{ column }}">{{ column_labels[column] }}</option>
+                    <option value="{{ column }}">{{ column_labels[column] }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col">
-                <select class="form-control operator-select">
+                <select class="form-control operator-select" data-tooltip="Select the filter operator">
                     <option value="=">=</option>
                     <option value="!=">!=</option>
-                    <option value=">">&gt;</option>
-                    <option value="<">&lt;</option>
-                    <option value=">=">&gt;=</option>
-                    <option value="<=">&lt;=</option>
+                    <option value=">">></option>
+                    <option value="<"><</option>
+                    <option value=">=">>=</option>
+                    <option value="<="><=</option>
                     <option value="ilike">contains</option>
                     <option value="in">in</option>
                     <option value="not in">not in</option>
@@ -161,455 +347,587 @@
                 </select>
             </div>
             <div class="col">
-                <input type="text" class="form-control filter-value" placeholder="Enter filter value">
+                <input
+                    type="text"
+                    class="form-control filter-value"
+                    placeholder="Enter filter value"
+                    data-tooltip="Enter the value to filter by"
+                />
             </div>
             <div class="col-auto">
-                <button type="button" class="btn btn-outline-danger btn-sm remove-filter">×</button>
+                <button
+                    type="button"
+                    class="btn btn-sm btn-outline-danger remove-filter"
+                    data-tooltip="Remove this filter row"
+                >
+                    X
+                </button>
             </div>
         </div>
-    </template>
+    </div>
+    <div style="top: -85px; position: relative;">
+        <div class="card mt-4 mb-4 p-2" style="display: inline-block;">
+            <div class="d-flex align-items-center gap-3" style="flex-wrap: nowrap; white-space: nowrap;">
+                <!-- Form Section -->
+                <form method="POST" action="{{ url_for('download') }}" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="schema" id="schema" value="" />
+                    <input type="hidden" name="table" id="table" value="" />
 
-    
-      <!-- CSV Download Form -->
-    <div class="card mt-4 mb-4 p-3">
-        <form method="POST" action="{{ url_for('download') }}" style="width: 100%;">
-            <input type="hidden" name="schema" id="schema" value="">
-            <input type="hidden" name="table" id="table" value="">
-
-            {% if date_columns %}
-                <div class="d-flex flex-wrap align-items-end gap-2">
-                    <div class="form-group mb-0">
-                        <label for="date_column">Date column</label>
-                        <select name="date_column" id="date_column" class="form-control">
+                    {% if date_columns %}
+                    <div class="d-flex align-items-center gap-1">
+                        <label for="date_column" class="mb-0 small me-1" data-tooltip="Select the date column for filtering">Date column:</label>
+                        <select
+                            name="date_column"
+                            id="date_column"
+                            class="form-select form-select-sm"
+                            style="width: 120px;"
+                            data-tooltip="Select a date column"
+                        >
                             {% for col in date_columns %}
-                                <option value="{{ col }}">{{ col }}</option>
+                            <option value="{{ col }}">{{ col }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="form-group mb-0">
-                        <label for="start_date">Start date</label>
-                        <input type="date" name="start_date" id="start_date" class="form-control" required>
+
+                    <div class="d-flex align-items-center gap-1">
+                        <label for="start_date" class="mb-0 small me-1" data-tooltip="Select the start date for the filter">Start:</label>
+                        <input
+                            type="date"
+                            name="start_date"
+                            id="start_date"
+                            class="form-control form-control-sm"
+                            style="width: 130px;"
+                            required
+                            data-tooltip="Enter the start date"
+                        />
                     </div>
-                    <div class="form-group mb-0">
-                        <label for="end_date">End date</label>
-                        <input type="date" name="end_date" id="end_date" class="form-control" required>
+
+                    <div class="d-flex align-items-center gap-1">
+                        <label for="end_date" class="mb-0 small me-1" data-tooltip="Select the end date for the filter">End:</label>
+                        <input
+                            type="date"
+                            name="end_date"
+                            id="end_date"
+                            class="form-control form-control-sm"
+                            style="width: 130px;"
+                            required
+                            data-tooltip="Enter the end date"
+                        />
                     </div>
-                    <div class="form-group mb-0">
-                        <button type="submit" class="btn btn-primary mt-4">Download CSV</button>
+
+                    <button type="submit" class="btn btn-sm btn-primary" data-tooltip="Download the filtered data as CSV">Download CSV</button>
+                    {% else %}
+                    <p class="mb-0 me-2"><em>No date or datetime columns found.</em></p>
+                    {% endif %}
+                </form>
+
+                <!-- Navigation Buttons Section -->
+                {% if date_columns %}
+                <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-1">
+                        <label for="jump-amount" class="mb-0 small me-1" data-tooltip="Enter number of pages to jump">Jump by pages:</label>
+                        <input
+                            type="number"
+                            id="jump-amount"
+                            class="form-control form-control-sm"
+                            style="width: 90px;"
+                            placeholder="number"
+                            data-tooltip="Enter number of pages"
+                        />
                     </div>
+
+                    <button type="button" class="btn btn-sm btn-primary" onclick="handleJump(this)" data-tooltip="Jump by specified pages">Jump</button>
+
+                    {% if pagination.has_prev %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to previous page">Prev</button>
+                    {% else %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" disabled>Prev</button>
+                    {% endif %}
+
+                    {% if pagination.has_next %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to next page">Next</button>
+                    {% else %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" disabled>Next</button>
+                    {% endif %}
                 </div>
-            {% else %}
-                <p><em>No date or datetime columns found in this table.</em></p>
-            {% endif %}
-        </form>
-    </div>
-
-    <!-- Header and Pagination Controls -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div><strong>Total Rows:</strong> {{ count }}</div>
-        <div class="d-flex flex-wrap align-items-center" style="gap: 1rem;">
-            <label for="jump-amount" class="mb-0">Jump by pages:</label>
-            <input type="number" id="jump-amount" class="form-control" style="width: 100px;" placeholder="number" />
-            <button class="btn btn-primary" onclick="handleJump(this)">Jump</button>
-    
-            {% if pagination.has_prev %}
-                <button class="btn btn-outline-primary" onclick="handleJump(this)">Prev</button>
-            {% else %}
-                <button class="btn btn-outline-primary" onclick="handleJump(this)" disabled>Prev</button>
-            {% endif %}
-    
-            {% if pagination.has_next %}
-                <button class="btn btn-outline-primary" onclick="handleJump(this)">Next</button>
-            {% else %}
-                <button class="btn btn-outline-primary" onclick="handleJump(this)" disabled>Next</button>
-            {% endif %}
+                {% endif %}
+            </div>
         </div>
-    </div>
-
-    {% if not pagination.is_large_dataset %}
+        
+        {% if not pagination.is_large_dataset %}
         <div class="pagination mb-3">
             {% if pagination.has_prev %}
-            <button class="btn btn-outline-primary" onclick="handleJump(this)">First</button>
+            <button type="button" class="btn btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to the first page">
+                First
+            </button>
             {% endif %}
-
             {% if pagination.start_page > 1 %}
-                <span class="btn btn-light disabled">...</span>
+            <span class="btn btn-light disabled">...</span>
             {% endif %}
-
             {% for p in pagination.page_range %}
-                {% if p == pagination.page %}
-                    <span class="btn btn-primary active">{{ p }}</span>
-                {% else %}
-                    <button class="btn btn-light" onclick="handleJump(this)">{{ p }}</button>
-                {% endif %}
-            {% endfor %}
-
-            {% if pagination.end_page < pagination.total_pages %}
-                <span class="btn btn-light disabled">...</span>
+            {% if p == pagination.page %}
+            <span class="btn btn-primary active">{{ p }}</span>
+            {% else %}
+            <button type="button" class="btn btn-light" onclick="handleJump(this)" data-tooltip="Go to page {{ p }}">{{ p }}</button>
             {% endif %}
-
+            {% endfor %}
+            {% if pagination.end_page < pagination.total_pages %}
+            <span class="btn btn-light disabled">...</span>
+            {% endif %}
             {% if pagination.has_next %}
-                <button class="btn btn-outline-primary" onclick="handleJump(this)">Last</button>
+            <button type="button" class="btn btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to the last page">
+                Last
+            </button>
             {% endif %}
         </div>
-    {% endif %}
-
-    <!-- Data Table -->
-    <table id="data-table" class="table table-striped">
-        <thead>
-            <tr>
-                {% for column in column_list %}
-                    <th>{{ column_labels[column] }}</th>
-                {% endfor %}
-            </tr>
-        </thead>
-        <tfoot>
-            <tr>
-                {% for column in column_list %}
-                    <th></th>
-                {% endfor %}
-            </tr>
-        </tfoot>
-        <tbody>
-            {% for row in data %}
-                <tr>
-                    {% for col_name in admin_view.column_list %}
-                        <td>{{ row | attr(col_name) }}</td>
-                    {% endfor %}
-                </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            <div class="alert alert-info">
-                <ul>
-                    {% for message in messages %}
-                        <li>{{ message }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
         {% endif %}
-    {% endwith %}
 
+        <!-- Data Table -->
+        <table id="data-table" class="table table-striped">
+            <thead>
+            <tr>
+                {% for column in column_list %}
+                <th data-tooltip="Column: {{ column_labels[column] }}">{{ column_labels[column] }}</th>
+                {% endfor %}
+            </tr>
+            </thead>
+            <tfoot>
+            <tr>
+                {% for column in column_list %}
+                <th></th>
+                {% endfor %}
+            </tr>
+            </tfoot>
+            <tbody>
+            {% for row in data %}
+            <tr>
+                {% for col_name in admin_view.column_list %}
+                <td data-tooltip="Value: {{ row | attr(col_name) }}">{{ row | attr(col_name) }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %} {% if messages %}
+        <div class="alert alert-info">
+            <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %} {% endwith %}
+    </div>
 </div>
 
+<div class="splash-screen" id="splash-screen" style="display: flex;">
+    Processing... <div class="spinner"></div>
+  </div>
 
 <script>
-    function getQueryParam(param) {
-        const urlParams = new URLSearchParams(window.location.search);
-        return parseInt(urlParams.get(param)) || 1;
+const baseUrl = "/admin/dynamictable/";
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('splash-screen').style.display = 'none';
+    // Initialize filter dropdown on page load
+    updateFilterNamesDropdown();
+
+    // Load saved filters from localStorage (previously saved search input)
+    const saved = JSON.parse(localStorage.getItem('savedFilters'));
+    if (saved) {
+        if (saved.search) {
+            const searchInput = document.getElementById('search-input');
+            if (searchInput) {
+                searchInput.value = saved.search;
+            }
+        }
     }
 
-    function handleJump(el) {
-        const currentPage = parseInt(getQueryParam('page'),10);
-        // Get the text of the button
-        const label = el.textContent.trim();
-
-        // If you use data attributes, grab them like this:
-        // const action = element.dataset.action;
-
-        console.log("Clicked:", label);
-        let jumpValue = null
-        const totalPages = {{ pagination.total_pages }};
-        // Do something based on the button
-        if (!isNaN(label)) {
-            pg = parseInt(label)
-            jumpValue = pg - currentPage
-        } else if (label === "Prev") {
-            jumpValue = -1
-        } else if (label === "Next") {
-            jumpValue = 1
-        } else if (label === "Jump") {
-            jumpValue = parseInt(document.getElementById("jump-amount").value, 10);
-            console.log("Jump by:", jumpValue);
-            if (isNaN(jumpValue) || jumpValue === 0) {
-                alert("Please enter a valid number");
-                document.getElementById('jump-amount').value = 0;
-                return;
-            }
-            localStorage.setItem('lastJumpValue', jumpValue);
-        } else if (label == 'First'){
-            jumpValue = currentPage * -1
-        } else if (label == 'Last'){
-            jumpValue = totalPages - currentPage + 1
+    // Load most recent saved filter set, if any
+    let mostRecentFilterName = null;
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('savedFilters_')) {
+            mostRecentFilterName = key.split('savedFilters_')[1];
+            break; // Load the first saved filter set found
         }
-        
-        let newPage = Math.max(1, Math.min(currentPage + jumpValue, totalPages));
-        
-        // Include any active filters in the URL
-        const baseUrl = "{{ url_for('.index_view') }}";
-        const filterParams = getActiveFilters();
-        const filterQueryString = Object.entries(filterParams)
-            .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-            .join('&');
-            
-        const pageParam = `page=${newPage}`;
-        const url = baseUrl + '?' + pageParam + (filterQueryString ? '&' + filterQueryString : '');
-        
+    }
+    if (mostRecentFilterName) {
+        loadFiltersByName(mostRecentFilterName);
+        $('#filter-names-dropdown').val(mostRecentFilterName); // Update dropdown
+    }
+
+    // Load the last jump value from localStorage or set default to 10
+    const jumpInput = document.getElementById('jump-amount');
+    const lastJumpValue = localStorage.getItem('lastJumpValue');
+    if (lastJumpValue) {
+        jumpInput.value = lastJumpValue;
+    } else {
+        jumpInput.value = '10'; // Default value
+        localStorage.setItem('lastJumpValue', '10');
+    }
+
+    const toggleBtn = document.getElementById('theme-toggle');
+    const darkClass = 'dark-mode';
+
+    // Load theme from localStorage
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.classList.add(darkClass);
+        toggleBtn.textContent = '☀️ Light Mode';
+    }
+
+    toggleBtn.addEventListener('click', () => {
+        const isDark = document.body.classList.toggle(darkClass);
+        toggleBtn.textContent = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    });
+
+    const schema = localStorage.getItem("selected_schema");
+    const table = localStorage.getItem("selected_table");
+    document.getElementById('schema').value = schema;
+    document.getElementById('table').value = table;
+
+    const dynamicText = schema && table ? `${schema}.${table}` : 'Dynamic Table';
+    const dynamicLink = document.querySelector('a.nav-link[href="/admin/dynamictable/"]');
+    if (dynamicLink) {
+        dynamicLink.textContent = dynamicText;
+    }
+
+    const lastStart = localStorage.getItem("startDateValue");
+    if (lastStart) document.getElementById("start_date").value = lastStart;
+
+    const lastEnd = localStorage.getItem("endDateValue");
+    if (lastEnd) document.getElementById("end_date").value = lastEnd;
+
+    document.getElementById("start_date").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") event.preventDefault();
+    });
+    document.getElementById('start_date').addEventListener('change', function () {
+        const val = this.value;
+        if (val) {
+            localStorage.setItem('startDateValue', val);
+            if (!document.getElementById('end_date').value) {
+                document.getElementById('end_date').value = val;
+                localStorage.setItem('endDateValue', val);
+            }
+        }
+    });
+
+    document.getElementById("end_date").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+        }
+    });
+
+    document.getElementById('end_date').addEventListener('change', function () {
+        const val = this.value;
+        if (val) {
+            localStorage.setItem('endDateValue', val);
+            if (!document.getElementById('start_date').value) {
+                document.getElementById('start_date').value = val;
+                localStorage.setItem('startDateValue', val);
+            }
+        }
+    });
+
+    // Initialize event handlers for filters
+    $('#add-filter').on('click', addFilterRow);
+    $('#apply-filters').on('click', applyFilters);
+    $('#clear-filters').on('click', clearFilters);
+
+    // Handle delete button click for filters
+    $('#filter-container').on('click', '.remove-filter', function() {
+        const $filterRow = $(this).closest('.filter-row');
+        const index = $filterRow.index();
+        $filterRow.remove();
+        $('#filter-container .filter-row').each(function(i) {
+            if (i === 0) {
+                $(this).find('.logical-operator').remove();
+            } else {
+                $(this).find('.logical-operator').val('AND');
+            }
+        });
+    });
+
+    // Initialize DataTables with server-side processing for column filters
+    $('#data-table').DataTable({
+        initComplete: function () {
+            this.api().columns().every(function () {
+                const column = this;
+                const select = $('<select multiple style="width: 100%; margin-top: 5px;"><option value=""></option></select>')
+                    .appendTo($(column.footer()).empty())
+                    .on('change', function () {
+                        const vals = $(this).val() || [];
+                        if (vals.length === 0) {
+                            column.search('', true, false).draw();
+                        } else {
+                            const regex = vals.map(val => `^${val}$`).join('|');
+                            column.search(regex, true, false).draw();
+                        }
+                    });
+                column.data().unique().sort().each(function (d) {
+                    if (d != null && d !== '') {
+                        select.append(`<option value="${d}">${d}</option>`);
+                    }
+                });
+            });
+        }
+    });
+
+    restoreFiltersFromUrl();
+
+    document.querySelectorAll('div.dt-length').forEach(el => el.remove());
+    document.querySelectorAll('div.dt-search').forEach(el => el.remove());
+    let rows = document.querySelectorAll('div.dt-layout-row');
+    if (rows.length > 0) {
+        rows[rows.length - 1].remove();
+    }
+    document.querySelectorAll('tfoot').forEach(el => el.remove());
+
+    function addFilterRow() {
+        const $template = $('#filter-template').html();
+        const $row = $($template);
+        $('#filter-container').append($row);
+        $('#filter-container .filter-row').each(function(i) {
+            if (i === 0) {
+                $(this).find('.logical-operator').remove();
+            }
+        });
+    }
+
+    function clearFilters() {
+        localStorage.removeItem('savedFilters');
+        $('#filter-container').empty();
+        updateFilterNamesDropdown();
+        const queryParams = new URLSearchParams();
+        add_date_args(queryParams)
+        const url = `${baseUrl}?${queryParams.toString()}`;
         window.location.href = url;
     }
 
+    function restoreFiltersFromUrl() {
+        const queryParams = new URLSearchParams(window.location.search);
+        let filterCount = 0;
+        while (queryParams.has(`filter_column_${filterCount}`)) {
+            filterCount++;
+        }
+        $('#filter-container').empty();
+        for (let i = 0; i < filterCount; i++) {
+            const column = queryParams.get(`filter_column_${i}`);
+            const value = queryParams.get(`filter_value_${i}`);
+            const comparisonOp = queryParams.get(`filter_operator_${i}`);
+            const logicalOp = queryParams.get(`filter_logical_${i}`);
+            const $row = $($('#filter-template').html());
+            if (i === 0) {
+                $row.find('.logical-operator').remove();
+            } else {
+                $row.find('.logical-operator').val(logicalOp || 'AND');
+            }
+            $row.find('.column-select').val(column);
+            $row.find('.operator-select').val(comparisonOp || '=');
+            $row.find('.filter-value').val(value);
+            $('#filter-container').append($row);
+        }
+    }
+});
 
-// Function to get active filters
+function add_date_args(queryParams){
+    queryParams.set('start_date', document.getElementById("start_date").value);
+    queryParams.set('end_date', document.getElementById("end_date").value);
+    queryParams.set('date_column', document.getElementById("date_column").value);
+    return queryParams
+}
+
+function applyFilters() {
+const filters = getActiveFilters();
+console.log("Applying filters:", filters);
+const queryParams = new URLSearchParams();
+queryParams.set('page', 1);
+Object.entries(filters).forEach(([key, value]) => {
+    queryParams.set(key, value);
+    console.log(`Setting param: ${key} = ${value}`);
+});
+add_date_args(queryParams)
+const url = `${baseUrl}?${queryParams.toString()}`;
+console.log("Navigating to:", url);
+document.getElementById('splash-screen').style.display = 'flex';
+window.location.href = url;
+}
+
+function updateFilterNamesDropdown() {
+const filterDropdown = $('#filter-names-dropdown');
+filterDropdown.empty();
+filterDropdown.append('<option value="">Select Saved Filter</option>');
+for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.startsWith('savedFilters_')) {
+        const filterName = key.split('savedFilters_')[1];
+        filterDropdown.append(`<option value="${filterName}">${filterName}</option>`);
+    }
+}
+}
+
+function loadFiltersByName(name) {
+try {
+    const savedFilters = localStorage.getItem(`savedFilters_${name}`);
+    if (savedFilters) {
+        const filters = JSON.parse(savedFilters);
+        console.log("Loaded filters:", filters);
+        $('#filter-container').empty();
+        Object.entries(filters).forEach(([key, value], index) => {
+            if (key.startsWith('filter_column_')) {
+
+                const filterIndex = key.split('_')[2];
+                const column = value;
+                const filterValue = filters[`filter_value_${filterIndex}`];
+                const operator = filters[`filter_operator_${filterIndex}`];
+                const logicalOp = filters[`filter_logical_${filterIndex}`];
+                const $row = $($('#filter-template').html());
+                if (filterIndex == 0) {
+                    $row.find('.logical-operator').remove();
+                } else {
+                    $row.find('.logical-operator').val(logicalOp || 'AND');
+                }
+                $row.find('.column-select').val(column);
+                $row.find('.operator-select').val(operator);
+                $row.find('.filter-value').val(filterValue);
+                $('#filter-container').append($row);
+            }
+        });
+    }
+} catch (e) {
+    console.error('Error parsing savedFilters:', e);
+    localStorage.removeItem('savedFilters'); // Clear corrupted data
+}
+}
+
+$(document).ready(function() {
+    $('#filter-names-dropdown').change(function() {
+        const selectedFilter = $(this).val();
+        if (selectedFilter) {
+            loadFiltersByName(selectedFilter);
+        }
+    });
+
+    // Attach event listeners to navigation buttons to pass the event
+    document.querySelectorAll('.btn[onclick="handleJump(this)"]').forEach(button => {
+        button.addEventListener('click', (event) => handleJump(button, event));
+    });
+});
+
+function saveFiltersWithName(name) {
+    if (!name) {
+        alert('Please enter a filter name.');
+        return;
+    }
+    const filters = getActiveFilters();
+    if (Object.keys(filters).length === 0) {
+        alert('No filters to save.');
+        return;
+    }
+    localStorage.setItem(`savedFilters_${name}`, JSON.stringify(filters));
+    console.log(`Filters saved with name: ${name}`);
+    updateFilterNamesDropdown();
+    $('#filter-names-dropdown').val(name); // Select the newly saved filter
+    alert(`Filter "${name}" saved successfully.`);
+}
+
 function getActiveFilters() {
     const filters = {};
     let filterIndex = 0;
-
     $('.filter-row').each((_, row) => {
         const $row = $(row);
         const column = $row.find('.column-select').val()?.trim();
         const value = $row.find('.filter-value').val()?.trim();
         const operator = $row.find('.operator-select').val()?.trim();
-
-        // Skip rows with missing column or value
+        const logicalOp = $row.find('.logical-operator').val()?.trim();
         if (column && value) {
             filters[`filter_column_${filterIndex}`] = column;
             filters[`filter_value_${filterIndex}`] = value;
-
-            if (filterIndex > 0 && operator) {
-                filters[`filter_operator_${filterIndex}`] = operator;
+            filters[`filter_operator_${filterIndex}`] = operator;
+            if (filterIndex > 0 && logicalOp) {
+                filters[`filter_logical_${filterIndex}`] = logicalOp;
             }
-
             filterIndex++;
         }
     });
-
     return filters;
 }
 
-
-    // Handle adding a new filter row
-    function addFilterRow() {
-        const $template = $('#filter-template').html();
-        const $row = $($template);
-    
-        $('#filter-container').append($row);
+function handleJump(el, event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
     }
 
-    // Clear all filters
-    function clearFilters() {
-        // Navigate to the base URL without filters
-        window.location.href = "{{ url_for('.index_view') }}";
+    const currentPage = parseInt(getQueryParam('page'), 10);
+    const label = el.textContent.trim();
+    console.log("Clicked:", label);
+    let jumpValue = null;
+    const totalPages = {{ pagination.total_pages | default(4246) }};
+    if (!isNaN(label)) {
+        const pg = parseInt(label);
+        jumpValue = pg - currentPage;
+    } else if (label === "Prev") {
+        jumpValue = -1;
+    } else if (label === "Next") {
+        jumpValue = 1;
+    } else if (label === "Jump") {
+        jumpValue = parseInt(document.getElementById("jump-amount").value, 10);
+        console.log("Jump by:", jumpValue);
+        if (isNaN(jumpValue) || jumpValue === 0) {
+            alert("Please enter a valid number");
+            const lastJumpValue = localStorage.getItem('lastJumpValue') || '10';
+            document.getElementById('jump-amount').value = lastJumpValue;
+            return;
+        }
+        localStorage.setItem('lastJumpValue', jumpValue);
+    } else if (label === 'First') {
+        jumpValue = currentPage * -1;
+    } else if (label === 'Last') {
+        jumpValue = totalPages - currentPage + 1;
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
-        const lastJump = localStorage.getItem("lastJumpValue");
-        if (lastJump !== "null") {
-            document.getElementById("jump-amount").value = lastJump;
-        }
-
-        const schema = "{{ session.schema or '' }}";
-        const table = "{{ session.table or '' }}";
-        document.getElementById('schema').value = schema;
-        document.getElementById('table').value = table;
-
-        const dynamicText = schema && table ? `${schema}.${table}` : 'Dynamic Table';
-        const dynamicLink = document.querySelector('a.nav-link[href="/admin/dynamictable/"]');
-        if (dynamicLink) {
-            dynamicLink.textContent = dynamicText;
-        }
-
-        const lastStart = localStorage.getItem("startDateValue");
-        if (lastStart) document.getElementById("start_date").value = lastStart;
-
-        const lastEnd = localStorage.getItem("endDateValue");
-        if (lastEnd) document.getElementById("end_date").value = lastEnd;
-
-        document.getElementById('start_date').addEventListener('change', function () {
-            const val = this.value;
-            if (val) {
-                localStorage.setItem('startDateValue', val);
-                if (!document.getElementById('end_date').value) {
-                    document.getElementById('end_date').value = val;
-                    localStorage.setItem('endDateValue', val);
-                }
-            }
-        });
-
-        document.getElementById('end_date').addEventListener('change', function () {
-            const val = this.value;
-            if (val) {
-                localStorage.setItem('endDateValue', val);
-                if (!document.getElementById('start_date').value) {
-                    document.getElementById('start_date').value = val;
-                    localStorage.setItem('startDateValue', val);
-                }
-            }
-        });
-
-        // Initialize event handlers for filters
-        $('#add-filter').on('click', addFilterRow);
-        $('#apply-filters').on('click', applyFilters);
-        $('#clear-filters').on('click', clearFilters);
-        
-        // Event delegation for remove filter buttons
-// Handle delete button click for filters
-$('#filter-container').on('click', '.remove-filter', function() {
-    // Get the current filter row
-    const $filterRow = $(this).closest('.filter-row');
-    const index = $filterRow.index(); // Get the index of the row
-
-    // Remove the filter row
-    $filterRow.remove();
-
-    // Adjust the logical operators for the remaining filters
-    $('#filter-container .filter-row').each(function(i) {
-            // If it's the first filter row, remove the logical operator
-            if (i === 0) {
-                $(this).find('.logical-operator').remove();  // Remove on first filter
-            } else {
-                $(this).find('.logical-operator').val('AND');  // Default to 'AND' for other filters
-            }
-        });
-    });
-        
-        // Initialize DataTables with server-side processing for column filters
-        $('#data-table').DataTable({
-            initComplete: function () {
-                this.api().columns().every(function () {
-                    const column = this;
-                    const select = $('<select multiple style="width: 100%; margin-top: 5px;"><option value=""></option></select>')
-                        .appendTo($(column.footer()).empty())
-                        .on('change', function () {
-                            const vals = $(this).val() || [];
-                            if (vals.length === 0) {
-                                column.search('', true, false).draw();
-                            } else {
-                                const regex = vals.map(val => `^${val}$`).join('|');
-                                column.search(regex, true, false).draw();
-                            }
-                        });
-                    column.data().unique().sort().each(function (d) {
-                        if (d != null && d !== '') {
-                            select.append(`<option value="${d}">${d}</option>`);
-                        }
-                    });
-                });
-            }
-        });
-
-        restoreFiltersFromUrl();
-
-        document.querySelectorAll('div.dt-length').forEach(el => el.remove());
-        document.querySelectorAll('div.dt-search').forEach(el => el.remove());
-        let rows = document.querySelectorAll('div.dt-layout-row');
-        if (rows.length > 0) {
-        rows[rows.length - 1].remove();
-        }
-        document.querySelectorAll('tfoot').forEach(el => el.remove());
-
-    });
-
-// Function to restore filters from URL parameters
-
-
-// To restore filters with the correct logical operator, update restoreFiltersFromUrl function:
-function restoreFiltersFromUrl() {
-    const queryParams = new URLSearchParams(window.location.search);
-    let filterCount = 0;
-    
-    // Check how many filter rows there are in the query params
-    while (queryParams.has(`filter_column_${filterCount}`)) {
-        filterCount++;
-    }
-
-    // Clear the existing filter rows
-    $('#filter-container').empty();
-
-    for (let i = 0; i < filterCount; i++) {
-        const column = queryParams.get(`filter_column_${i}`);
-        const value = queryParams.get(`filter_value_${i}`);
-        const comparisonOp = queryParams.get(`filter_operator_${i}`);  // e.g. "="
-        const logicalOp = queryParams.get(`filter_logical_${i}`);      // e.g. "AND"
-
-        // Clone the filter template row
-        const $row = $($('#filter-template').html());
-
-        // Only show logical operator from second row onwards
-        if (i === 0) {
-            $row.find('.logical-operator').remove(); // Remove on first row
-        } else {
-            $row.find('.logical-operator').val(logicalOp || 'AND');
-        }
-
-        // Set values for column select, operator select, and filter value input
-        $row.find('.column-select').val(column);
-        $row.find('.operator-select').val(comparisonOp || '=');  // Default to "=" if no comparison operator found
-        $row.find('.filter-value').val(value);
-
-        // Append the row to the filter container
-        $('#filter-container').append($row);
-    }
-}
-
-// Add this to your applyFilters function:
-function applyFilters() {
-    const filters = getActiveFilters();
-    console.log("Applying filters:", filters);
-
-    // Build the URL with filter parameters
-    const baseUrl = "{{ url_for('.index_view') }}";
+ 
     const queryParams = new URLSearchParams();
-    queryParams.set('page', 1); // Reset to first page when applying filters
-
-    // Add each filter parameter
+    let newPage = Math.max(1, Math.min(currentPage + jumpValue, totalPages));
+    const filters = getActiveFilters();
     Object.entries(filters).forEach(([key, value]) => {
-        queryParams.set(key, value);
+        queryParams.set(`${encodeURIComponent(key)}`, `${encodeURIComponent(value)}`);
         console.log(`Setting param: ${key} = ${value}`);
     });
-
-    // Set logical operator
-    $('.logical-operator').each(function(index, operator) {
-        queryParams.set(`filter_logical_${index}`, $(operator).val());
-    });
-
-    // Set comparison operator
-    $('.operator-select').each(function(index, operator) {
-        queryParams.set(`filter_operator_${index}`, $(operator).val());
-    });
-
-    const url = `${baseUrl}?${queryParams.toString()}`;
-    console.log("Navigating to:", url);
-
-    // Navigate to filtered URL
+    //const filterQueryString = Object.entries(filterParams)
+    //    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    //    .join('&');
+    //const pageParam = `page=${newPage}`;
+    //const queryParams = filterQueryString ? `${filterQueryString}&${pageParam}` : pageParam;
+    queryParams.set('page', `${newPage}`);
+    add_date_args(queryParams)
+    const url = `${baseUrl}?${queryParams.toString()}`; //###baseUrl + '?' + pageParam + (filterQueryString ? '&' + filterQueryString : '');
     window.location.href = url;
 }
 
-
-
-function generateFilterRows(filters) {
-    // Clear the current filter container
-    $('#filter-container').empty();
-
-    filters.forEach((filter, i) => {
-        const { column, value, comparisonOp, logicalOp } = filter;
-        
-        // Clone the template for each row
-        const $row = $($('#filter-template').html());
-
-        // If it's the first filter, set the default comparison operator to "="
-        if (i === 0) {
-            $row.find('.operator-select').val(comparisonOp || '='); // Default comparison operator
-            $row.find('.logical-operator').remove(); // No logical operator for the first filter
-        } else {
-            $row.find('.logical-operator').val(logicalOp || 'AND'); // Default to AND for subsequent filters
-            $row.find('.operator-select').val(comparisonOp || '='); // Use the comparison operator from the filter or default to "="
+function updateFilterNamesDropdown() {
+    const filterDropdown = $('#filter-names-dropdown');
+    filterDropdown.empty();
+    filterDropdown.append('<option value="">Select Saved Filter</option>');
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('savedFilters_')) {
+            const filterName = key.split('savedFilters_')[1];
+            filterDropdown.append(`<option value="${filterName}">${filterName}</option>`);
         }
-
-        // Set the values for the column and filter value
-        $row.find('.column-select').val(column);
-        $row.find('.filter-value').val(value);
-
-        // Append the row to the container
-        $('#filter-container').append($row);
-    });
+    }
 }
 
+function getQueryParam(param) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return parseInt(urlParams.get(param)) || 1;
+}
 
-
+window.addEventListener("pagehide", function () {
+    document.getElementById('splash-screen').style.display = 'flex';
+});
 </script>
-
 {% endblock %}
