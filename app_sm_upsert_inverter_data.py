@@ -1,18 +1,7 @@
-import calendar
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta, timezone
-from dateutil.relativedelta import relativedelta
+from datetime import datetime, timedelta
 import itertools
-import json
-import logging
 import numpy as np
-import os
-import pandas as pd
-from psycopg2.extras import execute_values, execute_batch
-from psycopg2 import DatabaseError
-import requests
-from sqlalchemy import text
-import sys
 import threading
 import time
 
@@ -62,13 +51,13 @@ def process_chunk(chunk, date, engine):
         # this blocks till the API call returns. The solarman API server seems to have changed, it used to be async
         # I used to be able to calls this in parallel, but now it slows down.
         with api_lock:
-            res, err = api_solarman.get_inverter_data(sn=sn, start_date=date, type=1)
+            res, err = api_solarman.get_inverter_data(sn=sn, start_date=date, type=1, days=None, db_eng=db_eng)
         if err:
             logger.error(f"Error fetching data for SN {sn}: {err}")
-        else:
-            res, err = err_handler.error_wrapper(lambda: api_solarman.insert_inverter_data(db_eng, res))
-            if err:
-                logger.error(f"Error fetching data for SN {sn}: {err}")
+        # else:
+        #     res, err = err_handler.error_wrapper(lambda: api_solarman.insert_inverter_data(db_eng, res))
+        #     if err:
+        #         logger.error(f"Error fetching data for SN {sn}: {err}")
         end_time = time.time()
         logger.info(f"SN: {sn} | Execution time: {((end_time - start_time)):.2f} secs")
 
@@ -78,27 +67,23 @@ def process_chunk(chunk, date, engine):
 
 # **MAIN PROCESS LOOP**
 # start_dt = datetime.strptime('2025-03-22', "%Y-%m-%d").date() # set a specific date
-start_dt = datetime.today().date() #!!!!!!+ timedelta(days=1)
-days = 3
+start_dt = datetime.today().date()
 timing = time.time()
-while days > 0:
-    days -= 1
-    global_counter = itertools.count(1)
 
-    with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        results = list(
-            executor.map(lambda chunk: process_chunk(chunk, start_dt, db_eng), chunks)
-        )
+global_counter = itertools.count(1)
 
-    logger.info(f"Completed processing for {start_dt}. Moving to next day.")
-    # Compute elapsed time
-    et = time.time()
-    elapsed = et-timing
-    timing = et
-    logger.info(f"Elapsed time: {elapsed:.2f} seconds")
-    start_dt -= timedelta(days=1)
-    if start_dt < datetime.strptime('2024-10-01', "%Y-%m-%d").date():
-        break
+with ThreadPoolExecutor(max_workers=num_threads) as executor:
+    results = list(
+        executor.map(lambda chunk: process_chunk(chunk, start_dt, db_eng), chunks)
+    )
+
+logger.info(f"Completed processing")
+# Compute elapsed time
+et = time.time()
+elapsed = et-timing
+timing = et
+logger.info(f"Elapsed time: {elapsed:.2f} seconds")
+
 
 # Flatten results
 final_output = [item for sublist in results for item in sublist]

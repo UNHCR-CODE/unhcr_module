@@ -682,7 +682,9 @@ def insert_inverter_data(db_eng=None, json_data={}):
     if db_eng is None:
         db_eng = db.set_local_defaultdb_engine()
     z = ''
-    # Define the expected keys
+    inverter_data_table = inspect(models.InverterData).local_table
+    # Define the expected keys -- the ones coming from API so we can map them to DB cols
+    DB_KEYS = [col for col in inverter_data_table.columns.keys() if col not in ['ts', 'created', 'updated']]
     EXPECTED_KEYS = {
         "SN1": "device_sn",
         "INV_MOD1": "inverter_type",
@@ -838,8 +840,8 @@ def insert_inverter_data(db_eng=None, json_data={}):
                     mapped_data[EXPECTED_KEYS[items["key"]]] = items["value"]
 
         # Check for missing keys
-        missing_keys = [key for key in EXPECTED_KEYS if key not in mapped_data]
-
+        missing_keys = [key for key in DB_KEYS if key not in mapped_data]
+        # there are typically 31 keys missng, because we do not store those in the DB
         # if missing_keys:
         #     raise ValueError(f"Missing keys in JSON data: {', '.join(missing_keys)}")
 
@@ -853,16 +855,6 @@ def insert_inverter_data(db_eng=None, json_data={}):
             else:
                 data.system_time = ("20" + data.system_time)[:16]
         inverter_instances.append(data)
-
-    Session = sessionmaker(bind=db_eng)
-    session = Session()
-    # Merge all instances in the batch at once
-    x = time.time()
-    # TODO: test how slow this is
-    # for inverter_instance in inverter_instances:
-    #     session.merge(inverter_instance)
-    # # Commit the new record to the database
-    # session.commit()
 
     def to_plain_dict(obj, exclude_fields=None):
         """Convert SQLAlchemy ORM object to plain dict, excluding listed fields."""
@@ -879,68 +871,125 @@ def insert_inverter_data(db_eng=None, json_data={}):
     ]
 
     rows = [to_plain_dict(obj, exclude_fields=['created', 'updated']) for obj in valid_inverters]
+    
+    def dedupe_by_keys(rows, keys):
+        seen = set()
+        dups = 0
+        deduped = []
+        for row in rows:
+            identifier = tuple(row[k] for k in keys)
+            if identifier not in seen:
+                seen.add(identifier)
+                deduped.append(row)
+            else:
+                dups += 1
+            last = row
+        return deduped
+
+    rows = dedupe_by_keys(rows, keys=['ts', 'device_sn'])
 
     # Clean up internal SQLAlchemy attributes (like _sa_instance_state)
     for row in rows:
         row.pop('_sa_instance_state', None)
 
     # Build the INSERT statement
-    stmt = insert(models.InverterData).values(rows)
-    stmt = stmt.on_conflict_do_nothing(index_elements=['ts', 'device_sn'])
-    if str(stmt) and rows:
-        # Execute
+    update_columns = [
+        c.name for c in inverter_data_table.columns
+        if c.name not in ('ts', 'device_sn', 'created', 'updated')  # Do not try to update PKs
+    ]
+
+    stmt = insert(inverter_data_table).values(rows)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=['ts', 'device_sn'],
+        set_={col: getattr(stmt.excluded, col) for col in update_columns}
+    )
+    # No update
+    # stmt = stmt.on_conflict_do_nothing(index_elements=['ts', 'device_sn'])
+
+    if rows:
         try:
-            session = Session()
-            session.execute(stmt)
-            session.commit()
+            with db_eng.begin() as conn:
+                res = conn.execute(stmt)
+                return res.rowcount, None
         except Exception as e:
-            session.rollback()
             logger.error(f"Error inserting data: {e}")
+            return None, f"Error inserting data: {e}"
 
 
 def get_inverter_data(
-    sn=2309200154, start_date=datetime.today().date(), type=1, db_eng=None
+    sn=2309200154, 
+    start_date=datetime.today().date(), 
+    type=1,
+    days=3, 
+    db_eng=None
 ):
     """
-    Retrieves inverter data for a given device serial number and date range.
+    Fetches inverter data for a specified device serial number over a range of days.
+
+    This function retrieves historical data from the Solarman API for a given inverter 
+    device, starting from a specified date. The data is retrieved for a specified number 
+    of days, or until the most recent data in the database if `days` is None. The function 
+    also attempts to insert the retrieved data into a database if a database engine is provided.
 
     Args:
-        sn (int, optional): Device serial number. Defaults to 2309200154.
-        start_date (datetime.date, optional): Start date of the date range. Defaults to today.
-        type (int, optional): Time type. Defaults to 1.
-        db_eng (sqlalchemy.engine.Engine, optional): Engine to use for inserting data into database.
+        sn (int): The serial number of the inverter device.
+        start_date (date): The starting date from which to fetch data.
+        type (int): The type of data to fetch, determining the granularity of time data.
+        days (int, optional): The number of days worth of data to fetch. Defaults to 3. 
+                              If None, the function calculates the number of days from 
+                              the last recorded date in the database.
+        db_eng: A SQLAlchemy database engine instance for database operations.
 
     Returns:
-        tuple: Data and error message. If error, data is None and error message is not None.
+        tuple: A tuple containing the data fetched (or None if unsuccessful), and an error message 
+               if applicable. If successful, the error message is None.
     """
+
     url = HISTORICAL_URL
 
-    payload = json.dumps(
-        {
-            "deviceSn": sn,  # 2309200154,
-            "startTime": start_date.isoformat(),  # "2024-12-30",
-            "endTime": (start_date + timedelta(days=1)).isoformat(),  # "2024-12-31",
-            "timeType": type,  # 1
+    if days is None:
+        res, err = db.sql_execute(
+            f" SELECT max(ts) FROM solarman.inverter_data WHERE device_sn = '{sn}';",
+            db_eng
+        )
+        if err is not None:
+            logger.warning(f"get_inverter_data max data ERROR: {err}")
+            days = 4
+        else:
+            end_date = (res[0][0]).date()
+            days = (start_date - end_date).days + 1
+    data = []
+    for i in range(days):
+        payload = json.dumps(
+            {
+                "deviceSn": sn,  # 2309200154,
+                "startTime": start_date.isoformat(),  # "2024-12-30",
+                "endTime": (start_date + timedelta(days=1)).isoformat(),  # "2024-12-31",
+                "timeType": type,  # 1
+            }
+        )
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "UNHCR_STEVE",
+            "Authorization": f"Bearer {BIZ_ACCESS_TOKEN}",
         }
-    )
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "UNHCR_STEVE",
-        "Authorization": f"Bearer {BIZ_ACCESS_TOKEN}",
-    }
 
-    z = time.time()
-    response = requests.request("POST", url, headers=headers, data=payload)
+        z = time.time()
+        response = requests.request("POST", url, headers=headers, data=payload)
 
-    res = response.json()
-    if "success" not in res or res["success"] != True:
-        return None, "API call not successful"
-    data = res["paramDataList"]
-    err = None
-    if db_eng:
-        res, err = err_handler.error_wrapper(lambda: insert_inverter_data(db_eng, data))
-    if err:
-        return None, err
+        res = response.json()
+        if "success" not in res or res["success"] != True:
+            return None, f'API call not successful {response.text}, date: {start_date}, # days: {i+1}'
+        data.append(res["paramDataList"])
+        err = None
+        if db_eng:
+            res, err = err_handler.error_wrapper(lambda: insert_inverter_data(db_eng, res["paramDataList"]))
+        if err:
+            return None, f'Insert inverter data ERROR: {err} , date: {start_date}, # days: {i+1}'
+        logger.info(f"SN: {sn} |  date: {start_date} | # rows: {res[0] if res else 0}")
+        start_date -= timedelta(days=1)
+
+
     return data, None
 
 

@@ -1,5 +1,5 @@
 import csv
-from datetime import datetime
+from datetime import date, datetime
 import io
 import time
 from types import SimpleNamespace
@@ -34,8 +34,10 @@ from sqlalchemy import (
     and_, or_,
     text
 )
-from wtforms import StringField, IntegerField, BooleanField, DateField, SelectField
+from wtforms import StringField, IntegerField, BooleanField, DateField
 from wtforms.validators import DataRequired
+from wtforms.widgets import HiddenInput, Input
+
 from flask_wtf import FlaskForm
 from dotenv import load_dotenv
 import os
@@ -64,17 +66,30 @@ ALLOWED_SCHEMAS = {'eyedro','solarman','public'}
 model_registry = {}
 
 
+# Define the widget to make the input readonly with custom styling
+# Define the widget to make the input readonly with custom styling
+class ReadOnlyInput(Input):
+    input_type = 'text'
+
+    def __call__(self, field, **kwargs):
+        kwargs['disabled'] = True  # Ensure the field is disabled
+        kwargs['style'] = 'background-color: #f0f0f0; color: #999; cursor: not-allowed; border: 2px solid red;'  # Add a visible grey background
+        kwargs['title'] = 'This field is read-only (PK or FK)'
+
+        # Call the parent class's __call__ method correctly using Input's __call__
+        return Input.__call__(self, field, **kwargs) 
+
 class DynamicRowModel(db.Model):
     __abstract__ = True  # Not meant to be instantiated directly.
 
-    def __init__(self, row, row_number):
+    def __init__(self, row):
         # Dynamically set attributes based on the row's columns
         for key, value in row.items():
             setattr(self, key, value)  # Assign each column to the instance's attributes
-        self.row_number = row_number  # Set row_number
+
 
     def __repr__(self):
-        return f"<DynamicRowModel row_number={self.row_number} {self.__dict__}>"
+        return f"<DynamicRowModel {self.__dict__}>"
 
 
 # Dummy model
@@ -183,6 +198,10 @@ class DynamicTableView(ModelView):
     page_size = 10  # Rows per page
     list_template = 'admin/custom_list.html'
 
+    @property
+    def primary_key_columns(self):
+        return [col.name for col in self.model.__table__.primary_key.columns]
+    
     def __init__(self, session, name="DynamicTable", endpoint="dynamictable", url="/admin/dynamictable", **kwargs):
         self.session = session
         self._is_initializing = True  # Initialize to True during object creation
@@ -208,14 +227,37 @@ class DynamicTableView(ModelView):
     def parse_date(self, date_str):
         # Common date formats to try
         formats = [
-            "%Y-%m-%d",       # YYYY-MM-DD
-            "%m/%d/%Y",       # MM/DD/YYYY
-            "%d-%m-%Y"        # DD-MM-YYYY
+        "%Y-%m-%d %H:%M:%S",       # ISO 8601 (YYYY-MM-DD HH:MM:SS)
+        "%Y-%m-%d %H:%M",           # ISO 8601 without seconds (YYYY-MM-DD HH:MM)
+        "%Y-%m-%d",                 # Date only (YYYY-MM-DD)
+        "%m/%d/%Y %H:%M:%S",        # US style with time (MM/DD/YYYY HH:MM:SS)
+        "%m/%d/%Y %H:%M",           # US style with time (MM/DD/YYYY HH:MM)
+        "%m/%d/%Y",                 # US style date only (MM/DD/YYYY)
+        "%d-%m-%Y %H:%M:%S",        # EU style with time (DD-MM-YYYY HH:MM:SS)
+        "%d-%m-%Y %H:%M",           # EU style with time (DD-MM-YYYY HH:MM)
+        "%d-%m-%Y",                 # EU style date only (DD-MM-YYYY)
+        "%Y/%m/%d %H:%M:%S",        # ISO-like with slashes (YYYY/MM/DD HH:MM:SS)
+        "%Y/%m/%d %H:%M",           # ISO-like with slashes (YYYY/MM/DD HH:MM)
+        "%Y%m%d%H%M%S",             # Compact ISO (YYYYMMDDHHMMSS)
+        "%Y%m%d",                   # Compact ISO date (YYYYMMDD)
+        "%I:%M %p",                 # US-style time (12-hour format with AM/PM)
+        "%I:%M:%S %p",              # US-style time with seconds (12-hour format with AM/PM)
+        "%m/%d/%Y %I:%M %p",        # US with AM/PM (MM/DD/YYYY HH:MM AM/PM)
+        "%m/%d/%Y %I:%M:%S %p",     # US with AM/PM (MM/DD/YYYY HH:MM:SS AM/PM)
+        "%d.%m.%Y",                 # EU/Asia style with dots (DD.MM.YYYY)
+        "%d.%m.%Y %H:%M:%S",        # EU/Asia style with dots and time (DD.MM.YYYY HH:MM:SS)
+        "%d.%m.%Y %H:%M",           # EU/Asia style with dots and time (DD.MM.YYYY HH:MM)
+        "%b %d, %Y",                # Month abbreviation with date (e.g., "Oct 01, 2024")
+        "%B %d, %Y %H:%M",          # Full month name with time (e.g., "October 01, 2024 14:30")
+        "%B %d, %Y",                # Full month name (e.g., "October 01, 2024")
         ]
         
         for fmt in formats:
             try:
-                return datetime.strptime(date_str, fmt)
+                res = datetime.strptime(date_str, fmt)
+                if res == '':
+                    continue
+                return res
             except ValueError:
                 continue
         return None
@@ -351,68 +393,6 @@ class DynamicTableView(ModelView):
         return combined_filter
 
 
-    # def get_list(self, page, sort_column, sort_desc, search, filters, execute=True, page_size=None):
-    #     """Overridden get_list method with filter support."""
-    #     model = self.get_model()
-    #     if not model:
-    #         return 0, []  # Return an empty list if no model is found.
-
-    #     # Initialize queries
-    #     query = self.session.query(model)
-    #     self.count_query = self.session.query(func.count()).select_from(model)
-    #     count = self.count_query.scalar()
-
-    #     if has_request_context():
-    #         combined_filter = self.get_filters_from_request(model)
-    #     # Apply the combined filter to both queries 
-    #     if combined_filter is not None:
-    #         query = query.filter(combined_filter)
-    #         self.count_query = self.count_query.filter(combined_filter)
-    #         filtered_count = self.count_query.scalar()
-    #         print(f"DEBUG: Applied filters. Original count: {count}, Filtered count: {filtered_count}")
-
-    #     # # Apply the combined filter if any 'SELECT public.gb_gb_unifier.building_code AS public_gb_gb_unifier_building_code, public.gb_gb_unifier.brand AS public_gb_gb_unifier_brand, public.gb_gb_unifier.stat_unifier AS public_gb_gb_unifier_stat_unifier, public.gb_gb_unifier.gauge_meter_uom AS public_gb_gb_unifier_gauge_meter_uom, public.gb_gb_unifier.supplier AS public_gb_gb_unifier_supplier, public.gb_gb_unifier.model AS public_gb_gb_unifier_model, public.gb_gb_unifier.asset_type AS public_gb_gb_unifier_asset_type, public.gb_gb_unifier.manufacturer AS public_gb_gb_unifier_manufacturer, public.gb_gb_unifier.model_1 AS public_gb_gb_unifier_model_1, public.gb_gb_unifier.sensor_type AS public_gb_gb_unifier_sensor_type, public.gb_gb_unifier.installation_date AS public_gb_gb_unifier_installation_date, public.gb_gb_unifier.serial_number AS public_gb_gb_unifier_serial_number, public.gb_gb_unifier.latest_reading AS public_gb_gb_unifier_latest_reading, public.gb_gb_unifier.asset_id AS public_gb_gb_unifier_asset_id, public.gb_gb_unifier.de_activation_date AS public_gb_gb_unifier_de_activation_date, public.gb_gb_unifier.activation_date AS public_gb_gb_unifier_activation_date, public.gb_gb_unifier.country_name AS public_gb_gb_unifier_country_name, public.gb_gb_unifier.building_name AS public_gb_gb_unifier_building_name, public.gb_gb_unifier.idx AS public_gb_gb_unifier_idx \nFROM public.gb_gb_unifier \nWHERE public.gb_gb_unifier.installation_date ILIKE %(installation_date_1)s AND public.gb_gb_unifier.installation_date ILIKE %(installation_date_1)s'
-    #     #'SELECT eyedro.gb_b12005e9.epoch_secs AS eyedro_gb_b12005e9_epoch_secs, eyedro.gb_b12005e9.ts AS eyedro_gb_b12005e9_ts, eyedro.gb_b12005e9.a_p1 AS eyedro_gb_b12005e9_a_p1, eyedro.gb_b12005e9.a_p2 AS eyedro_gb_b12005e9_a_p2, eyedro.gb_b12005e9.a_p3 AS eyedro_gb_b12005e9_a_p3, eyedro.gb_b12005e9.v_p1 AS eyedro_gb_b12005e9_v_p1, eyedro.gb_b12005e9.v_p2 AS eyedro_gb_b12005e9_v_p2, eyedro.gb_b12005e9.v_p3 AS eyedro_gb_b12005e9_v_p3, eyedro.gb_b12005e9.pf_p1 AS eyedro_gb_b12005e9_pf_p1, eyedro.gb_b12005e9.pf_p2 AS eyedro_gb_b12005e9_pf_p2, eyedro.gb_b12005e9.pf_p3 AS eyedro_gb_b12005e9_pf_p3, eyedro.gb_b12005e9.wh_p1 AS eyedro_gb_b12005e9_wh_p1, eyedro.gb_b12005e9.wh_p2 AS eyedro_gb_b12005e9_wh_p2, eyedro.gb_b12005e9.wh_p3 AS eyedro_gb_b12005e9_wh_p3, eyedro.gb_b12005e9.api_flag AS eyedro_gb_b12005e9_api_flag \nFROM eyedro.gb_b12005e9 \nWHERE eyedro.gb_b12005e9.a_p1 < %(a_p1_1)s AND eyedro.gb_b12005e9.a_p1 < %(a_p1_1)s'
-    #     # if combined_filter is not None:
-    #     #     query = query.filter(combined_filter)
-    #     #     #! sqlalchemy < v2
-    #     #     #self.count_query = query.statement.with_only_columns([func.count()]).order_by(None)
-    #     #     #! sqlalchemy >= v2
-    #     #     self.count_query = query.statement.with_only_columns(func.count()).order_by(None)
-
-    #         # Get the count with filters applied
-    #         count = self.session.scalar(self.count_query)
-
-    #     # Apply pagination at the database level
-    #     page_size = page_size or self.page_size
-    #     offset = (page - 1) * page_size if page else 0
-    #     # Get primary key for consistent ordering
-    #     if model.__table__.primary_key.columns:
-    #         pk_column = next(iter(model.__table__.primary_key.columns))
-    #         query = query.order_by(pk_column)
-
-    #     # Get rows with pagination
-    #     rows = query.limit(page_size).offset(offset).all()
-    #     # Process the rows
-    #     processed_rows = []
-    #     for idx, row in enumerate(rows):
-    #         row_number = offset + idx + 1
-    #         row_data = {
-    #             col.name: getattr(row, col.name)
-    #             for col in model.__table__.columns
-    #         }
-    #         row_data["row_number"] = row_number
-    #         processed_rows.append(DynamicRowModel(row_data, row_number))
-
-    #     # Print debug info
-    #     print(f"DEBUG: Query returned {count} total rows")
-    #     print(f"DEBUG: Returning {len(processed_rows)} rows for page {page}")
-    #     print(f"DEBUG: Query SQL: {query.statement.compile(dialect=engine.dialect, compile_kwargs={'literal_binds': True})}")
-
-    #     return count, processed_rows
-
-
-
     def get_list(self, page, sort_column, sort_desc, search, filters, execute=True, page_size=None):
         """Overridden get_list method with filter support."""
         model = self.get_model()
@@ -432,40 +412,44 @@ class DynamicTableView(ModelView):
         if column_name and hasattr(model, column_name):
             column = getattr(model, column_name)
             if hasattr(column.type, 'python_type'):
+                condition = None
                 python_type = column.type.python_type
                 if issubclass(python_type, (datetime, str)):
                     start_date = self.parse_date(start_dt)
                     end_date = self.parse_date(end_dt)
-                    condition = column.cast(Date).between(start_date, end_date)
+                    if start_date == end_date == None:
+                        condition = None
+                    elif start_date and end_date:
+                        condition = column.cast(Date).between(start_date, end_date)
+                    elif start_date is None and end_date is not None:
+                        condition = column.cast(Date) <= end_date
+                    elif start_date is not None and end_date is None:
+                        condition = column.cast(Date) >= start_date
                 else: # assume str
                     print(f"Date column type: {python_type} not date or str")
-                combined_filter = condition
+                if condition is not None:
+                    combined_filter = condition
             else:
                 print("Date column type not found")
         else:
             print("Date column not found")
-        
-        
-        
-        
-        
+
         if has_request_context():
             for i in range(10):  # Limit to reasonable number of filters
                 column_name = request.args.get(f'filter_column_{i}')
                 filter_value = request.args.get(f'filter_value_{i}')
                 operator = request.args.get(f'filter_operator_{i}', 'AND')
-                
+
                 if not column_name or not filter_value:
                     break
-                    
+
                 if hasattr(model, column_name):
                     column = getattr(model, column_name)
-                    
                     # Create filter condition
                     try:
                         if hasattr(column.type, 'python_type'):
                             python_type = column.type.python_type
-                            
+
                             if issubclass(python_type, (int, float)):
                                 try:
                                     filter_value = python_type(filter_value)
@@ -478,22 +462,20 @@ class DynamicTableView(ModelView):
                                 condition = column == filter_value
                         else:
                             condition = column.ilike(f'%{filter_value}%')
-                        
                         # Build combined filter condition
                         if combined_filter is None:
                             combined_filter = condition
-                        elif operator == 'AND':
-                            combined_filter = and_(combined_filter, condition)
-                        else:  # OR
+                        elif operator == 'OR':
                             combined_filter = or_(combined_filter, condition)
-                        
+                        else:  # AND
+                            combined_filter = and_(combined_filter, condition)
+
                         print(f"DEBUG: Added filter: {column_name} {'LIKE' if isinstance(condition, str) else '='} {filter_value} with {operator}")
                     except Exception as e:
                         print(f"DEBUG: Error applying filter: {str(e)}")
                 else:
                     print(f"DEBUG: Invalid filter column: {column_name}")
-        
-        
+
         #####combined_filter = None
         if has_request_context():
             for i in range(10):  # Limit to reasonable number of filters
@@ -602,14 +584,12 @@ class DynamicTableView(ModelView):
         for idx, row in enumerate(rows):
             # if row is None:
             #     continue
-            row_number = offset + idx + 1
             row_data = {
                 col.name: getattr(row, col.name)
                 for col in model.__table__.columns
             }
-            row_data["row_number"] = row_number
-            processed_rows.append(DynamicRowModel(row_data, row_number))
-        
+            processed_rows.append(DynamicRowModel(row_data))
+    
         # Print debug info
         print(f"DEBUG: Query returned {count} total rows")
         print(f"DEBUG: Returning {len(processed_rows)} rows for page {page}")
@@ -771,11 +751,14 @@ class DynamicTableView(ModelView):
         model = self.get_model()
         if model:
             self.model = model
-            self.column_list = ['row_number'] + [col.name for col in model.__table__.columns]
-            self.column_labels = {'row_number': '#'}
-            self.column_labels.update({
-                col.name: col.name.capitalize() for col in model.__table__.columns
-            })
+            # self.column_list = ['row_number'] + [col.name for col in model.__table__.columns]
+            # self.column_labels = {'row_number': '#'}
+            # self.column_labels.update({
+            #     col.name: col.name.capitalize() for col in model.__table__.columns
+            # })
+            self.column_list =  [col.name for col in model.__table__.columns]
+            self.column_labels = {col.name: col.name.capitalize() for col in model.__table__.columns}
+
         super()._refresh_cache()
 
     def is_accessible(self):
@@ -783,6 +766,16 @@ class DynamicTableView(ModelView):
         model_exists = self.get_model() is not None
         self._refresh_cache()
         return model_exists
+
+    def get_foreign_key_columns(self):
+        fk_info = {}
+        for col in self.model.__table__.columns:
+            for fk in col.foreign_keys:
+                fk_info[col.name] = {
+                    'referred_table': fk.column.table.name,
+                    'referred_column': fk.column.name
+                }
+        return fk_info
 
     def scaffold_form(self):
         """Scaffold the form dynamically based on the model's columns."""
@@ -794,71 +787,98 @@ class DynamicTableView(ModelView):
             return super().scaffold_form()
 
         self.model = model
+
+        # Extract columns involved in the primary key (composite PK)
         pk_columns = [col.name for col in model.__table__.primary_key.columns]
-        form_columns = [col.name for col in model.__table__.columns if col.name not in pk_columns]
+
+        # Get foreign key columns
+        fk_columns = [
+            col.name for col in self.model.__table__.columns if col.foreign_keys
+        ]
+
+        # Build list of editable columns (exclude PK and FK)
+        form_columns = [
+            col.name
+            for col in model.__table__.columns
+            if col.name not in pk_columns  # exclude primary keys
+        ]
         self.form_columns = form_columns
 
-        class DynamicModelForm(FlaskForm): pass
+        class DynamicModelForm(FlaskForm):
+            pass
 
-        for col_name in form_columns:
-            column = model.__table__.columns.get(col_name)
-            if column is not None:
-                field = None
-                if isinstance(column.type, Integer):
-                    field = IntegerField(col_name.capitalize(), validators=[DataRequired()])
-                elif isinstance(column.type, String):
-                    field = StringField(col_name.capitalize(), validators=[DataRequired()])
-                elif isinstance(column.type, Boolean):
-                    field = BooleanField(col_name.capitalize())
-                elif isinstance(column.type, Date):
-                    field = DateField(col_name.capitalize(), validators=[DataRequired()])
-                if field:
-                    setattr(DynamicModelForm, col_name, field)
+        # Loop through all columns to build fields
+        for col in model.__table__.columns:
+            col_name = col.name
+
+            # Mark pk or fk as read-only
+            is_readonly = col_name in pk_columns or col_name in fk_columns
+
+            field = None
+            kwargs = {'validators': [DataRequired()]} if not is_readonly else {}
+            
+            # If the field is read-only, apply the 'ReadOnlyInput' widget
+            if is_readonly:
+                kwargs['render_kw'] = {'readonly': True}
+                kwargs['widget'] = ReadOnlyInput()  # Apply the custom widget
+
+            # Handle different column types and create fields accordingly
+            if isinstance(col.type, Integer):
+                field = IntegerField(col_name.capitalize(), **kwargs)
+            elif isinstance(col.type, String):
+                field = StringField(col_name.capitalize(), **kwargs)
+            elif isinstance(col.type, Boolean):
+                field = BooleanField(col_name.capitalize())
+            elif isinstance(col.type, Date):
+                field = DateField(col_name.capitalize(), **kwargs)
+
+            if field:
+                setattr(DynamicModelForm, col_name, field)
 
         return DynamicModelForm
 
-    def get_pk_value(self, model):
-        """Get the primary key value for a given model instance."""
-        if hasattr(model, 'row_number'):
-            return getattr(model, 'row_number')
-        if hasattr(model, '__table__'):
-            pk_columns = [col.name for col in model.__table__.primary_key.columns]
-            if len(pk_columns) == 1:
-                return getattr(model, pk_columns[0])
-            elif pk_columns:
-                return tuple(getattr(model, col) for col in pk_columns)
-        return None
+        def get_pk_value(self, model):
+            """Get the primary key value for a given model instance."""
+            if hasattr(model, 'row_number'):
+                return getattr(model, 'row_number')
+            if hasattr(model, '__table__'):
+                pk_columns = [col.name for col in model.__table__.primary_key.columns]
+                if len(pk_columns) == 1:
+                    return getattr(model, pk_columns[0])
+                elif pk_columns:
+                    return tuple(getattr(model, col) for col in pk_columns)
+            return None
 
-    def handle_action(self, return_view=None):
-        """Handle actions like delete for the selected rows."""
-        model = self.get_model()
-        if not model:
-            return redirect(self.get_url(".index_view"))
+        def handle_action(self, return_view=None):
+            """Handle actions like delete for the selected rows."""
+            model = self.get_model()
+            if not model:
+                return redirect(self.get_url(".index_view"))
 
-        selected_rows = request.form.getlist("rowid")
-        if selected_rows:
-            pk_columns = [col.name for col in model.__table__.primary_key.columns]  # ✅ fixed line
-            for pk_str in selected_rows:
+            selected_rows = request.form.getlist("rowid")
+            if selected_rows:
+                pk_columns = [col.name for col in model.__table__.primary_key.columns]  # ✅ fixed line
+                for pk_str in selected_rows:
+                    try:
+                        if len(pk_columns) > 1:
+                            pk_values = eval(pk_str)
+                            filters = {col: val for col, val in zip(pk_columns, pk_values)}
+                            row = self.session.query(model).filter_by(**filters).first()
+                        else:
+                            row = self.session.get(model, pk_str)
+                        if row:
+                            self.session.delete(row)
+                    except Exception as e:
+                        flash(f"Error deleting row: {str(e)}", "error")
+
                 try:
-                    if len(pk_columns) > 1:
-                        pk_values = eval(pk_str)
-                        filters = {col: val for col, val in zip(pk_columns, pk_values)}
-                        row = self.session.query(model).filter_by(**filters).first()
-                    else:
-                        row = self.session.get(model, pk_str)
-                    if row:
-                        self.session.delete(row)
+                    self.session.commit()
+                    flash(f"Deleted {len(selected_rows)} row(s).", "success")
                 except Exception as e:
-                    flash(f"Error deleting row: {str(e)}", "error")
+                    self.session.rollback()
+                    flash(f"Commit failed: {str(e)}", "error")
 
-            try:
-                self.session.commit()
-                flash(f"Deleted {len(selected_rows)} row(s).", "success")
-            except Exception as e:
-                self.session.rollback()
-                flash(f"Commit failed: {str(e)}", "error")
-
-        return redirect(self.get_url(".index_view"))
+            return redirect(self.get_url(".index_view"))
 
     def inaccessible_callback(self, name, **kwargs):
         """Handle case when view is inaccessible."""
@@ -866,10 +886,10 @@ class DynamicTableView(ModelView):
         print("DEBUG: Session table =", flask_session.get("table"))
         flash("Please select a schema and table first.")
         #return redirect("/")
-        return redirect("/admin/dynamictable/")
+        return redirect("/admin/dynamictable")
 
 
-admin = Admin(app, name="Postgres Admin", template_mode="bootstrap4")
+admin = Admin(app, name="UNHCR AZURE Admin", template_mode="bootstrap4")
 
 # Register the DynamicTableView with the admin interface
 admin.add_view(
@@ -976,7 +996,7 @@ def index():
         ):
             flask_session["schema"] = selected_schema
             flask_session["table"] = selected_table
-            return redirect("/admin/dynamictable/")
+            return redirect("/admin/dynamictable")
 
     if selected_schema and selected_schema != "-- choose schema --":
             tables = sorted(get_tables_with_counts(selected_schema))
@@ -997,33 +1017,108 @@ def go_admin():
     #flask_session.pop("table", None)
     return redirect("/")
 
-@app.route("/admin/dynamictable", methods=["GET"])
+admin_rt = '/admin/dynamictable'
+@app.route(admin_rt, methods=["GET", "POST"])
 def index_view():
     # Print all request arguments for debugging
     print("DEBUG: Request args:", request.args)
     
     page = request.args.get('page', 1, type=int)
-    
-    # Create an instance of DynamicTableView
+
+    # Create the dynamic admin view
     table_view = DynamicTableView(session=db.session)
+    table_view.admin = admin
     
     # Get the model based on schema and table
     model = table_view.get_model()
     if not model:
         flash("Please select a schema and table first.")
         return redirect("/")
+
+    # Handle form submission (editing rows)
+    if request.method == "POST":
+        formdata = request.form.to_dict()
+        print("DEBUG: Form submission:", formdata)
+
+        if model:
+            # Get the original primary key values
+            pk_filters = []
+            for pk_col in model.__table__.primary_key.columns:
+                orig_value = formdata.get(f"orig_{pk_col.name}")
+                if orig_value is None:
+                    flash(f"Missing original value for PK column: {pk_col.name}")
+                    return redirect('/')
+
+                try:
+                    # Cast to correct type
+                    python_type = pk_col.type.python_type
+                    if orig_value in ( "None", None):
+                        typed_value = None
+                    elif python_type in (datetime, date):
+                        typed_value = table_view.parse_date(orig_value)
+                    else:
+                        typed_value = python_type(orig_value)
+                except Exception as e:
+                    flash(f"Failed to cast {orig_value} for {pk_col.name}: {e}")
+                    return redirect(request.url)
+
+                pk_filters.append(getattr(model, pk_col.name) == typed_value)
+
+            obj = db.session.query(model).filter(*pk_filters).first()
+            if obj:
+                # Update attributes
+                # Columns to exclude from update
+                excluded_fields = {"created", "updated"}
+
+                for field, value in formdata.items():
+                    if field.startswith("orig_pk_") or field in excluded_fields:
+                        continue
+
+                    if not hasattr(obj, field):
+                        continue
+
+                    col = getattr(model, field, None)
+                    column_obj = model.__table__.columns.get(field)
+
+                    if column_obj is None:
+                        continue
+
+                    python_type = column_obj.type.python_type
+
+                    if value in ("", "None", None):
+                        if not isinstance(column_obj.type, String):  # Empty string is valid for strings
+                            if not column_obj.nullable:
+                                flash(f"{field} is required and cannot be empty.")
+                                return redirect(request.url)
+                            value = None
+                    else:
+                        try:
+                            if python_type in (datetime, date):
+                                value = table_view.parse_date(value)
+                            else:
+                                value = python_type(value)
+                        except Exception as e:
+                            flash(f"Error casting {field}: {e}")
+                            return redirect(request.url)
+
+                    setattr(obj, field, value)
+
+                db.session.commit()
+                flash("Row updated.")
+            else:
+                flash("Row not found.")
+        return redirect(request.url)
     
-    # Refresh the column list and labels
+    # Refresh column metadata
     table_view._refresh_cache()
-    
-    # Extract date/datetime columns
+
+    # Extract date-like columns
     date_columns = [
-        col.name
-        for col in model.__table__.columns
+        col.name for col in model.__table__.columns
         if isinstance(col.type, (Date, DateTime)) or 'date' in col.name.lower()
     ]
-    
-    # Get filter parameters
+
+    # Filter handling
     filter_params = {}
     i = 0
     while request.args.get(f'filter_column_{i}') is not None:
@@ -1032,25 +1127,22 @@ def index_view():
         if i > 0:
             filter_params[f'filter_operator_{i}'] = request.args.get(f'filter_operator_{i}', 'AND')
         i += 1
-    
+
     print("DEBUG: Filter params:", filter_params)
     
     # Call get_list to get count and rows
     count, rows = table_view.get_list(page=page, sort_column=None, sort_desc=None, search=None, filters=None)
     
     # Generate pagination data
-    pagination_data = table_view.get_pagination_data(page, count, table_view.page_size)
-    
+    #pagination_data = table_view.get_pagination_data(page, count, table_view.page_size)
+
     # Pass the data to the template
-    return render_template(
+    return table_view.render(
         'admin/custom_list.html', 
-        admin_view=table_view,
         data=rows, 
         count=count, 
-        pagination=pagination_data,
-        column_list=table_view.column_list,
-        column_labels=table_view.column_labels,
-        date_columns=date_columns,
+        foreign_key_info=table_view.get_foreign_key_columns(),
+        primary_key_columns=table_view.primary_key_columns,
         filter_params=filter_params
     )
 
@@ -1075,10 +1167,24 @@ def download():
 
         if fd.date_column and fd.start_date and fd.end_date:
             try:
-                start = datetime.strptime(fd.start_date, "%Y-%m-%d")
-                end = datetime.strptime(fd.end_date, "%Y-%m-%d")
+                table_view = DynamicTableView(session=db.session)
+                start = table_view.parse_date(fd.start_date)
+                end = table_view.parse_date(fd.end_date)
             except ValueError:
                 flash("Invalid date format.")
+                return redirect(request.referrer or "/")
+            msg = None
+            if start == end == None:
+                msg = f"You must enter both start and end date "
+            elif start is None and end is not None:
+                msg = f"Invalid date format for start date: {fd.start_date}"
+            elif end is None and start is not None:
+                msg = f"Invalid date format for end date: {fd.end_date}"
+            elif start > end:
+                msg = "Start date must be before end date."
+
+            if msg:
+                flash(msg)
                 return redirect(request.referrer or "/")
 
             query = f"""
