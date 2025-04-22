@@ -6,7 +6,7 @@
 
 # Check if the application is alive
 if ! curl -s --head --request GET http://localhost:5000/alive | grep "200 OK" > /dev/null; then
-    sudo echo "Service is down, killing the process..." >> /datadrive/logs/cron_ >> /datadrive/logs/cron_web_app.log
+    sudo echo "Service is down, killing the process..." >> /datadrive/logs/cron_web_app.log
 
     # Get the PID of the running web app
     # Loop until no PID is found
