@@ -1014,6 +1014,10 @@ def index():
         logs=[],
     )
 
+#cd /home/unhcr_admin/code/unhcr_module/web_app && pgrep -fx "sudo /bin/bash ./scripts/web_app.sh" > /dev/null || (sudo /bin/bash ./scripts/web_app.sh | sudo tee -a /datadrive/logs/web_app.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_web_app.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_web_app.log')
+@app.route("/alive", methods=["GET"])
+def alive():
+    return 'ALIVE', 200
 
 @app.route("/admin")
 def go_admin():
