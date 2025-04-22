@@ -81,7 +81,7 @@ body.dark-mode .table {
     color: #e0e0e0;
 }
 
-body.dark-mode .table thead th {
+body.dark-mode .table thead th td {
     background-color: #2c2c2c;
 }
 
@@ -202,3 +202,60 @@ body.dark-mode [data-tooltip]:hover:before {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
   }
+
+  #data-table-wrapper {
+    overflow-x: auto;
+    position: relative;
+}
+
+#data-table {
+    width: max-content;
+    min-width: 100%;
+}
+
+/* Make sure inputs stay nicely styled */
+td input[type="text"] {
+    width: 100%;
+    padding: 4px;
+}
+
+td {
+    vertical-align: middle;
+}
+
+.floating-save-btn {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 999;
+    display: none; /* hidden by default */
+}
+
+input.unsaved {
+    background-color: #2ea131 !important; /* light yellow */
+    border: 1px solid #ffc107 !important;
+}
+
+tr.disabled-row {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+#floating-save-form {
+    position: fixed;
+    display: none;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: none; /* controlled by JS */
+    gap: 10px;
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.25);
+    padding: 12px 24px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+

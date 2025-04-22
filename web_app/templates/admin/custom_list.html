@@ -23,10 +23,10 @@
 <!-- Page Content -->
 <div class="container-fluid">
     <div id="total-rows-display">
+        <strong style="color: white;" data-tooltip="Total number of rows in the table">Total Rows: {{ count }}</strong>
         <button id="theme-toggle" class="btn btn-outline-secondary" style="height: 29px;" data-tooltip="Toggle between light and dark mode">
             🌙 Dark Mode
         </button>
-        <strong style="color: white;" data-tooltip="Total number of rows in the table">Total Rows: {{ count }}</strong>
     </div>
     <div class="filter-actions d-flex justify-content-between align-items-center mb-3">
         <!-- Dropdown for selecting saved filters -->
@@ -190,66 +190,44 @@
         </div>
     </div>
     <div style="top: -85px; position: relative;">
-        <div class="card mt-4 mb-4 p-2" style="display: inline-block;">
+        <div class="card mt-4 mb-4 p-2" style="display: inline-block; width:100%; top: -8px;height: 100px;">
             <div class="d-flex align-items-center gap-3" style="flex-wrap: nowrap; white-space: nowrap;">
                 <!-- Form Section -->
-                <form method="POST" action="{{ url_for('download') }}" class="d-flex align-items-center gap-2">
-                    <input type="hidden" name="schema" id="schema" value="" />
-                    <input type="hidden" name="table" id="table" value="" />
-
-                    {% if date_columns %}
-                    <div class="d-flex align-items-center gap-1">
-                        <label for="date_column" class="mb-0 small me-1" data-tooltip="Select the date column for filtering">Date column:</label>
-                        <select
-                            name="date_column"
-                            id="date_column"
-                            class="form-select form-select-sm"
-                            style="width: 120px;"
-                            data-tooltip="Select a date column"
-                        >
-                            {% for col in date_columns %}
-                            <option value="{{ col }}">{{ col }}</option>
-                            {% endfor %}
+                <form method="POST" action="{{ url_for('download') }}" class="d-flex align-items-end gap-3 flex-wrap">
+                    <input type="hidden" name="schema" id="schema" value="eyedro">
+                    <input type="hidden" name="table" id="table" value="gb_0098063d">
+                
+                    <div class="d-flex flex-column gap-1">
+                        <label for="date_column" class="small" data-tooltip="Select the date column for filtering">Date column:</label>
+                        <select name="date_column" id="date_column" class="form-select form-select-sm" style="width: 120px;" data-tooltip="Select a date column">
+                            <option value="ts">ts</option>
                         </select>
                     </div>
-
-                    <div class="d-flex align-items-center gap-1">
-                        <label for="start_date" class="mb-0 small me-1" data-tooltip="Select the start date for the filter">Start:</label>
-                        <input
-                            type="date"
-                            name="start_date"
-                            id="start_date"
-                            class="form-control form-control-sm"
-                            style="width: 130px;"
-                            required
-                            data-tooltip="Enter the start date"
-                        />
+                
+                    <div class="d-flex flex-column gap-1">
+                        <label for="start_date" class="small" data-tooltip="Select the start date for the filter">Start:</label>
+                        <input type="date" name="start_date" id="start_date" class="form-control form-control-sm" style="width: 130px;" required data-tooltip="Enter the start date">
                     </div>
-
-                    <div class="d-flex align-items-center gap-1">
-                        <label for="end_date" class="mb-0 small me-1" data-tooltip="Select the end date for the filter">End:</label>
-                        <input
-                            type="date"
-                            name="end_date"
-                            id="end_date"
-                            class="form-control form-control-sm"
-                            style="width: 130px;"
-                            required
-                            data-tooltip="Enter the end date"
-                        />
+                
+                    <div class="d-flex flex-column gap-1">
+                        <label for="end_date" class="small" data-tooltip="Select the end date for the filter">End:</label>
+                        <input type="date" name="end_date" id="end_date" class="form-control form-control-sm" style="width: 130px;" required data-tooltip="Enter the end date">
                     </div>
-
-                    <button type="submit" class="btn btn-sm btn-primary" data-tooltip="Download the filtered data as CSV">Download CSV</button>
-                    {% else %}
-                    <p class="mb-0 me-2"><em>No date or datetime columns found.</em></p>
-                    {% endif %}
+                
+                    <div class="d-flex flex-column">
+                        <label class="invisible">Download</label>
+                        <button type="submit" class="btn btn-sm btn-primary" data-tooltip="Download the filtered data as CSV">Download CSV</button>
+                    </div>
                 </form>
+                
+          
 
                 <!-- Navigation Buttons Section -->
-                {% if date_columns %}
-                <div class="d-flex align-items-center gap-2">
-                    <div class="d-flex align-items-center gap-1">
-                        <label for="jump-amount" class="mb-0 small me-1" data-tooltip="Enter number of pages to jump">Jump by pages:</label>
+            </div>
+            {% if date_columns %}
+                <div class="d-flex align-items-end gap-3 flex-wrap  justify-content-end" style="top: -70px;position: relative;">
+                    <div class="d-flex flex-column gap-2  justify-content-end">
+                        <label for="jump-amount" class="small" data-tooltip="Enter number of pages to jump">Jump by pages:</label>
                         <input
                             type="number"
                             id="jump-amount"
@@ -259,23 +237,48 @@
                             data-tooltip="Enter number of pages"
                         />
                     </div>
+                
+                    <div class="d-flex flex-column">
+                        <label class="invisible">Jump</label>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="handleJump(this)" data-tooltip="Jump by specified pages">Jump</button>
+                    </div>
+                
+                    <div class="d-flex flex-column">
+                        <label class="invisible">First</label>
+                        {% if pagination.has_prev %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to first page">First</button>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" disabled>First</button>
+                        {% endif %}
+                    </div>
 
-                    <button type="button" class="btn btn-sm btn-primary" onclick="handleJump(this)" data-tooltip="Jump by specified pages">Jump</button>
-
-                    {% if pagination.has_prev %}
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to previous page">Prev</button>
-                    {% else %}
-                    <button type="button" class="btn btn-sm btn-outline-primary" disabled>Prev</button>
-                    {% endif %}
-
-                    {% if pagination.has_next %}
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to next page">Next</button>
-                    {% else %}
-                    <button type="button" class="btn btn-sm btn-outline-primary" disabled>Next</button>
-                    {% endif %}
+                    <div class="d-flex flex-column">
+                        <label class="invisible">Prev</label>
+                        {% if pagination.has_prev %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to previous page">Prev</button>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" disabled>Prev</button>
+                        {% endif %}
+                    </div>
+                
+                    <div class="d-flex flex-column">
+                        <label class="invisible">Next</label>
+                        {% if pagination.has_next %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to next page">Next</button>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" disabled>Next</button>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex flex-column">
+                        <label class="invisible">Last</label>
+                        {% if pagination.has_next %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to Last page">Last</button>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" disabled>Last</button>
+                        {% endif %}
+                    </div>
                 </div>
                 {% endif %}
-            </div>
         </div>
         
         {% if not pagination.is_large_dataset %}
@@ -307,64 +310,66 @@
         {% endif %}
 
         <!-- Data Table -->
-        <table id="data-table" class="table table-striped">
-            <thead>
-            <tr>
-                {% for column in column_list %}
-                <th data-tooltip="Column: {{ column_labels[column] }}">{{ column_labels[column] }}</th>
-                {% endfor %}
-            </tr>
-            </thead>
-            <tfoot>
-            <tr>
-                {% for column in column_list %}
-                <th></th>
-                {% endfor %}
-            </tr>
-            </tfoot>
-            <tbody>
-                {% for row in data %}
-                <tr>
-                    <form method="POST" action="/admin/dynamictable">
-                        {% for col_name in admin_view.column_list %}
-                        <td>
-                            {% if col_name in foreign_key_info %}
-                                <!-- Hidden original PK value -->
+        <div id="data-table-wrapper" style="overflow-x: auto; top: -20px;">
+            <table id="data-table" class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>row</th>
+                        {% for column in column_list %}
+                        <th data-tooltip="Column: {{ column_labels[column] }}">{{ column_labels[column] }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tfoot>
+                    <tr>
+                        {% for column in column_list %}
+                        <th></th>
+                        {% endfor %}
+                    </tr>
+                </tfoot>
+                <tbody>
+                    {% for row in data %}
+                    <tr data-row-id="{{ loop.index }}">
+                        <form method="POST" action="/admin/dynamictable" class="row-form" data-row-id="{{ loop.index }}">
+                            <td>{{ loop.index +(pagination_data.page_size * (pagination.page-1)) }}</td>
+                            {% for col_name in admin_view.column_list %}
+                            <td>
+                                {% if col_name in foreign_key_info %}
                                 <input type="hidden" name="orig_{{ col_name }}" value="{{ row[col_name] }}">
-                        
-                                <!-- PK: Orange styling -->
                                 <input type="text"
                                        name="{{ col_name }}"
                                        value="{{ row[col_name] }}"
                                        readonly
                                        style="background-color: #fff8e1; color: #c77700; cursor: not-allowed; border: 2px solid orange;"
                                        title="Foreign Key → {{ foreign_key_info[col_name].referred_table }}.{{ foreign_key_info[col_name].referred_column }}">
-                            
-                            {% elif col_name in primary_key_columns %}
-                                <!-- Hidden original FK value -->
+                                {% elif col_name in primary_key_columns %}
                                 <input type="hidden" name="orig_{{ col_name }}" value="{{ row[col_name] }}">
-                        
-                                <!-- FK: Green styling -->
                                 <input type="text"
                                        name="{{ col_name }}"
                                        value="{{ row[col_name] }}"
                                        readonly
                                        style="background-color: #e8f5e9; color: #2e7d32; cursor: not-allowed; border: 2px solid green;"
                                        title="Primary Key (read-only)">
-                            {% else %}
-                                <!-- Editable input -->
+                                {% else %}
                                 <input type="text" name="{{ col_name }}" value="{{ row[col_name] }}">
-                            {% endif %}
-                        </td>
-                        {% endfor %}
-                        <td>
-                            <button type="submit" class="btn btn-sm btn-primary">Save</button>
-                        </td>
-                    </form>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td>
+                                <button type="submit" class="btn btn-sm btn-primary" style="display: none;">Save</button>
+                            </td>
+                        </form>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Floating Save Button -->
+        <form id="floating-save-form" method="POST" class="floating-save-btn">
+            <button type="submit" class="btn btn-sm btn-primary me-2" style="color: green">Save</button>
+            <button type="button" id="cancel-btn" class="btn btn-sm btn-secondary" style="color: red">Cancel</button>
+        </form>        
 
         <!-- Flash Messages -->
         {% with messages = get_flashed_messages() %} {% if messages %}
@@ -387,6 +392,109 @@
 
 const baseUrl = "/admin/dynamictable";
 document.addEventListener('DOMContentLoaded', function () {
+
+
+    const floatingForm = document.getElementById('floating-save-form');
+    const cancelBtn = document.getElementById('cancel-btn');
+    let currentRow = null;
+    let rowChanged = false;  // Track if any input is changed in the current row
+    
+    // Set up each editable row
+    document.querySelectorAll('tr[data-row-id]').forEach(row => {
+        const inputs = row.querySelectorAll('input');
+        const form = row.querySelector('form');
+    
+        inputs.forEach(input => {
+            input.dataset.originalValue = input.value;
+    
+            input.addEventListener('focus', () => {
+                if (currentRow !== row) {
+                    activateRow(row);
+                }
+            });
+    
+            input.addEventListener('input', () => {
+                // Track if the value has changed
+                input.classList.toggle('unsaved', input.value !== input.dataset.originalValue);
+                rowChanged = Array.from(inputs).some(input => input.value !== input.dataset.originalValue);
+                if (rowChanged) {
+                    activateRow(currentRow)
+                    showFloatingButtons(form);
+                } else {
+                    deactivateAllRows()
+                    floatingForm.style.display = 'none';
+                }
+            });
+    
+            // Prevent form submission when pressing Enter
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();  // Prevent the form from submitting
+                }
+            });
+        });
+    });
+    
+    function activateRow(row) {
+        currentRow = row;
+    
+        // Only disable other rows if there are changes in the current row
+        if (rowChanged) {
+            document.querySelectorAll('tr[data-row-id]').forEach(r => {
+                if (r !== row) {
+                    r.classList.add('disabled-row');
+                    r.querySelectorAll('input').forEach(i => i.disabled = true);
+                }
+            });
+        }
+    }
+    
+    function deactivateAllRows() {
+        currentRow = null;
+    
+        document.querySelectorAll('tr[data-row-id]').forEach(r => {
+            r.classList.remove('disabled-row');
+            r.querySelectorAll('input').forEach(i => {
+                i.disabled = false;
+                i.classList.remove('unsaved');
+            });
+        });
+    }
+    
+    function showFloatingButtons(form) {
+        floatingForm.style.display = 'flex';
+        floatingForm.onsubmit = () => {
+            deactivateAllRows();
+            floatingForm.style.display = 'none';
+        };
+    
+        floatingForm.querySelector('button[type="submit"]').onclick = (e) => {
+            e.preventDefault(); // Prevent the floating form from submitting
+            const saveButton = form[form.length - 1];
+            if (saveButton) {
+                saveButton.click(); // Simulate actual click on original Save
+            }
+        };
+    }
+    
+    cancelBtn.addEventListener('click', () => {
+        if (currentRow) {
+            const inputs = currentRow.querySelectorAll('input');
+            inputs.forEach(input => {
+                input.value = input.dataset.originalValue;
+                input.classList.remove('unsaved');
+            });
+        }
+    
+        deactivateAllRows();
+        floatingForm.style.display = 'none';
+    });
+    
+
+//*************************************************************
+//*************************************************************
+//*************************************************************
+
 
   // When the modal is shown, set the iframe's source
     $('#iframeModal').on('show.bs.modal', function () {
@@ -574,9 +682,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.querySelectorAll('div.dt-length').forEach(el => el.remove());
     document.querySelectorAll('div.dt-search').forEach(el => el.remove());
-    let rows = document.querySelectorAll('div.dt-layout-row');
-    if (rows.length > 0) {
-        rows[rows.length - 1].remove();
+    let rowss = document.querySelectorAll('div.dt-layout-row');
+    if (rowss.length > 0) {
+        rowss[rows.length - 1].remove();
     }
     document.querySelectorAll('tfoot').forEach(el => el.remove());
 
@@ -773,6 +881,10 @@ function handleJump(el, event) {
     if (!isNaN(label)) {
         const pg = parseInt(label);
         jumpValue = pg - currentPage;
+    } else if (label === "First") {
+        jumpValue = (currentPage - 1) * -1;
+    }  else if (label === "Last") {
+        jumpValue = totalPages - currentPage + 1;;
     } else if (label === "Prev") {
         jumpValue = -1;
     } else if (label === "Next") {

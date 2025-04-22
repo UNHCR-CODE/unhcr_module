@@ -112,6 +112,7 @@ def get_pagination_data(self):
         page = request.args.get('page', 1, type=int)
         pagination_data = {
             'page': page,
+            'page_size': self.page_size,
             'total_pages': (row_count // self.page_size) + (1 if row_count % self.page_size else 0),
             'has_prev': page > 1,
             'has_next': page * self.page_size < row_count
@@ -121,6 +122,8 @@ def get_pagination_data(self):
         after = request.args.get('after', None, type=int)
         pagination_data = {
             'after': after,
+            'page': page,
+            'page_size': self.page_size,
             'before': None,  # Add backward pagination if necessary
             'has_more': row_count > (self.page_size if after else 0)
         }
@@ -706,6 +709,7 @@ class DynamicTableView(ModelView):
             'start_page': start_page,         # ✅ Added
             'end_page': end_page,             # ✅ Added
             'is_large_dataset': is_large_dataset,
+            'page_size': self.page_size
         }
         
         
@@ -1134,7 +1138,7 @@ def index_view():
     count, rows = table_view.get_list(page=page, sort_column=None, sort_desc=None, search=None, filters=None)
     
     # Generate pagination data
-    #pagination_data = table_view.get_pagination_data(page, count, table_view.page_size)
+    pagination_data = table_view.get_pagination_data(page, count, table_view.page_size)
 
     # Pass the data to the template
     return table_view.render(
@@ -1143,7 +1147,8 @@ def index_view():
         count=count, 
         foreign_key_info=table_view.get_foreign_key_columns(),
         primary_key_columns=table_view.primary_key_columns,
-        filter_params=filter_params
+        filter_params=filter_params,
+        pagination_data=pagination_data
     )
 
 @app.route("/download", methods=["POST"])
