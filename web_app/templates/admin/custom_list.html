@@ -457,6 +457,7 @@ document.addEventListener('DOMContentLoaded', function () {
             r.querySelectorAll('input').forEach(i => {
                 i.disabled = false;
                 i.classList.remove('unsaved');
+                i.blur();
             });
         });
     }
