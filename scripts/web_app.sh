@@ -6,11 +6,11 @@
 
 # Check if the application is alive
 if ! curl -s --head --request GET http://localhost:5000/alive | grep "200 OK" > /dev/null; then
-    echo "Service is down, killing the process..."
+    sudo echo "Service is down, killing the process..." >> /datadrive/logs/cron_ >> /datadrive/logs/cron_web_app.log
 
     # Get the PID of the running web app
     # Loop until no PID is found
-while true; do
+    while true; do
     # Get the PIDs of the running web app, excluding 'grep' itself
     pids=$(ps aux | grep "python3 ./web_app/web_app.py" | grep -v "grep" | awk '{print $2}')
 
@@ -21,16 +21,16 @@ while true; do
             sudo kill -9 "$pid" && echo "Process with PID $pid killed."
         done
     else
-        echo "No running process found for 'python3 web_app/web_app.py'."
+        sudo echo "No running process found for 'python3 web_app/web_app.py'." >> /datadrive/logs/cron_web_app.log
         break  # Exit the loop if no process is found
     fi
 
     # Optional: Sleep for a few seconds before checking again
     sleep 2
-done
+    done
 
     # Restart the service
-    echo "Restarting the web application..."
+    sudo echo "Restarting the web application..." >> /datadrive/logs/cron_web_app.log
 
     # change to your repo root dir
     cd /home/unhcr_admin/code/unhcr_module || exit 1
@@ -74,14 +74,14 @@ done
 
     # If Python script fails, log the exit code
     if [ $EXIT_CODE -ne 0 ]; then
-        echo "$(date): web_app.py FAILED with exit code $EXIT_CODE" >> /datadrive/logs/error_web_app.log
+        sudo echo "$(date): web_app.py FAILED with exit code $EXIT_CODE" >> /datadrive/logs/error_web_app.log
     fi
 
     # Exit with the same exit code as Python
     exit $EXIT_CODE
 
 
-    echo "Service restarted."
+    sudo echo "Service restarted." >> /datadrive/logs/cron_web_app.log
 else
-    echo "Service is alive."
+    sudo echo "Service is alive." >> /datadrive/logs/cron_web_app.log
 fi
