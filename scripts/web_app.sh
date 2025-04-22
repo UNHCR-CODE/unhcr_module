@@ -12,7 +12,8 @@ if ! curl -s --head --request GET http://localhost:5000/alive | grep "200 OK" > 
     echo "Service is down, killing the process..."
 
     # Get the PID of the running web app
-    pid=$(pgrep -f "python3 web_app.py")
+    pid=$(ps aux | grep "python3 web_app/web_app.py" | grep -v "vfedot" | grep -v grep | awk '{print $2}'
+)
 
     # Kill the process if it's found
     if [ -n "$pid" ]; then
