@@ -4,24 +4,30 @@
 # */1 * * * * cd /home/unhcr_admin/code/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/web_app.sh" > /dev/null || (sudo /bin/bash ./scripts/web_app.sh | sudo tee -a /datadrive/logs/web_app.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_web_app.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_web_app.log')
 
 
-
-#!/bin/bash
-
 # Check if the application is alive
 if ! curl -s --head --request GET http://localhost:5000/alive | grep "200 OK" > /dev/null; then
     echo "Service is down, killing the process..."
 
     # Get the PID of the running web app
-    pid=$(ps aux | grep "python3 ./web_app/web_app.py" | grep -v "vfedot" | grep -v grep | awk '{print $2}'
-)
+    # Loop until no PID is found
+while true; do
+    # Get the PIDs of the running web app, excluding 'grep' itself
+    pids=$(ps aux | grep "python3 ./web_app/web_app.py" | grep -v "grep" | awk '{print $2}')
 
-    # Kill the process if it's found
-    if [ -n "$pid" ]; then
-        kill -9 "$pid"
-        echo "Process with PID $pid killed."
+    # Check if any PIDs are found
+    if [ -n "$pids" ]; then
+        # Loop over each PID and kill it
+        for pid in $pids; do
+            sudo kill -9 "$pid" && echo "Process with PID $pid killed."
+        done
     else
-        echo "No running process found for 'python3 web_app.py'."
+        echo "No running process found for 'python3 web_app/web_app.py'."
+        break  # Exit the loop if no process is found
     fi
+
+    # Optional: Sleep for a few seconds before checking again
+    sleep 2
+done
 
     # Restart the service
     echo "Restarting the web application..."
@@ -39,7 +45,7 @@ if ! curl -s --head --request GET http://localhost:5000/alive | grep "200 OK" > 
         python3 -m venv $VENV_DIR
         echo "Virtual environment created successfully."
         source $VENV_DIR/bin/activate
-        pip install -r fedotreqs.txt
+        pip install --no-deps -r fedotreqs.txt
     else
         echo "Virtual environment '$VENV_DIR' already exists."
         source $VENV_DIR/bin/activate
@@ -79,7 +85,3 @@ if ! curl -s --head --request GET http://localhost:5000/alive | grep "200 OK" > 
 else
     echo "Service is alive."
 fi
-
-
-
-
