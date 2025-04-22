@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # every 1 min
-# */1 * * * * cd /home/unhcr_admin/code/unhcr_module/web_app && pgrep -fx "sudo /bin/bash ./scripts/web_app.sh" > /dev/null || (sudo /bin/bash ./scripts/web_app.sh | sudo tee -a /datadrive/logs/web_app.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_web_app.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_web_app.log')
+# */1 * * * * cd /home/unhcr_admin/code/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/web_app.sh" > /dev/null || (sudo /bin/bash ./scripts/web_app.sh | sudo tee -a /datadrive/logs/web_app.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_web_app.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_web_app.log')
 
 
 
@@ -12,7 +12,7 @@ if ! curl -s --head --request GET http://localhost:5000/alive | grep "200 OK" > 
     echo "Service is down, killing the process..."
 
     # Get the PID of the running web app
-    pid=$(ps aux | grep "python3 web_app/web_app.py" | grep -v "vfedot" | grep -v grep | awk '{print $2}'
+    pid=$(ps aux | grep "python3 ./web_app/web_app.py" | grep -v "vfedot" | grep -v grep | awk '{print $2}'
 )
 
     # Kill the process if it's found
