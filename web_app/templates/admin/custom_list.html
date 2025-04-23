@@ -193,7 +193,7 @@
         <div class="card mt-4 mb-4 p-2" style="display: inline-block; width:100%; top: -8px;height: 100px;">
             <div class="d-flex align-items-center gap-3" style="flex-wrap: nowrap; white-space: nowrap;">
                 <!-- Form Section -->
-                <form method="POST" action="{{ url_for('download') }}" class="d-flex align-items-end gap-3 flex-wrap">
+                <form method="POST" action="{{ url_for('download') }}" class="d-flex align-items-end gap-3 flex-wrap" style="z-index: 150;">
                     <input type="hidden" name="schema" id="schema" value="eyedro">
                     <input type="hidden" name="table" id="table" value="gb_0098063d">
                 
@@ -225,7 +225,7 @@
                 <!-- Navigation Buttons Section -->
             </div>
             {% if date_columns %}
-                <div class="d-flex align-items-end gap-3 flex-wrap  justify-content-end" style="top: -70px;position: relative;">
+                <div class="d-flex align-items-end gap-3 flex-wrap  justify-content-end" style="top: -70px;position: relative; z-index: 100">
                     <div class="d-flex flex-column gap-2  justify-content-end">
                         <label for="jump-amount" class="small" data-tooltip="Enter number of pages to jump">Jump by pages:</label>
                         <input
@@ -579,7 +579,7 @@ document.addEventListener('DOMContentLoaded', function () {
     **/
 
 
-    // Load most recent saved filter set, if any
+    /* Load most recent saved filter set, if any
     let mostRecentFilterName = null;
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -588,11 +588,13 @@ document.addEventListener('DOMContentLoaded', function () {
             break; // Load the first saved filter set found
         }
     }
+    
     if (mostRecentFilterName) {
         loadFiltersByName(mostRecentFilterName);
         $('#filter-names-dropdown').val(mostRecentFilterName); // Update dropdown
         //$('#filter-names-dropdown option:first').prop('selected', true).trigger('change');
     }
+    */
 
     // Load the last jump value from localStorage or set default to 10
     const jumpInput = document.getElementById('jump-amount');
@@ -746,7 +748,7 @@ function add_date_args(queryParams){
 function applyFilters() {
     const filters = getActiveFilters();
     console.log("Applying filters:", filters);
-    const queryParams = new URLSearchParams(window.location.search);
+    const queryParams = new URLSearchParams();
     queryParams.set('page', 1);
     Object.entries(filters).forEach(([key, value]) => {
         queryParams.set(key, value);
@@ -812,6 +814,8 @@ $(document).ready(function() {
         console.log('RRRRRRR', selectedFilter)
         if (selectedFilter) {
             loadFiltersByName(selectedFilter);
+            $('#filter-name').val($(this).val());
+        $(this).blur()
         }
     });
 
@@ -822,6 +826,13 @@ $(document).ready(function() {
             $(this).trigger('change');
         }
     });
+
+    $('#filter-names-dropdown').on('blur', function () {
+        // Only change if nothing selected (e.g. placeholder is selected)
+        //if (this.selectedIndex <= 0) {
+          this.selectedIndex = 0; // Select first real option
+        //}
+      });
 
     // Attach event listeners to navigation buttons to pass the event
     document.querySelectorAll('.btn[onclick="handleJump(this)"]').forEach(button => {
@@ -907,11 +918,11 @@ function handleJump(el, event) {
     }
 
  
-    const queryParams = new URLSearchParams(window.location.search);
+    const queryParams = new URLSearchParams();
     let newPage = Math.max(1, Math.min(currentPage + jumpValue, totalPages));
     const filters = getActiveFilters();
     Object.entries(filters).forEach(([key, value]) => {
-        queryParams.set(`${encodeURIComponent(key)}`, `${encodeURIComponent(value)}`);
+        queryParams.set(key, value);
         console.log(`Setting param: ${key} = ${value}`);
     });
     //const filterQueryString = Object.entries(filterParams)
