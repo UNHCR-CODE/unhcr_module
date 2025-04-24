@@ -460,8 +460,18 @@ document.addEventListener('DOMContentLoaded', function () {
     deleteBtn.addEventListener('click', (event) => {
         event.preventDefault();
         const form = currentRow.querySelector('form');
-        form.action = '/delete_record';
-        form.submit();
+        const hiddenInputs = currentRow.querySelectorAll('input[type="text"][title="Primary Key (read-only)"]');
+        // Initialize an object to store the name-value pairs
+        const hiddenValues = {};
+        // Loop through the NodeList of hidden inputs and collect values
+        hiddenInputs.forEach(input => {
+            hiddenValues[input.name] = input.value;
+        });
+        const hiddenValuesString = JSON.stringify(hiddenValues, null, 2);
+        if (confirm("Do you really want to delete this record? " + hiddenValuesString)) {
+            form.action = '/delete_record';
+            form.submit();
+        }
     });
 
     let currentRow = null;
