@@ -70,6 +70,8 @@
         >
             Save Filter
         </button>
+        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#addRecordModal" data-tooltip="Add a new record">Add Record</button>
+    
         <!-- Trigger Button -->
         <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#iframeModal" data-tooltip="User guide">
             Help
@@ -330,7 +332,7 @@
                 <tbody>
                     {% for row in data %}
                     <tr data-row-id="{{ loop.index }}">
-                        <form method="POST" action="/admin/dynamictable" class="row-form" data-row-id="{{ loop.index }}">
+                        <form method="POST" action="/admin" class="row-form" data-row-id="{{ loop.index }}">
                             <td>{{ loop.index +(pagination_data.page_size * (pagination.page-1)) }}</td>
                             {% for col_name in admin_view.column_list %}
                             <td>
@@ -356,7 +358,8 @@
                             </td>
                             {% endfor %}
                             <td>
-                                <button type="submit" class="btn btn-sm btn-primary" style="display: none;">Save</button>
+                                <button type="submit" id="row-delete" class="btn btn-sm btn-primary" style="display: none;">Delete</button>
+                                <button type="submit" id="row-save" class="btn btn-sm btn-primary" style="display: none;">Save</button>
                             </td>
                         </form>
                     </tr>
@@ -367,8 +370,9 @@
         
         <!-- Floating Save Button -->
         <form id="floating-save-form" method="POST" class="floating-save-btn">
-            <button type="submit" class="btn btn-sm btn-primary me-2" style="background-color: green">Save</button>
-            <button type="button" id="cancel-btn" class="btn btn-sm btn-secondary" style="background-color: red">Cancel</button>
+            <button type="submit" id= "save-btn" class="btn btn-sm btn-primary me-2" style="background-color: green">Save</button>
+            <button type="submit" id="delete-btn" class="btn btn-sm btn-secondary" style="background-color: red">Delete</button>
+            <button type="button" id="cancel-btn" class="btn btn-sm btn-secondary" style="background-color: orange">Cancel</button>
         </form>        
 
         <!-- Flash Messages -->
@@ -388,6 +392,53 @@
     Processing... <div class="spinner"></div>
   </div>
 
+  <!-- Add Record Modal -->
+<div class="modal fade" id="addRecordModal" tabindex="-1" role="dialog" aria-labelledby="addRecordModalLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="addRecordModalLabel">Add New Record</h2>
+                <button type="button" class="close" data-dismiss="modal">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-record-form" method="POST" action="{{ url_for('add_record') }}">
+                    <input type="hidden" id="schema_name" name="schema_name">
+                    <input type="hidden" id="table_name" name="table_name">
+                
+                    {% for column in column_list %}
+                    {% if column not in ['created', 'updated'] %}
+                        <div class="form-group">
+                            <label for="add_{{ column }}">
+                                {{ column_labels[column] }}
+                                <small class="text-muted">({{ col_types[column] }})</small>
+                            </label>
+                
+                            {% if column == 'collection_time' %}
+                                <input type="text" class="form-control" id="add_{{ column }}" name="{{ column }}"
+                                       value="{{ current_epoch }}" readonly
+                                       style="background-color: #f5f5f5; font-style: italic; border: 1px solid #ccc; color: #555;">
+                            {% elif column in foreign_key_info %}
+                                <input type="text" class="form-control" id="add_{{ column }}" name="{{ column }}"
+                                       title="Foreign Key → {{ foreign_key_info[column].referred_table }}.{{ foreign_key_info[column].referred_column }}"
+                                       style="background-color: #fff8e1; color: #c77700; border: 2px solid orange;">
+                            {% else %}
+                                <input type="text" class="form-control" id="add_{{ column }}" name="{{ column }}">
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+                
+                
+                
+                    <button type="submit" class="btn btn-primary">Save Record</button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                </form>
+                
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 
 const baseUrl = "/admin/dynamictable";
@@ -396,6 +447,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const floatingForm = document.getElementById('floating-save-form');
     const cancelBtn = document.getElementById('cancel-btn');
+    const saveBtn = document.getElementById('save-btn');
+    const deleteBtn = document.getElementById('delete-btn');
+
+    saveBtn.addEventListener('click', (event) => {
+        event.preventDefault();  // Optional, if needed
+        const form = currentRow.querySelector('form');
+        form.action = '/admin/dynamictable'; // Just to be explicit
+        form.submit();
+    });
+    
+    deleteBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        const form = currentRow.querySelector('form');
+        form.action = '/delete_record';
+        form.submit();
+    });
+
     let currentRow = null;
     let rowChanged = false;  // Track if any input is changed in the current row
     
@@ -469,13 +537,50 @@ document.addEventListener('DOMContentLoaded', function () {
             floatingForm.style.display = 'none';
         };
     
+        /*
         floatingForm.querySelector('button[type="submit"]').onclick = (e) => {
             e.preventDefault(); // Prevent the floating form from submitting
             const saveButton = form[form.length - 1];
-            if (saveButton) {
+            if (saveBtn) {
                 saveButton.click(); // Simulate actual click on original Save
             }
         };
+        */
+
+         /*   
+        floatingForm.querySelector('button[type="submit"]').onclick = (e) => {
+            e.preventDefault(); // Prevent the floating form from submitting
+        
+            const saveButton = form.querySelector('#row-save');
+            const deleteButton = form.querySelector('#row-delete');
+        
+            if (e.target.id === 'save-btn') {
+                form.submit()//if (saveButton) saveButton.click(); // Forward to actual Save
+            } else if (e.target.id === 'delete-btn') {
+                form.action = "/delete-record";
+                form.submit()
+                //if (deleteButton) deleteButton.click(); // Forward to actual Delete
+            }
+        };
+        
+
+        floatingForm.querySelector('button[type="submit"]').onclick = (e) => {
+            e.preventDefault(); // Prevent the floating form from submitting
+        
+            const saveButton = form.querySelector('#row-save');
+            const deleteButton = form.querySelector('#row-delete');
+        
+            if (e.target.id === 'save-btn') {
+                form.submit()//if (saveButton) saveButton.click(); // Forward to actual Save
+            } else if (e.target.id === 'delete-btn') {
+                form.action = "/delete-record";
+                form.submit()
+                //if (deleteButton) deleteButton.click(); // Forward to actual Delete
+            }
+        };
+        */
+
+
     }
     
     cancelBtn.addEventListener('click', () => {
@@ -625,6 +730,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const table = localStorage.getItem("selected_table");
     document.getElementById('schema').value = schema;
     document.getElementById('table').value = table;
+
+    $('#addRecordModal').on('shown.bs.modal', function () {
+        document.getElementById("schema_name").value = schema;
+        document.getElementById("table_name").value = table;
+    });
 
     const dynamicText = schema && table ? `${schema}.${table}` : 'Dynamic Table';
     const dynamicLink = document.querySelector('a.nav-link[href="/admin/dynamictable/"]');

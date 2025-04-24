@@ -12,6 +12,7 @@ from flask import (
     flash,
     Response,
     session as flask_session,
+    url_for,
 )
 from flask_babel import Babel
 from flask_sqlalchemy import SQLAlchemy
@@ -19,7 +20,6 @@ from flask_admin import Admin, AdminIndexView
 from flask_admin.contrib.sqla import ModelView
 from flask_admin.base import expose
 from sqlalchemy import (
-    DateTime,
     create_engine,
     func,
     inspect,
@@ -27,10 +27,7 @@ from sqlalchemy import (
     Table,
     PrimaryKeyConstraint,
     Column,
-    Integer,
-    String,
-    Boolean,
-    Date,
+    Boolean, BigInteger, Integer, String, DateTime, Float, Date,
     and_, or_,
     text
 )
@@ -273,7 +270,7 @@ class DynamicTableView(ModelView):
         end_dt = request.args.get('end_date')
         date_col = request.args.get('date_column')
         column_name = date_col
-        if hasattr(model, column_name):
+        if column_name and hasattr(model, column_name):
             column = getattr(model, column_name)
             if hasattr(column.type, 'python_type'):
                 python_type = column.type.python_type
@@ -1059,73 +1056,72 @@ def index_view():
         formdata = request.form.to_dict()
         print("DEBUG: Form submission:", formdata)
 
-        if model:
-            # Get the original primary key values
-            pk_filters = []
-            for pk_col in model.__table__.primary_key.columns:
-                orig_value = formdata.get(f"orig_{pk_col.name}")
-                if orig_value is None:
-                    flash(f"Missing original value for PK column: {pk_col.name}")
-                    return redirect('/')
+        # Get the original primary key values
+        pk_filters = []
+        for pk_col in model.__table__.primary_key.columns:
+            orig_value = formdata.get(f"orig_{pk_col.name}")
+            if orig_value is None:
+                flash(f"Missing original value for PK column: {pk_col.name}")
+                return redirect('/')
 
-                try:
-                    # Cast to correct type
-                    python_type = pk_col.type.python_type
-                    if orig_value in ( "None", None):
-                        typed_value = None
-                    elif python_type in (datetime, date):
-                        typed_value = table_view.parse_date(orig_value)
-                    else:
-                        typed_value = python_type(orig_value)
-                except Exception as e:
-                    flash(f"Failed to cast {orig_value} for {pk_col.name}: {e}")
-                    return redirect(request.url)
+            try:
+                # Cast to correct type
+                python_type = pk_col.type.python_type
+                if orig_value in ( "None", None):
+                    typed_value = None
+                elif python_type in (datetime, date):
+                    typed_value = table_view.parse_date(orig_value)
+                else:
+                    typed_value = python_type(orig_value)
+            except Exception as e:
+                flash(f"Failed to cast {orig_value} for {pk_col.name}: {e}")
+                return redirect(request.url)
 
-                pk_filters.append(getattr(model, pk_col.name) == typed_value)
+            pk_filters.append(getattr(model, pk_col.name) == typed_value)
 
-            obj = db.session.query(model).filter(*pk_filters).first()
-            if obj:
-                # Update attributes
-                # Columns to exclude from update
-                excluded_fields = {"created", "updated"}
+        obj = db.session.query(model).filter(*pk_filters).first()
+        if obj:
+            # Update attributes
+            # Columns to exclude from update
+            excluded_fields = {"created", "updated"}
 
-                for field, value in formdata.items():
-                    if field.startswith("orig_pk_") or field in excluded_fields:
-                        continue
+            for field, value in formdata.items():
+                if field.startswith("orig_pk_") or field in excluded_fields:
+                    continue
 
-                    if not hasattr(obj, field):
-                        continue
+                if not hasattr(obj, field):
+                    continue
 
-                    col = getattr(model, field, None)
-                    column_obj = model.__table__.columns.get(field)
+                col = getattr(model, field, None)
+                column_obj = model.__table__.columns.get(field)
 
-                    if column_obj is None:
-                        continue
+                if column_obj is None:
+                    continue
 
-                    python_type = column_obj.type.python_type
+                python_type = column_obj.type.python_type
 
-                    if value in ("", "None", None):
-                        if not isinstance(column_obj.type, String):  # Empty string is valid for strings
-                            if not column_obj.nullable:
-                                flash(f"{field} is required and cannot be empty.")
-                                return redirect(request.url)
-                            value = None
-                    else:
-                        try:
-                            if python_type in (datetime, date):
-                                value = table_view.parse_date(value)
-                            else:
-                                value = python_type(value)
-                        except Exception as e:
-                            flash(f"Error casting {field}: {e}")
+                if value in ("", "None", None):
+                    if not isinstance(column_obj.type, String):  # Empty string is valid for strings
+                        if not column_obj.nullable:
+                            flash(f"{field} is required and cannot be empty.")
                             return redirect(request.url)
+                        value = None
+                else:
+                    try:
+                        if python_type in (datetime, date):
+                            value = table_view.parse_date(value)
+                        else:
+                            value = python_type(value)
+                    except Exception as e:
+                        flash(f"Error casting {field}: {e}")
+                        return redirect(request.url)
 
-                    setattr(obj, field, value)
+                setattr(obj, field, value)
 
-                db.session.commit()
-                flash("Row updated.")
-            else:
-                flash("Row not found.")
+            db.session.commit()
+            flash("Row updated.")
+        else:
+            flash("Row not found.")
         return redirect(request.url)
     
     # Refresh column metadata
@@ -1136,6 +1132,8 @@ def index_view():
         col.name for col in model.__table__.columns
         if isinstance(col.type, (Date, DateTime)) or 'date' in col.name.lower()
     ]
+    
+    col_types =  {col.name: str(col.type) for col in model.__table__.columns}
 
     # Filter handling
     filter_params = {}
@@ -1163,8 +1161,122 @@ def index_view():
         foreign_key_info=table_view.get_foreign_key_columns(),
         primary_key_columns=table_view.primary_key_columns,
         filter_params=filter_params,
-        pagination_data=pagination_data
+        pagination_data=pagination_data,
+        col_types=col_types,
+        current_epoch=int(time.time())
     )
+
+
+@app.route('/add_record', methods=['POST'])
+@expose('/add_record')
+def add_record():
+    try:
+        schema = flask_session.get("schema")
+        table = flask_session.get("table")
+        if not schema or not table:
+            flash('Schema and table are required.', 'error')
+            return redirect('admin/dynamictable')
+
+        table_view = DynamicTableView(session=db.session)
+        table_view.admin = admin
+        
+        # Get the model based on schema and table
+        model = table_view.get_model()
+        if not model:
+            flash("Unable to get model.")
+            return redirect("/")
+
+        # Get all form data except schema and table
+        record_data = {key: value for key, value in request.form.items() if key not in ['schema_name', 'table_name']}
+
+        # Loop through the columns and apply dynamic type conversion based on the column types
+        for key, value in record_data.items():
+            # Get the column type from the model
+            column_type = model.__table__.columns[key].type
+            
+            # Convert value based on the column type
+            if isinstance(column_type, (Integer, BigInteger)):  # Handle both Integer and BigInteger
+                # Ensure the value is a valid integer
+                try:
+                    record_data[key] = int(value)
+                except ValueError:
+                    record_data[key] = None  # Or handle the invalid integer case accordingly
+            elif isinstance(column_type, String):
+                record_data[key] = str(value)
+            elif isinstance(column_type, DateTime):
+                # Convert to datetime (assuming it's an epoch time)
+                try:
+                    record_data[key] = datetime.fromtimestamp(int(value))  # Assuming it's an epoch time
+                except ValueError:
+                    record_data[key] = None  # Handle invalid datetime
+            elif isinstance(column_type, Float):
+                try:
+                    record_data[key] = float(value)
+                except ValueError:
+                    record_data[key] = None  # Handle invalid float
+            # Add other types as needed (e.g., Date, Boolean, etc.)
+
+        # Construct the INSERT query
+        columns = ', '.join(record_data.keys())
+        placeholders = ', '.join([f":{key}" for key in record_data])
+        query = text(f"INSERT INTO {schema}.{table} ({columns}) VALUES ({placeholders})")
+
+        # Execute the query with sanitized inputs
+        db.session.execute(query, record_data)
+        db.session.commit()
+        
+        flash('Record added successfully.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error adding record: {str(e)}', 'error')
+    
+    return redirect('admin/dynamictable')
+
+
+@app.route('/delete_record', methods=['POST'])
+def delete_record():
+    try:
+        schema = flask_session.get("schema")
+        table = flask_session.get("table")
+        if not schema or not table:
+            flash('Schema and table are required.', 'error')
+            return redirect('admin/dynamictable')
+
+        table_view = DynamicTableView(session=db.session)
+        table_view.admin = admin
+        
+        # Get the model based on schema and table
+        model = table_view.get_model()
+        if not model:
+            flash("Unable to get model.")
+            return redirect("/")
+
+        # Handle form submission (delete row)
+        formdata = request.form.to_dict()
+        print("DEBUG: Form submission:", formdata)
+        primary_keys = {}
+        for pk_col in model.__table__.primary_key.columns:
+            orig_value = formdata.get(f"orig_{pk_col.name}")
+            if orig_value is None:
+                flash(f"Missing original value for PK column: {pk_col.name}")
+                return redirect('/')
+            primary_keys[pk_col.name] = orig_value  # ✅ Build the dict
+
+        # Build WHERE clause dynamically
+        where_clause = " AND ".join([f"{col} = :{col}" for col in primary_keys])
+        sql = text(f"DELETE FROM {schema}.{table} WHERE {where_clause}")
+
+        db.session.execute(sql, primary_keys)
+        db.session.commit()
+
+        flash('Record deleted successfully.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting record: {str(e)}', 'error')
+    
+    return redirect('admin/dynamictable')  # Or return JSON if it's AJAX
+
+
 
 @app.route("/download", methods=["POST"])
 def download():
