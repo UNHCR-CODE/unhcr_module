@@ -191,29 +191,37 @@
             </div>
         </div>
     </div>
-    <div style="top: -85px; position: relative;">
+    <div style="top: -70px; position: relative;">
         <div class="card mt-4 mb-4 p-2" style="display: inline-block; width:100%; top: -8px;height: 100px;">
             <div class="d-flex align-items-center gap-3" style="flex-wrap: nowrap; white-space: nowrap;">
                 <!-- Form Section -->
-                <form method="POST" action="{{ url_for('download') }}" class="d-flex align-items-end gap-3 flex-wrap" style="z-index: 150;">
+                <form method="POST" id="download" action="{{ url_for('download') }}" class="d-flex align-items-end gap-3 flex-wrap" style="z-index: 150;">
                     <input type="hidden" name="schema" id="schema" value="eyedro">
                     <input type="hidden" name="table" id="table" value="gb_0098063d">
                 
                     <div class="d-flex flex-column gap-1">
                         <label for="date_column" class="small" data-tooltip="Select the date column for filtering">Date column:</label>
-                        <select name="date_column" id="date_column" class="form-select form-select-sm" style="width: 120px;" data-tooltip="Select a date column">
-                            <option value="ts">ts</option>
+                        <select id="date_column" class="form-control">
+                            {% set selected_column = admin_view.date_column if admin_view.date_column is defined else None %}
+                            {% for col_name in admin_view.column_list %}
+                                {% if 'ts' in col_name|lower or 'time' in col_name|lower or 'date' in col_name|lower %}
+                                    <option value="{{ col_name }}" {% if col_name == selected_column %}selected{% endif %}>
+                                        {{ col_name }}
+                                    </option>
+                                {% endif %}
+                            {% endfor %}
                         </select>
+                        
                     </div>
                 
                     <div class="d-flex flex-column gap-1">
                         <label for="start_date" class="small" data-tooltip="Select the start date for the filter">Start:</label>
-                        <input type="date" name="start_date" id="start_date" class="form-control form-control-sm" style="width: 130px;" required data-tooltip="Enter the start date">
+                        <input type="date" name="start_date" id="start_date" class="form-control form-control-sm" style="width: 130px;" data-tooltip="Enter the start date">
                     </div>
                 
                     <div class="d-flex flex-column gap-1">
                         <label for="end_date" class="small" data-tooltip="Select the end date for the filter">End:</label>
-                        <input type="date" name="end_date" id="end_date" class="form-control form-control-sm" style="width: 130px;" required data-tooltip="Enter the end date">
+                        <input type="date" name="end_date" id="end_date" class="form-control form-control-sm" style="width: 130px;" data-tooltip="Enter the end date">
                     </div>
                 
                     <div class="d-flex flex-column">
@@ -443,7 +451,18 @@
 
 const baseUrl = "/admin/dynamictable";
 document.addEventListener('DOMContentLoaded', function () {
+    const adminLink = document.querySelector('.navbar-brand');
+    if (adminLink) adminLink.href = '/';
+    const homeLink = document.querySelector('.nav-link');
+    if (homeLink) homeLink.href = '/';
+    const params = new URLSearchParams(window.location.search);
+    const dateColumn = params.get('date_column');
+    const select = document.getElementById('date_column');
 
+    if (dateColumn && select) {
+        select.value = dateColumn;
+    }
+    
 
     const floatingForm = document.getElementById('floating-save-form');
     const cancelBtn = document.getElementById('cancel-btn');
@@ -714,11 +733,13 @@ document.addEventListener('DOMContentLoaded', function () {
     // Load the last jump value from localStorage or set default to 10
     const jumpInput = document.getElementById('jump-amount');
     const lastJumpValue = localStorage.getItem('lastJumpValue');
-    if (lastJumpValue) {
-        jumpInput.value = lastJumpValue;
-    } else {
-        jumpInput.value = '10'; // Default value
-        localStorage.setItem('lastJumpValue', '10');
+    if (jumpInput) {
+        if (lastJumpValue) {
+            jumpInput.value = lastJumpValue;
+        } else {
+            jumpInput.value = '10'; // Default value
+            localStorage.setItem('lastJumpValue', '10');
+        }
     }
 
     const toggleBtn = document.getElementById('theme-toggle');
@@ -750,6 +771,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const dynamicLink = document.querySelector('a.nav-link[href="/admin/dynamictable/"]');
     if (dynamicLink) {
         dynamicLink.textContent = dynamicText;
+        dynamicLink.removeAttribute('href');
     }
 
     const lastStart = localStorage.getItem("startDateValue");
@@ -781,9 +803,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+
     // Initialize event handlers for filters
     $('#add-filter').on('click', addFilterRow);
-    $('#apply-filters').on('click', applyFilters);
+    $('#apply-filters').on('click', function() {
+        applyFilters(baseUrl);
+    });
     $('#clear-filters').on('click', clearFilters);
 
     // Handle delete button click for filters
@@ -826,6 +851,13 @@ document.addEventListener('DOMContentLoaded', function () {
         localStorage.removeItem('savedFilters');
         $('#filter-container').empty();
         updateFilterNamesDropdown();
+        el = document.getElementById('end_date')
+        const event = new Event('change');
+        el.value = '';
+        localStorage.setItem('endDateValue', '');
+        el = document.getElementById('start_date')
+        el.value = '';
+        localStorage.setItem('startDateValue', '');
         const queryParams = new URLSearchParams();
         add_date_args(queryParams)
         const url = `${baseUrl}?${queryParams.toString()}`;
@@ -865,7 +897,7 @@ function add_date_args(queryParams){
     return queryParams
 }
 
-function applyFilters() {
+function applyFilters(path) {
     const filters = getActiveFilters();
     console.log("Applying filters:", filters);
     const queryParams = new URLSearchParams();
@@ -875,11 +907,20 @@ function applyFilters() {
         console.log(`Setting param: ${key} = ${value}`);
     });
     add_date_args(queryParams)
-    const url = `${baseUrl}?${queryParams.toString()}`;
+    const url = `${path}?${queryParams.toString()}`;
     console.log("Navigating to:", url);
     document.getElementById('splash-screen').style.display = 'flex';
     window.location.href = url;
+    // Fallback: hide splash after 2 seconds
+    setTimeout(() => {
+        document.getElementById('splash-screen').style.display = 'none';
+    }, 2500);
 }
+
+document.getElementById("download").addEventListener("submit", function(e) {
+    e.preventDefault(); // Prevent default form submission
+    applyFilters('/download');
+});
 
 function updateFilterNamesDropdown() {
 const filterDropdown = $('#filter-names-dropdown');

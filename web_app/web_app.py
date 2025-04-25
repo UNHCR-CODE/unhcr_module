@@ -1,6 +1,5 @@
 import csv
 from datetime import date, datetime
-import io
 import time
 from types import SimpleNamespace
 from flask import (
@@ -12,13 +11,11 @@ from flask import (
     flash,
     Response,
     session as flask_session,
-    url_for,
 )
 from flask_babel import Babel
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin, AdminIndexView
 from flask_admin.contrib.sqla import ModelView
-from flask_admin.base import expose
 from sqlalchemy import (
     create_engine,
     func,
@@ -34,7 +31,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects import postgresql
 from wtforms import StringField, IntegerField, BooleanField, DateField
 from wtforms.validators import DataRequired
-from wtforms.widgets import HiddenInput, Input
+from wtforms.widgets import Input
 
 from flask_wtf import FlaskForm
 from dotenv import load_dotenv
@@ -278,10 +275,14 @@ class DynamicTableView(ModelView):
                 if issubclass(python_type, (datetime, str)):
                     start_date = self.parse_date(start_dt)
                     end_date = self.parse_date(end_dt)
+                    condition = None
                     if start_date == end_date == None:
                         condition = None
                     elif start_date and end_date:
-                        condition = column.cast(Date).between(start_date, end_date)
+                        if start_date > end_date:
+                            flash("Start date must be less than or equal to end date.")
+                        else:
+                            condition = column.cast(Date).between(start_date, end_date)
                     elif start_date is None and end_date is not None:
                         condition = column.cast(Date) <= end_date
                     elif start_date is not None and end_date is None:
@@ -291,9 +292,9 @@ class DynamicTableView(ModelView):
                 if condition is not None:
                     combined_filter = condition
             else:
-                print("Date column type not found")
+                flash("Date column type not found")
         else:
-            print("Date column not found")
+            print(f'Date column not found "{date_col}"')
 
         for i in range(10):  # Limit to reasonable number of filters
             column_name = request.args.get(f'filter_column_{i}')
@@ -606,7 +607,7 @@ class DynamicTableView(ModelView):
         print(f"DEBUG: Returning {len(processed_rows)} rows for page {page}")
         print(f"DEBUG: Query SQL: {query.statement.compile(dialect=engine.dialect, compile_kwargs={'literal_binds': True})}")
         
-        return count, processed_rows
+        return count, processed_rows, query.statement.compile(dialect=engine.dialect, compile_kwargs={'literal_binds': True})
 
 
     def get_query(self, page, model):
@@ -1148,7 +1149,7 @@ def index_view():
     print("DEBUG: Filter params:", filter_params)
     
     # Call get_list to get count and rows
-    count, rows = table_view.get_list(page=page, sort_column=None, sort_desc=None, search=None, filters=None)
+    count, rows, sql = table_view.get_list(page=page, sort_column=None, sort_desc=None, search=None, filters=None)
     
     # Generate pagination data
     pagination_data = table_view.get_pagination_data(page, count, table_view.page_size)
@@ -1163,12 +1164,12 @@ def index_view():
         filter_params=filter_params,
         pagination_data=pagination_data,
         col_types=col_types,
-        current_epoch=int(time.time())
+        current_epoch=int(time.time()),
+        date_column=request.args.get('date_column')
     )
 
 
 @app.route('/add_record', methods=['POST'])
-@expose('/add_record')
 def add_record():
     try:
         schema = flask_session.get("schema")
@@ -1278,74 +1279,41 @@ def delete_record():
 
 
 
-@app.route("/download", methods=["POST"])
+@app.route("/download", methods=["GET", "POST"])
 def download():
     try:
-        fd = request.form.to_dict()
-        fd =SimpleNamespace(**fd)
+        page = request.args.get('page', 1, type=int)
+        schema = flask_session['schema']
+        table = flask_session['table']
+        # Create the dynamic admin view
+        table_view = DynamicTableView(session=db.session)
+        table_view.admin = admin
+        
+        # Get the model based on schema and table
+        model = table_view.get_model()
+        if not model:
+            flash("Please select a schema and table first.")
+            return redirect("/")
+        
+        count, rows, sql = table_view.get_list(page=page, sort_column=None, sort_desc=None, search=None, filters=None)
+        result_proxy = db.session.execute(text(str(sql)))
+        columns = result_proxy.keys()  # column headers
 
-        # Load table metadata
-        metadata = MetaData()
-        try:
-            table_obj = Table(
-                fd.table,
-                metadata,
-                autoload_with=engine,
-                schema=fd.schema,
-            )
-        except Exception as e:
-            flash(f"Error loading table: {e}")
-            return redirect(request.referrer or "/")
+        def generate_csv():
+            yield ",".join(columns) + "\n"
+            for row in result_proxy:  # stream row by row
+                yield ",".join(str(item) if item is not None else "" for item in row) + "\n"
 
-        if fd.date_column and fd.start_date and fd.end_date:
-            try:
-                table_view = DynamicTableView(session=db.session)
-                start = table_view.parse_date(fd.start_date)
-                end = table_view.parse_date(fd.end_date)
-            except ValueError:
-                flash("Invalid date format.")
-                return redirect(request.referrer or "/")
-            msg = None
-            if start == end == None:
-                msg = f"You must enter both start and end date "
-            elif start is None and end is not None:
-                msg = f"Invalid date format for start date: {fd.start_date}"
-            elif end is None and start is not None:
-                msg = f"Invalid date format for end date: {fd.end_date}"
-            elif start > end:
-                msg = "Start date must be before end date."
+        filename = f"{schema}_{table}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
+        response = Response(
+            response=generate_csv(),
+            headers={
+                "Content-Type": "text/csv",
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
 
-            if msg:
-                flash(msg)
-                return redirect(request.referrer or "/")
-
-            query = f"""
-                SELECT * FROM "{fd.schema}"."{fd.table}"
-                WHERE "{fd.date_column}"::date BETWEEN '{start}' AND '{end}'
-            """
-            result = db.session.execute(text(query))
-
-            # Streaming generator
-            def generate_csv():
-                yield ",".join(result.keys()) + "\n"
-                for row in result:
-                    yield ",".join(str(item) if item is not None else "" for item in row) + "\n"
-
-            # Return a streaming response
-            filename = f"{fd.schema}_{fd.table}_{fd.start_date}_to_{fd.end_date}.csv"
-            response = Response(
-                response=generate_csv(),
-                headers={
-                    "Content-Type": "text/csv",
-                    "Content-Disposition": f"attachment; filename={filename}"
-                }
-            )
-            return response
-
-        else:
-            flash(f"Error during download: Missing date range, or column", "error")
-            return redirect(request.referrer or "/")
-
+        return response
 
     except Exception as e:
         flash(f"Error during download: {str(e)}", "error")
