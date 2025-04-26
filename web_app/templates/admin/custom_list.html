@@ -366,11 +366,12 @@
                                 {% elif col_name in primary_key_columns %}
                                 <input type="hidden" name="orig_{{ col_name }}" value="{{ row[col_name] }}">
                                 <input type="text"
-                                       name="{{ col_name }}"
-                                       value="{{ row[col_name] }}"
-                                       readonly
-                                       style="background-color: #e8f5e9; color: #2e7d32; cursor: not-allowed; border: 2px solid green;"
-                                       title="Primary Key (read-only)">
+                                    name="{{ col_name }}"
+                                    value="{{ row[col_name] }}"
+                                    readonly
+                                    style="background-color: #e8f5e9; color: #2e7d32; cursor: not-allowed; border: 2px solid green;"
+                                    title="Primary Key (read-only)"
+                                    onclick="showFloatingButtons(true);">
                                 {% else %}
                                 <input type="text" name="{{ col_name }}" value="{{ row[col_name] }}">
                                 {% endif %}
@@ -527,7 +528,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 rowChanged = Array.from(inputs).some(input => input.value !== input.dataset.originalValue);
                 if (rowChanged) {
                     activateRow(currentRow)
-                    showFloatingButtons(form);
+                    showFloatingButtons(false);
                 } else {
                     deactivateAllRows()
                     floatingForm.style.display = 'none';
@@ -570,59 +571,18 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
     
-    function showFloatingButtons(form) {
+    window.showFloatingButtons = function(del) {
         floatingForm.style.display = 'flex';
+        if (del)
+            saveBtn.style.display='none'
+        else
+            saveBtn.style.display='flex'
         floatingForm.onsubmit = () => {
             deactivateAllRows();
             floatingForm.style.display = 'none';
         };
-    
-        /*
-        floatingForm.querySelector('button[type="submit"]').onclick = (e) => {
-            e.preventDefault(); // Prevent the floating form from submitting
-            const saveButton = form[form.length - 1];
-            if (saveBtn) {
-                saveButton.click(); // Simulate actual click on original Save
-            }
-        };
-        */
-
-         /*   
-        floatingForm.querySelector('button[type="submit"]').onclick = (e) => {
-            e.preventDefault(); // Prevent the floating form from submitting
-        
-            const saveButton = form.querySelector('#row-save');
-            const deleteButton = form.querySelector('#row-delete');
-        
-            if (e.target.id === 'save-btn') {
-                form.submit()//if (saveButton) saveButton.click(); // Forward to actual Save
-            } else if (e.target.id === 'delete-btn') {
-                form.action = "/delete-record";
-                form.submit()
-                //if (deleteButton) deleteButton.click(); // Forward to actual Delete
-            }
-        };
-        
-
-        floatingForm.querySelector('button[type="submit"]').onclick = (e) => {
-            e.preventDefault(); // Prevent the floating form from submitting
-        
-            const saveButton = form.querySelector('#row-save');
-            const deleteButton = form.querySelector('#row-delete');
-        
-            if (e.target.id === 'save-btn') {
-                form.submit()//if (saveButton) saveButton.click(); // Forward to actual Save
-            } else if (e.target.id === 'delete-btn') {
-                form.action = "/delete-record";
-                form.submit()
-                //if (deleteButton) deleteButton.click(); // Forward to actual Delete
-            }
-        };
-        */
-
-
     }
-    
+
     cancelBtn.addEventListener('click', () => {
         if (currentRow) {
             const inputs = currentRow.querySelectorAll('input');
