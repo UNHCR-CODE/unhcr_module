@@ -1,7 +1,6 @@
 # test_utils.py
 
 from time import sleep
-import pyautogui
 import pytest
 import os
 import logging
