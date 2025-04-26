@@ -12,6 +12,7 @@ import io
 # Functions to test
 from unhcr import utils
 
+skip_gui = os.name != "nt" and not os.environ.get("DISPLAY")
 
 class NonClosingStringIO(io.StringIO):
     def close(self):
@@ -245,13 +246,14 @@ def test_show_dropdown_from_directory_no_files(
     #     "Error", "No files found matching '*.csv' in 'empty_dir'."
     # )
 
-
+@pytest.mark.skipif(skip_gui, reason="Skipping GUI test: no DISPLAY available")
 @patch("tkinter.messagebox.askyesno", return_value=True)
 def test_msgbox_yes_no_yes(mock_askyesno):
     assert utils.msgbox_yes_no("Test", "Yes?", auto_yes=1) is True
     mock_askyesno.assert_called_once_with(title="Test", message="Yes?")
 
 
+@pytest.mark.skipif(skip_gui, reason="Skipping GUI test: no DISPLAY available")
 @patch("tkinter.messagebox.askyesno", return_value=False)
 def test_msgbox_yes_no_no(mock_askyesno):
     assert utils.msgbox_yes_no(auto_yes=0) is False  # Test defaults
