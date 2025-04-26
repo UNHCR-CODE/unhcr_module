@@ -155,12 +155,14 @@
 
     if (!schemaEl.value) {
       schemaEl.classList.add('error-border');
+      document.getElementById('splash-screen').style.display = 'none';
       isValid = false;
     } else
       saveSchema();
 
     if (!tableEl.value) {
       tableEl.classList.add('error-border');
+      document.getElementById('splash-screen').style.display = 'none';
       isValid = false;
     } else
       saveTable();
