@@ -1,20 +1,22 @@
-import csv
+
 from datetime import date, datetime
 import time
-from types import SimpleNamespace
 from flask import (
     Flask,
     has_request_context,
     render_template,
+    render_template_string,
     request,
     redirect,
     flash,
     Response,
     session as flask_session,
+    url_for
 )
+
 from flask_babel import Babel
 from flask_sqlalchemy import SQLAlchemy
-from flask_admin import Admin, AdminIndexView
+from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
 from sqlalchemy import (
     create_engine,
@@ -40,6 +42,7 @@ from pathlib import Path
 import uuid
 from sqlalchemy.ext.declarative import declarative_base
 
+PASSWORD = "Unhcr.007"  # Replace with your desired password
 
 # Load .env
 project_root = Path(__file__).parent.resolve()
@@ -267,6 +270,7 @@ class DynamicTableView(ModelView):
         end_dt = request.args.get('end_date')
         date_col = request.args.get('date_column')
         column_name = date_col
+        condition = None
         if column_name and hasattr(model, column_name):
             column = getattr(model, column_name)
             if hasattr(column.type, 'python_type'):
@@ -910,11 +914,6 @@ admin.add_view(
 )
 
 
-@app.route("/dynamictable")
-def dynamictable_view():
-    return redirect("/admin/dynamictable")
-
-
 _query_cache = {}
 CACHE_TTL_SECONDS = 60 * 30  # 30 minutes
 
@@ -977,6 +976,24 @@ def get_tables_with_counts(schema_name):
     res = [(table, est_rows, size) for table, (est_rows, size) in res_dict.items()]
     _query_cache[schema_name] = (now, res)
     return res
+
+
+@app.before_request
+def require_login():
+    public_endpoints = ['login','logout', 'alive', 'static']
+    
+    if request.endpoint in public_endpoints:
+        return
+
+    if not flask_session.get('logged_in'):
+        flash(f"Please log in to access this page: {format(request.url).split('?')[0]}")
+        return redirect(url_for('login'))
+
+
+@app.route("/dynamictable")
+def dynamictable_view():
+    return redirect("/admin/dynamictable")
+
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -1131,7 +1148,7 @@ def index_view():
     # Extract date-like columns
     date_columns = [
         col.name for col in model.__table__.columns
-        if isinstance(col.type, (Date, DateTime)) or 'date' in col.name.lower()
+        if isinstance(col.type, (Date, DateTime)) or 'date' in col.name.lower() or col.name.lower() in ('created', 'updated')
     ]
     
     col_types =  {col.name: str(col.type) for col in model.__table__.columns}
@@ -1278,7 +1295,6 @@ def delete_record():
     return redirect('admin/dynamictable')  # Or return JSON if it's AJAX
 
 
-
 @app.route("/download", methods=["GET", "POST"])
 def download():
     try:
@@ -1319,6 +1335,28 @@ def download():
         flash(f"Error during download: {str(e)}", "error")
         return redirect(request.referrer or "/")
 
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password')
+
+        if email.endswith('@unhcr.org') and password == PASSWORD:
+            flask_session['logged_in'] = True
+            flask_session['user_email'] = email
+            return redirect('/')
+        else:
+            error = "Invalid email or password"
+
+    return render_template('login.html', error=error)
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    flask_session.pop("logged_in", None)
+    return redirect(url_for("login"))
 
 if __name__ == "__main__":
      app.run(host='0.0.0.0', port=5000, debug=True)

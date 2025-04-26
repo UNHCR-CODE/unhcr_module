@@ -19,15 +19,26 @@
 {% block body %}
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-
 <!-- Page Content -->
-<div class="container-fluid">
-    <div id="total-rows-display">
-        <strong style="color: white;" data-tooltip="Total number of rows in the table">Total Rows: {{ count }}</strong>
-        <button id="theme-toggle" class="btn btn-outline-secondary" style="height: 29px;" data-tooltip="Toggle between light and dark mode">
-            🌙 Dark Mode
-        </button>
+<div id="total-rows-display" class="d-flex align-items-center justify-content-between gap-3" style="gap: 1rem;right: 350px;">
+    <strong style="color: white;" data-tooltip="Total number of rows in the table">
+        Total Rows: {{ count }}
+    </strong>
+
+    <button id="theme-toggle" class="btn btn-outline-secondary" style="height: 29px;" data-tooltip="Toggle between light and dark mode">
+        🌙 Dark Mode
+    </button>
+
+    <div class="d-flex align-items-center">
+        <span class="me-2 text-muted small">
+            {{ session.get('user_email', '') }}
+        </span>
+        <form method="POST" action="{{ url_for('logout') }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Logout</button>
+        </form>
     </div>
+</div>
+<div class="container-fluid">
     <div class="filter-actions d-flex justify-content-between align-items-center mb-3">
         <!-- Dropdown for selecting saved filters -->
         <select class="form-control w-auto me-2" id="filter-names-dropdown" data-tooltip="Select a previously saved filter set">
