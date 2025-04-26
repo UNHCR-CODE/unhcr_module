@@ -24,7 +24,7 @@ mods=[
     ["gb_eyedro", "gb_eyedro"],
 ]
 
-res = app_utils.app_init(mods, log_file="unhcr.app_gb_1min_data.log", version="0.4.7", 
+res = app_utils.app_init(mods, log_file="unhcr.app_gb_1min_data.log", version="0.4.8", 
                          level="INFO", override=True, quiet=False)
 logger = res[0]
 if const.LOCAL:

@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Select Schema and Table{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='unhcr.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <h2>Select Schema and Table</h2>
+
+  {% if logs %}
+  <div class="logs">
+    <strong>Startup Logs:</strong>
+    <ul>
+      {% for line in logs %}
+        <li>{{ line }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  <form method="POST" class="w-auto me-2 " onsubmit="return validateFormAndSave()">
+    <input type="hidden" name="prev_schema" value="{{ selected_schema }}">
+
+    <label for="schema">Select Schema:</label>
+    <select name="schema" id="schema" onchange="saveSchema(); this.form.submit();" autofocus>
+      <option value="">-- choose schema --</option>
+      {% for schema in schemas %}
+        <option value="{{ schema }}">{{ schema }}</option>
+      {% endfor %}
+    </select>
+
+    <label for="table">Select Table:</label>
+    <select name="tabledb" id="tabledb" onchange="saveTable(); removeErrorHighlight(this);">
+      <option value="">-- choose table --</option>
+      {% for table, row_count, size in tables %}
+        <option value="{{ table }}">
+          {{ table }} (Rows: {{ row_count }} | Size: {{ size }})
+        </option>
+      {% endfor %}
+    </select>
+    <div class="d-flex justify-content-between">
+      <button type="submit" data-tooltip="Display the selected table">Open</button>
+      <button type="button" data-toggle="modal" data-target="#iframeModal" data-tooltip="User guide">Help</button>
+    </div>
+  </form>
+  <button id="theme-toggle" class="btn btn-outline-secondary" 
+  style="height: 29px;top: 18px;position: absolute;left: 430px;" data-tooltip="Toggle between light and dark mode">
+    🌙 Dark Mode
+</button>
+  <!-- Modal -->
+  <div class="modal fade" id="iframeModal" tabindex="-1" role="dialog" aria-labelledby="iframeModalLabel">
+    <div class="modal-dialog modal-lg" role="document" style="width: 90%;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title" id="iframeModalLabel">UNHCR AZURE Admin Users guide</h2>
+          <button type="button" class="close" data-dismiss="modal">&times;</button>
+        </div>
+        <div class="modal-body" style="height: 80vh;">
+          <iframe src="" width="100%" height="100%" style="border: none;"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="splash-screen" id="splash-screen" style="display: flex;">
+    Processing... <div class="spinner"></div>
+  </div>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <ul class="flash-messages">
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.addEventListener("DOMContentLoaded", function () {
+    const darkClass = 'dark-mode';
+    const toggleBtn = document.getElementById('theme-toggle');
+
+    // Load theme from localStorage
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.classList.add(darkClass);
+        toggleBtn.textContent = '☀️ Light Mode';
+    }
+
+    toggleBtn.addEventListener('click', () => {
+        const isDark = document.body.classList.toggle(darkClass);
+        toggleBtn.textContent = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    });
+
+    $('#iframeModal').on('show.bs.modal', function () {
+      const iframe = $(this).find('iframe');
+      if (!iframe.attr('src')) {
+        iframe.attr('src', "{{ url_for('static', filename='help.html') }}");
+      }
+    });
+
+    $('#iframeModal').on('hidden.bs.modal', function () {
+      $(this).find('iframe').attr('src', '');
+    });
+
+    const referrer = document.referrer;
+    console.log("Referer:", referrer);
+    document.getElementById('splash-screen').style.display = 'none';
+
+    const schema = localStorage.getItem("index_schema");
+    const table = localStorage.getItem("index_table");
+
+    if (!referrer.includes("/admin/dynamictable")) {
+      document.getElementById("schema").value = "{{ selected_schema }}";
+      document.getElementById("tabledb").value = "{{ selected_table }}";
+    } else {
+      if (schema)
+        document.getElementById("schema").value = schema;
+      if (table)
+        document.getElementById("tabledb").value = table;
+      else
+        document.getElementById("schema").value = '{{ selected_schema }}';
+    }
+  });
+
+  function saveSchema() {
+    const schema = document.getElementById('schema').value;
+    localStorage.setItem('index_schema', schema);
+    document.getElementById('splash-screen').style.display = 'flex';
+    localStorage.setItem('selected_schema', schema);
+  }
+
+  function saveTable() {
+    const table = document.getElementById('tabledb').value;
+    localStorage.setItem('index_table', table);
+    localStorage.setItem('selected_table', table);
+  }
+
+  function removeErrorHighlight(el) {
+    el.classList.remove('error-border');
+  }
+
+  function validateFormAndSave() {
+    const schemaEl = document.getElementById('schema');
+    const tableEl = document.getElementById('tabledb');
+    let isValid = true;
+
+    if (!schemaEl.value) {
+      schemaEl.classList.add('error-border');
+      document.getElementById('splash-screen').style.display = 'none';
+      isValid = false;
+    } else
+      saveSchema();
+
+    if (!tableEl.value) {
+      tableEl.classList.add('error-border');
+      document.getElementById('splash-screen').style.display = 'none';
+      isValid = false;
+    } else
+      saveTable();
+
+    return isValid;
+  }
+
+  window.addEventListener("pagehide", function () {
+    document.getElementById('splash-screen').style.display = 'flex';
+  });
+</script>
+{% endblock %}

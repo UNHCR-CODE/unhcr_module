@@ -1,3 +1,4 @@
+* copy*
 build/
 unhcr/__pycache__/
 unhcr_module.egg-info/
@@ -21,3 +22,6 @@ NUL
 .coverage
 unhcr/alembic copy/
 unhcr/alembix/
+temp/
+web_app copy/
+web_app copy 2/

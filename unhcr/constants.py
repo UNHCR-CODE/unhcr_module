@@ -582,16 +582,16 @@ GB_SN_COLS = ['gb_serial', 'site_label', 'epoch_utc', 'status']
 GB_GATEWAY_PREFIX = ('006-', '803-')
 
 if utils.is_running_on_azure() or utils.is_wsl():
-    TOP20_CSV = os.path.expanduser(r"~/code/DATA/gaps/new_top_20.csv")
-    GAPS_CSV_PATH = os.path.expanduser(r"~/code/DATA/gaps/gaps.csv")
-    GTB_GAPS_EXCEL = os.path.expanduser(r"~/code/DATA/gaps/gtb_gaps.xlsx")
-    ALL_API_GBS_CSV_PATH = os.path.expanduser(r"~/code/DATA/all_api_gbs.csv")
-    UNIFIER_CSV = os.path.expanduser(r"~/code/DATA/unifier.csv")
-    GB_MERGED_EXCEL_PATH = os.path.expanduser(r"~/code/DATA/gaps/merged.xlsx")
-    GB_GAPS_DATA_DIR = os.path.expanduser(r'~code\DATA\gaps\gap_csv')
-    GB_GAPS_CSV= os.path.expanduser(r'~code\DATA\gaps\eyedro_data_gaps.csv')
-    TOP20_ONEDRIVE_PATH =  os.path.expanduser(r'~/code\DATA')
-    DATA_DIR_PATH =  os.path.expanduser(r'~/code\DATA')
+    TOP20_CSV = os.path.expanduser(r"/home/unhcr_admin/code/DATA/gaps/new_top_20.csv")
+    GAPS_CSV_PATH = os.path.expanduser(r"/home/unhcr_admin/code/DATA/gaps/gaps.csv")
+    GTB_GAPS_EXCEL = os.path.expanduser(r"/home/unhcr_admin/code/DATA/gaps/gtb_gaps.xlsx")
+    ALL_API_GBS_CSV_PATH = os.path.expanduser(r"/home/unhcr_admin/code/DATA/all_api_gbs.csv")
+    UNIFIER_CSV = os.path.expanduser(r"/home/unhcr_admin/code/DATA/unifier.csv")
+    GB_MERGED_EXCEL_PATH = os.path.expanduser(r"/home/unhcr_admin/code/DATA/gaps/merged.xlsx")
+    GB_GAPS_DATA_DIR = os.path.expanduser(r'/home/unhcr_admin/code\DATA/gaps/gap_csv')
+    GB_GAPS_CSV= os.path.expanduser(r'/home/unhcr_admin/code\DATA/gaps/eyedro_data_gaps.csv')
+    TOP20_ONEDRIVE_PATH =  os.path.expanduser(r'/home/unhcr_admin/cod/\DATA')
+    DATA_DIR_PATH =  os.path.expanduser(r'/home/unhcr_admin/code/DATA')
 else:
     DATA_DIR_PATH = r"E:\_UNHCR\CODE\DATA"
     TOP20_CSV = r"E:\_UNHCR\CODE\DATA\gaps\new_top_20.csv"

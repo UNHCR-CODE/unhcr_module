@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Help: UNHCR AZURE Admin</title>
+
+    <!-- 1. Include Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+
+    <!-- Link to your custom external CSS files if they exist -->
+    <!-- <link rel="stylesheet" href="/static/unhcr.css"> -->
+    <!-- <link rel="stylesheet" href="/static/index.css"> -->
+
+    <style>
+        /* Basic styles - consider linking external CSS if available */
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 0; /* Remove default margin */
+            padding: 20px; /* Add padding */
+            background-color: #fff; /* Default light mode */
+            color: #333;
+        }
+        .dark-mode {
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+        .dark-mode h1, .dark-mode h2, .dark-mode h3, .dark-mode h4 {
+            color: #eee;
+        }
+        .dark-mode code {
+            background-color: #333;
+            color: #eee;
+        }
+        .dark-mode .note {
+            background-color: #424242;
+            border-left-color: #ffeb3b; /* Lighter yellow for dark mode */
+            color: #eee;
+        }
+        .dark-mode .ui-element {
+            color: #64b5f6; /* Lighter blue for dark mode */
+        }
+        .dark-mode .tooltip-info {
+            color: #aaa;
+        }
+        .dark-mode .feature-section {
+            border-bottom-color: #444;
+        }
+        .dark-mode a:not(.nav-link) { /* Avoid styling tab links */
+            color: #8ab4f8;
+        }
+        /* Dark mode for Bootstrap tabs */
+        .dark-mode .nav-tabs .nav-link {
+            color: #adb5bd;
+            border-color: #444;
+        }
+        .dark-mode .nav-tabs .nav-link.active {
+            color: #e9ecef;
+            background-color: #343a40;
+            border-color: #444 #444 #343a40;
+        }
+        .dark-mode .tab-content {
+            border-color: #444;
+        }
+
+        h1, h2, h3, h4 {
+            color: #333;
+            margin-top: 1.5em;
+        }
+        h1 { margin-top: 0; }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .feature-section {
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .ui-element {
+            font-weight: bold;
+            color: #0056b3; /* Blue color for UI elements */
+        }
+        .tooltip-info {
+            font-style: italic;
+            color: #555;
+            font-size: 0.9em;
+        }
+        ul {
+            margin-left: 20px;
+        }
+        li {
+            margin-bottom: 5px;
+        }
+        .note {
+            background-color: #fff8e1;
+            border-left: 4px solid #ffc107;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        /* Add padding to tab content */
+        .tab-content {
+            padding: 20px;
+            border: 1px solid #dee2e6;
+            border-top: none;
+            border-radius: 0 0 0.25rem 0.25rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 2. Tab Navigation -->
+    <ul class="nav nav-tabs" id="helpTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview-content" type="button" role="tab" aria-controls="overview-content" aria-selected="true">Overview</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="workflow-tab" data-bs-toggle="tab" data-bs-target="#workflow-content" type="button" role="tab" aria-controls="workflow-content" aria-selected="false">Typical Workflow</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="index-tab" data-bs-toggle="tab" data-bs-target="#index-content" type="button" role="tab" aria-controls="index-content" aria-selected="true">Schema/Table Selection</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="customlist-tab" data-bs-toggle="tab" data-bs-target="#customlist-content" type="button" role="tab" aria-controls="customlist-content" aria-selected="false">Dynamic Table View</button>
+        </li>
+    </ul>
+
+    <!-- 3. Tab Content -->
+    <div class="tab-content" id="helpTabsContent">
+        
+        <div class="tab-pane fade show active" id="overview-content" role="tabpanel" aria-labelledby="overview-tab">
+            <h3>Overview</h3>
+            <div class="feature-section">
+                <h2>Overview</h2>
+                <p>This application allows you to connect to the UNHCR Azure database, select specific schemas and tables, and then view, filter, edit, and download data from the chosen table. It provides powerful tools for exploring and managing your data directly.</p>
+                <p>The process starts with selecting a schema and table, after which you are taken to the main data view page.</p>
+            </div>
+        
+            <div class="feature-section">
+                <h2>Key Features</h2>
+                <ul>
+                    <li>Select database schema and table to work with.</li>
+                    <li>View data from the selected table.</li>
+                    <li>Apply complex filters using multiple criteria.</li>
+                    <li>Save and load frequently used filter sets.</li>
+                    <li>Filter data by a specific date range and download the results as a CSV file.</li>
+                    <li>Navigate through large datasets using pagination controls.</li>
+                    <li>Edit data directly in the table (except for key identifier columns).</li>
+                    <li>Switch between light and dark visual themes (available on the Dynamic Table View page).</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="index-content" role="tabpanel" aria-labelledby="index-tab">
+            <h3>Schema and Table Selection Page (`index.html`)</h3>
+            <p>This is the starting page where you choose which data you want to work with.</p>
+            <ul>
+                <li><span class="ui-element">Select Schema Dropdown</span>: Lists the available database schemas (e.g., `eyedro`, `solarman`).
+                    <ul>
+                        <li>Selecting a schema will automatically reload the page to populate the 'Select Table' dropdown with tables from that schema. A loading indicator (<span class="ui-element">Processing...</span>) will appear briefly.</li>
+                        <li>Your last selected schema is usually remembered.</li>
+                    </ul>
+                </li>
+                <li><span class="ui-element">Select Table Dropdown</span>: Lists tables available within the currently selected schema.
+                    <ul>
+                        <li>Table names are shown along with estimated row counts and data size to help you choose.</li>
+                        <li>You must select a table from this list before proceeding.</li>
+                        <li>Your last selected table for the chosen schema is usually remembered.</li>
+                    </ul>
+                </li>
+                <li><span class="ui-element">Open Button</span>: Click this button after selecting both a schema and a table.
+                    <ul>
+                        <li>It will validate that both selections have been made. If not, the dropdowns might be highlighted in red.</li>
+                        <li>On success, it navigates you to the Dynamic Table View page (`custom_list.html`) displaying data from your chosen table.</li>
+                    </ul>
+                </li>
+                <li><span class="ui-element">Flash Messages</span>: May display informational messages or errors from the server (e.g., if a table fails to load).</li>
+            </ul>
+            <div class="note">
+                <p><strong>Note:</strong> Your selections for schema and table are saved in your browser's local storage, so they should persist between sessions.</p>
+            </div>
+        </div>
+
+        <!-- Custom List Page Content -->
+        <div class="tab-pane fade" id="customlist-content" role="tabpanel" aria-labelledby="customlist-tab">
+            <h3>Dynamic Table View Page (`custom_list.html`)</h3>
+            <p>This page displays the data from the table you selected on the previous screen.</p>
+
+            <h4>Header and Theme</h4>
+            <ul>
+                <li><span class="ui-element">Theme Toggle Button</span> (initially "🌙 Dark Mode"): Click this button to switch the page between light and dark visual modes. Your preference is saved in your browser.</li>
+                <li><span class="ui-element">Total Rows</span>: Displays the total number of data rows that match your current filter criteria.</li>
+                <li><span class="ui-element">Help Button</span>: Opens this help guide in a modal window.</li>
+            </ul>
+
+            <h4>Filter Management</h4>
+            <p>This section allows you to create, apply, save, and load filter sets.</p>
+            <ul>
+                <li><span class="ui-element">Select Saved Filter Dropdown</span>: Lists filter sets you have previously saved. Selecting a name from this list will automatically populate the filter rows below with that saved configuration.</li>
+                <li><span class="ui-element">Filter Name Input</span>: Enter a descriptive name here <em>before</em> clicking "Save Filter" to save the current set of filter rows.</li>
+                <li><span class="ui-element">Add Filter Button</span>: Click to add a new, empty filter row. Rows after the first will include an "AND" / "OR" dropdown to combine conditions.</li>
+                <li><span class="ui-element">Apply Filters Button</span>: Click this after setting up your filter rows. The page will reload to show only the data matching your criteria.</li>
+                <li><span class="ui-element">Clear Filters Button</span>: Removes all active filters and reloads the page to show the full dataset (respecting any date range filter if applied separately). It also clears the filter rows in the interface.</li>
+                <li><span class="ui-element">Save Filter Button</span>: Saves the current configuration of all filter rows (column, operator, value, AND/OR) to your browser's local storage under the name provided in the "Filter Name Input". The saved filter will then appear in the "Select Saved Filter" dropdown.</li>
+            </ul>
+
+            <h4>Filter Rows</h4>
+            <p>Each row in this section defines a single condition for filtering your data.</p>
+            <ul>
+                <li><span class="ui-element">Logical Operator (AND/OR)</span>: (Appears from the second row onwards) Choose how this condition relates to the previous one. "AND" means both must be true; "OR" means either can be true.</li>
+                <li><span class="ui-element">Column Select</span>: Choose the database column you want to filter on.</li>
+                <li><span class="ui-element">Operator Select</span>: Choose how to compare the column's value (e.g., <code>=</code>, <code>!=</code> (not equal), <code>&gt;</code> (greater than), <code>&lt;</code> (less than), <code>contains</code>, <code>in</code>, <code>is null</code>, etc.).</li>
+                <li><span class="ui-element">Value Input</span>: Enter the value to compare against.
+                    <ul>
+                        <li>For <code>in</code> or <code>not in</code> operators, enter multiple values separated by commas (e.g., <code>value1, value2, value3</code>).</li>
+                        <li>For <code>is null</code> or <code>is not null</code>, this input is ignored.</li>
+                    </ul>
+                </li>
+                <li><span class="ui-element">Remove Button (X)</span>: Click the 'X' at the end of a row to remove that specific filter condition.</li>
+            </ul>
+
+            <h4>Date Range Filter & CSV Download</h4>
+            <p>This section appears if the selected table contains date or timestamp columns. It allows filtering by date and downloading the results.</p>
+            <ul>
+                <li><span class="ui-element">Date column Select</span>: Choose the specific date/time column you want to filter by.</li>
+                <li><span class="ui-element">Start Date Input</span>: Select the beginning date for your filter range.</li>
+                <li><span class="ui-element">End Date Input</span>: Select the ending date for your filter range.</li>
+                <li><span class="ui-element">Download CSV Button</span>: Click this to download a CSV file containing only the rows that fall within the selected date range (using the chosen date column). The start/end dates you select are remembered in your browser. <span class="tooltip-info">Note: Basic date validation is performed. Ensure Start Date is not after End Date.</span></li>
+            </ul>
+            <div class="note">
+                <p><strong>Note:</strong> The "Apply Filters" button uses both the general filter rows AND the date range filter if set. The "Download CSV" button primarily uses the date range filter for the download content.</p>
+            </div>
+
+            <h4>Pagination and Navigation</h4>
+            <p>Controls for moving through large datasets.</p>
+            <ul>
+                <li><span class="ui-element">Jump by pages Input</span>: Enter a number (e.g., 10, 50) to specify how many pages you want to jump forward or backward using the "Jump" button. The last value you entered is remembered.</li>
+                <li><span class="ui-element">Jump Button</span>: Click to navigate forward or backward by the number of pages specified in the "Jump by pages" input.</li>
+                <li><span class="ui-element">Prev / Next Buttons</span>: Navigate one page backward or forward. These are disabled if you are on the first or last page, respectively.</li>
+                <li><span class="ui-element">Page Number Links / First / Last Buttons</span>: (Displayed for smaller datasets) Direct links to nearby pages, and buttons to go directly to the first or last page of results.</li>
+            </ul>
+            <div class="note">
+                <p><strong>Note:</strong> All navigation actions automatically re-apply any active filters (from the filter rows and the date range).</p>
+            </div>
+
+            <h4>Data Table</h4>
+            <p>Displays the actual data rows based on your current page and filters. Allows for inline editing.</p>
+            <ul>
+                <li><span class="ui-element">Table Headers</span>: Show the names of the columns in the table.</li>
+                <li><span class="ui-element">Data Rows</span>: Each row represents a record from the database table.</li>
+                <li><span class="ui-element">Editable Fields</span>: Most cells contain standard input fields where you can directly type to change the data.</li>
+                <li><span class="ui-element">Read-Only Fields (PK/FK)</span>:
+                    <ul>
+                        <li>Cells with a <span style="background-color: #e8f5e9; color: #2e7d32; border: 1px solid green; padding: 2px;">green background</span> are Primary Keys (unique identifiers for the row). They cannot be edited here. Hovering over them shows a "Primary Key" tooltip.</li>
+                        <li>Cells with an <span style="background-color: #fff8e1; color: #c77700; border: 1px solid orange; padding: 2px;">orange background</span> are Foreign Keys (linking to another table). They cannot be edited here. Hovering over them shows which table and column they link to.</li>
+                    </ul>
+                </li>
+                <li><span class="ui-element">Save Button</span>: Located at the end of each row. After making changes in the editable fields of a row, click its "Save" button to submit the changes to the database. The page will reload after saving.</li>
+            </ul>
+
+            <h4>Flash Messages</h4>
+            <p>Informational messages or error notifications from the server (e.g., "Row updated.", "Error saving row.") will appear temporarily near the bottom of the table after certain actions like saving.</p>
+
+            <h4>Loading Indicator (Splash Screen)</h4>
+            <p>A "Processing..." message with a spinner appears briefly while the page is loading data, applying filters, or navigating between pages.</p>
+        </div>
+
+         <!-- Workflow Content -->
+        <div class="tab-pane fade" id="workflow-content" role="tabpanel" aria-labelledby="workflow-tab">
+            <h3>Typical Workflow</h3>
+            <p>This outlines the typical steps for using the application from start to finish.</p>
+            <ol>
+                <li>Start on the <span class="ui-element">Schema and Table Selection</span> page.</li>
+                <li>Select a schema from the <span class="ui-element">Select Schema</span> dropdown. Wait for the page to reload.</li>
+                <li>Select a table from the <span class="ui-element">Select Table</span> dropdown.</li>
+                <li>Click the <span class="ui-element">Open</span> button. You will be taken to the <span class="ui-element">Dynamic Table View</span> page.</li>
+                <li>(Optional) Load a previously saved filter set using the <span class="ui-element">Select Saved Filter</span> dropdown.</li>
+                <li>(Optional) Add filter conditions using the <span class="ui-element">Add Filter</span> button and configuring the filter rows (Column, Operator, Value, AND/OR).</li>
+                <li>(Optional) Set a date range using the <span class="ui-element">Date column</span>, <span class="ui-element">Start Date</span>, and <span class="ui-element">End Date</span> inputs.</li>
+                <li>Click the <span class="ui-element">Apply Filters</span> button to view the filtered data. The page reloads.</li>
+                <li>(Optional) If you want to reuse these filters later, enter a name in the <span class="ui-element">Filter Name Input</span> and click <span class="ui-element">Save Filter</span>.</li>
+                <li>Use the <span class="ui-element">Prev</span>, <span class="ui-element">Next</span>, <span class="ui-element">Jump</span>, or page number buttons/links to navigate through the results.</li>
+                <li>To edit data, modify the values in the editable fields of a specific row and click the <span class="ui-element">Save</span> button for that row.</li>
+                <li>To download data based on a date range, ensure the date range is set correctly and click the <span class="ui-element">Download CSV</span> button.</li>
+                <li>To remove all filters, click the <span class="ui-element">Clear Filters</span> button.</li>
+                <li>Use the <span class="ui-element">Theme Toggle Button</span> to switch between light and dark modes.</li>
+            </ol>
+        </div>
+
+    </div> <!-- End Tab Content -->
+
+    <!-- 4. Include Bootstrap JS Bundle (includes Popper) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+
+    <script>
+        // Simple theme persistence for the help page itself
+        const darkClass = 'dark-mode';
+        document.addEventListener('DOMContentLoaded', function () {
+            // Load theme from localStorage (set by the main application)
+            const theme = localStorage.getItem('theme');
+            console.log('Help page loading theme:', theme);
+            if (theme === 'dark') {
+                document.body.classList.add(darkClass);
+            } else {
+                document.body.classList.remove(darkClass);
+            }
+
+
+            try {
+                const parentUrl = window.parent.location.href;
+                console.log('Parent URL:', parentUrl);
+        
+                // Map URL substrings or patterns to tab IDs
+                const tabMap = {
+                    'overview': 'overview-tab',
+                    'admin': 'customlist-tab',
+                    'workflow': 'workflow-tab',
+                    '/': 'index-tab',
+                };
+        
+                // Check which keyword is in the parent URL and activate the corresponding tab
+                for (const [keyword, tabId] of Object.entries(tabMap)) {
+                    if (parentUrl.includes(keyword)) {
+                        const targetTab = document.getElementById(tabId);
+                        if (targetTab) {
+                            new bootstrap.Tab(targetTab).show();
+                        }
+                        break;
+                    }
+                }
+            } catch (err) {
+                console.warn('Could not access parent URL:', err);
+            }
+
+          });
+    </script>
+</body>
+</html>

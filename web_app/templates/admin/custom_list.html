@@ -1,0 +1,1094 @@
+{% extends 'admin/master.html' %}
+{% block head %}
+{{ super() }}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='datatables.min.css') }}"
+/>
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='unhcr.css') }}"
+/>
+{% endblock %}
+
+{% block tail %}
+{{ super() }}
+<script src="{{ url_for('static', filename='datatables.min.js') }}"></script>
+{% endblock %}
+
+{% block body %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<!-- Page Content -->
+<div id="total-rows-display" class="d-flex align-items-center justify-content-between gap-3" style="gap: 1rem;right: 350px;">
+    <strong style="color: white;" data-tooltip="Total number of rows in the table">
+        Total Rows: {{ count }}
+    </strong>
+
+    <button id="theme-toggle" class="btn btn-outline-secondary" style="height: 29px;" data-tooltip="Toggle between light and dark mode">
+        🌙 Dark Mode
+    </button>
+
+    <div class="d-flex align-items-center">
+        <span class="me-2 text-muted small">
+            {{ session.get('user_email', '') }}
+        </span>
+        <form method="POST" action="{{ url_for('logout') }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Logout</button>
+        </form>
+    </div>
+</div>
+<div class="container-fluid">
+    <div class="filter-actions d-flex justify-content-between align-items-center mb-3">
+        <!-- Dropdown for selecting saved filters -->
+        <select class="form-control w-auto me-2" id="filter-names-dropdown" data-tooltip="Select a previously saved filter set">
+            <option value="">Select Saved Filter</option>
+        </select>
+
+        <!-- Input for naming the filter -->
+        <input
+            type="text"
+            id="filter-name"
+            class="form-control w-auto me-2"
+            placeholder="Enter filter name"
+            style="min-width: 200px"
+            data-tooltip="Enter a name to save the current filter set"
+        />
+
+        <button type="button" class="btn btn-secondary me-2" id="add-filter" data-tooltip="Add a new filter row">
+            Add Filter
+        </button>
+
+        <!-- Apply and Clear buttons -->
+        <button type="button" class="btn btn-primary me-2" id="apply-filters" data-tooltip="Apply the current filter set">
+            Apply Filters
+        </button>
+        <button
+            type="button"
+            class="btn btn-outline-secondary me-2"
+            id="clear-filters"
+            data-tooltip="Clear all filters and reset the table"
+        >
+            Clear Filters
+        </button>
+
+        <!-- Save filter button -->
+        <button
+            type="button"
+            class="btn btn-secondary"
+            onclick="saveFiltersWithName($('#filter-name').val())"
+            data-tooltip="Save the current filter set with the specified name"
+        >
+            Save Filter
+        </button>
+        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#addRecordModal" data-tooltip="Add a new record">Add Record</button>
+    
+        <!-- Trigger Button -->
+        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#iframeModal" data-tooltip="User guide">
+            Help
+        </button>
+    </div>
+
+  
+  <!-- Modal -->
+  <div class="modal fade" id="iframeModal" tabindex="-1" role="dialog" aria-labelledby="iframeModalLabel">
+    <div class="modal-dialog modal-lg" role="document" style="width: 90%;">
+      <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="iframeModalLabel">UNHCR AZURE Admin Users guide</h2>
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+        </div>
+        <div class="modal-body" style="height: 80vh;">
+          <iframe
+            src=''
+            width="100%"
+            height="100%"
+            style="border: none;"
+          ></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- Column Filter Form -->
+    <div class="card mt-4 mb-4 p-3 filter-container">
+        <div id="filter-container" class="filter-container">
+            <!-- Initial filter row -->
+            <div class="filter-row row g-2 align-items-center mb-2" id="filter-row-0">
+                <div class="col">
+                    <select class="form-control column-select" name="filter_column_0" data-tooltip="Select a column to filter">
+                        <option value="">-- Select Column --</option>
+                        {% for column in column_list %}
+                        <option value="{{ column }}">{{ column_labels[column] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <select class="form-control operator-select" name="filter_op_0" data-tooltip="Select the filter operator">
+                        <option value="=">=</option>
+                        <option value="!=">!=</option>
+                        <option value=">">></option>
+                        <option value="<"><</option>
+                        <option value=">=">>=</option>
+                        <option value="<="><=</option>
+                        <option value="ilike">contains</option>
+                        <option value="in">in</option>
+                        <option value="not in">not in</option>
+                        <option value="is null">is null</option>
+                        <option value="is not null">is not null</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <input
+                        type="text"
+                        class="form-control filter-value"
+                        name="filter_value_0"
+                        placeholder="Enter filter value"
+                        data-tooltip="Enter the value to filter by"
+                    />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden filter row template for JS to clone -->
+    <div id="filter-template" class="d-none">
+        <div class="filter-row row g-2 align-items-center mb-2">
+            <div class="col-auto">
+                <select class="form-control logical-operator" data-tooltip="Select logical operator (AND/OR)">
+                    <option value="AND">AND</option>
+                    <option value="OR">OR</option>
+                </select>
+            </div>
+            <div class="col">
+                <select class="form-control column-select" data-tooltip="Select a column to filter">
+                    <option value="">-- Select Column --</option>
+                    {% for column in column_list %}
+                    <option value="{{ column }}">{{ column_labels[column] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col">
+                <select class="form-control operator-select" data-tooltip="Select the filter operator">
+                    <option value="=">=</option>
+                    <option value="!=">!=</option>
+                    <option value=">">></option>
+                    <option value="<"><</option>
+                    <option value=">=">>=</option>
+                    <option value="<="><=</option>
+                    <option value="ilike">contains</option>
+                    <option value="in">in</option>
+                    <option value="not in">not in</option>
+                    <option value="is null">is null</option>
+                    <option value="is not null">is not null</option>
+                </select>
+            </div>
+            <div class="col">
+                <input
+                    type="text"
+                    class="form-control filter-value"
+                    placeholder="Enter filter value"
+                    data-tooltip="Enter the value to filter by"
+                />
+            </div>
+            <div class="col-auto">
+                <button
+                    type="button"
+                    class="btn btn-sm btn-outline-danger remove-filter"
+                    data-tooltip="Remove this filter row"
+                >
+                    X
+                </button>
+            </div>
+        </div>
+    </div>
+    <div style="top: -70px; position: relative;">
+        <div class="card mt-4 mb-4 p-2" style="display: inline-block; width:100%; top: -8px;height: 100px;">
+            <div class="d-flex align-items-center gap-3" style="flex-wrap: nowrap; white-space: nowrap;">
+                <!-- Form Section -->
+                <form method="POST" id="download" action="{{ url_for('download') }}" class="d-flex align-items-end gap-3 flex-wrap" style="z-index: 150;">
+                    <input type="hidden" name="schema" id="schema" value="eyedro">
+                    <input type="hidden" name="table" id="table" value="gb_0098063d">
+                
+                    <div class="d-flex flex-column gap-1">
+                        <label for="date_column" class="small" data-tooltip="Select the date column for filtering">Date column:</label>
+                        <select id="date_column" class="form-control">
+                            {% set selected_column = admin_view.date_column if admin_view.date_column is defined else None %}
+                            {% for col_name in admin_view.column_list %}
+                                {% if 'ts' in col_name|lower or 'time' in col_name|lower or 'date' in col_name|lower %}
+                                    <option value="{{ col_name }}" {% if col_name == selected_column %}selected{% endif %}>
+                                        {{ col_name }}
+                                    </option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                        
+                    </div>
+                
+                    <div class="d-flex flex-column gap-1">
+                        <label for="start_date" class="small" data-tooltip="Select the start date for the filter">Start:</label>
+                        <input type="date" name="start_date" id="start_date" class="form-control form-control-sm" style="width: 130px;" data-tooltip="Enter the start date">
+                    </div>
+                
+                    <div class="d-flex flex-column gap-1">
+                        <label for="end_date" class="small" data-tooltip="Select the end date for the filter">End:</label>
+                        <input type="date" name="end_date" id="end_date" class="form-control form-control-sm" style="width: 130px;" data-tooltip="Enter the end date">
+                    </div>
+                
+                    <div class="d-flex flex-column">
+                        <label class="invisible">Download</label>
+                        <button type="submit" class="btn btn-sm btn-primary" data-tooltip="Download the filtered data as CSV">Download CSV</button>
+                    </div>
+                </form>
+                
+          
+
+                <!-- Navigation Buttons Section -->
+            </div>
+            {% if date_columns %}
+                <div class="d-flex align-items-end gap-3 flex-wrap  justify-content-end" style="top: -70px;position: relative; z-index: 100">
+                    <div class="d-flex flex-column gap-2  justify-content-end">
+                        <label for="jump-amount" class="small" data-tooltip="Enter number of pages to jump">Jump by pages:</label>
+                        <input
+                            type="number"
+                            id="jump-amount"
+                            class="form-control form-control-sm"
+                            style="width: 90px;"
+                            placeholder="number"
+                            data-tooltip="Enter number of pages"
+                        />
+                    </div>
+                
+                    <div class="d-flex flex-column">
+                        <label class="invisible">Jump</label>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="handleJump(this)" data-tooltip="Jump by specified pages">Jump</button>
+                    </div>
+                
+                    <div class="d-flex flex-column">
+                        <label class="invisible">First</label>
+                        {% if pagination.has_prev %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to first page">First</button>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" disabled>First</button>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-flex flex-column">
+                        <label class="invisible">Prev</label>
+                        {% if pagination.has_prev %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to previous page">Prev</button>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" disabled>Prev</button>
+                        {% endif %}
+                    </div>
+                
+                    <div class="d-flex flex-column">
+                        <label class="invisible">Next</label>
+                        {% if pagination.has_next %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to next page">Next</button>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" disabled>Next</button>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex flex-column">
+                        <label class="invisible">Last</label>
+                        {% if pagination.has_next %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to Last page">Last</button>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" disabled>Last</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+        </div>
+        
+        {% if not pagination.is_large_dataset %}
+        <div class="pagination mb-3" style="top: -20px;position: relative;">
+            {% if pagination.has_prev %}
+            <button type="button" class="btn btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to the first page">
+                First
+            </button>
+            {% endif %}
+            {% if pagination.start_page > 1 %}
+            <span class="btn btn-light disabled">...</span>
+            {% endif %}
+            {% for p in pagination.page_range %}
+            {% if p == pagination.page %}
+            <span class="btn btn-primary active">{{ p }}</span>
+            {% else %}
+            <button type="button" class="btn btn-light" onclick="handleJump(this)" data-tooltip="Go to page {{ p }}">{{ p }}</button>
+            {% endif %}
+            {% endfor %}
+            {% if pagination.end_page < pagination.total_pages %}
+            <span class="btn btn-light disabled">...</span>
+            {% endif %}
+            {% if pagination.has_next %}
+            <button type="button" class="btn btn-outline-primary" onclick="handleJump(this)" data-tooltip="Go to the last page">
+                Last
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Data Table -->
+        <div id="data-table-wrapper" style="overflow-x: auto; top: -20px;">
+            <table id="data-table" class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>row</th>
+                        {% for column in column_list %}
+                        <th data-tooltip="Column: {{ column_labels[column] }}">{{ column_labels[column] }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tfoot>
+                    <tr>
+                        {% for column in column_list %}
+                        <th></th>
+                        {% endfor %}
+                    </tr>
+                </tfoot>
+                <tbody>
+                    {% for row in data %}
+                    <tr data-row-id="{{ loop.index }}">
+                        <form method="POST" action="/admin" class="row-form" data-row-id="{{ loop.index }}">
+                            <td>{{ loop.index +(pagination_data.page_size * (pagination.page-1)) }}</td>
+                            {% for col_name in admin_view.column_list %}
+                            <td>
+                                {% if col_name in foreign_key_info %}
+                                <input type="hidden" name="orig_{{ col_name }}" value="{{ row[col_name] }}">
+                                <input type="text"
+                                       name="{{ col_name }}"
+                                       value="{{ row[col_name] }}"
+                                       readonly
+                                       style="background-color: #fff8e1; color: #c77700; cursor: not-allowed; border: 2px solid orange;"
+                                       title="Foreign Key → {{ foreign_key_info[col_name].referred_table }}.{{ foreign_key_info[col_name].referred_column }}">
+                                {% elif col_name in primary_key_columns %}
+                                <input type="hidden" name="orig_{{ col_name }}" value="{{ row[col_name] }}">
+                                <input type="text"
+                                    name="{{ col_name }}"
+                                    value="{{ row[col_name] }}"
+                                    readonly
+                                    style="background-color: #e8f5e9; color: #2e7d32; cursor: not-allowed; border: 2px solid green;"
+                                    title="Primary Key (read-only)"
+                                    onclick="showFloatingButtons(true);">
+                                {% else %}
+                                <input type="text" name="{{ col_name }}" value="{{ row[col_name] }}">
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td>
+                                <button type="submit" id="row-delete" class="btn btn-sm btn-primary" style="display: none;">Delete</button>
+                                <button type="submit" id="row-save" class="btn btn-sm btn-primary" style="display: none;">Save</button>
+                            </td>
+                        </form>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Floating Save Button -->
+        <form id="floating-save-form" method="POST" class="floating-save-btn">
+            <button type="submit" id= "save-btn" class="btn btn-sm btn-primary me-2" style="background-color: green">Save</button>
+            <button type="submit" id="delete-btn" class="btn btn-sm btn-secondary" style="background-color: red">Delete</button>
+            <button type="button" id="cancel-btn" class="btn btn-sm btn-secondary" style="background-color: orange">Cancel</button>
+        </form>        
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %} {% if messages %}
+        <div class="alert alert-info">
+            <ul>
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %} {% endwith %}
+    </div>
+</div>
+
+<div class="splash-screen" id="splash-screen" style="display: flex;">
+    Processing... <div class="spinner"></div>
+  </div>
+
+  <!-- Add Record Modal -->
+<div class="modal fade" id="addRecordModal" tabindex="-1" role="dialog" aria-labelledby="addRecordModalLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="addRecordModalLabel">Add New Record</h2>
+                <button type="button" class="close" data-dismiss="modal">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-record-form" method="POST" action="{{ url_for('add_record') }}">
+                    <input type="hidden" id="schema_name" name="schema_name">
+                    <input type="hidden" id="table_name" name="table_name">
+                
+                    {% for column in column_list %}
+                    {% if column not in ['created', 'updated'] %}
+                        <div class="form-group">
+                            <label for="add_{{ column }}">
+                                {{ column_labels[column] }}
+                                <small class="text-muted">({{ col_types[column] }})</small>
+                            </label>
+                
+                            {% if column == 'collection_time' %}
+                                <input type="text" class="form-control" id="add_{{ column }}" name="{{ column }}"
+                                       value="{{ current_epoch }}" readonly
+                                       style="background-color: #f5f5f5; font-style: italic; border: 1px solid #ccc; color: #555;">
+                            {% elif column in foreign_key_info %}
+                                <input type="text" class="form-control" id="add_{{ column }}" name="{{ column }}"
+                                       title="Foreign Key → {{ foreign_key_info[column].referred_table }}.{{ foreign_key_info[column].referred_column }}"
+                                       style="background-color: #fff8e1; color: #c77700; border: 2px solid orange;">
+                            {% else %}
+                                <input type="text" class="form-control" id="add_{{ column }}" name="{{ column }}">
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+                
+                
+                
+                    <button type="submit" class="btn btn-primary">Save Record</button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                </form>
+                
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+
+const baseUrl = "/admin/dynamictable";
+document.addEventListener('DOMContentLoaded', function () {
+    const adminLink = document.querySelector('.navbar-brand');
+    if (adminLink) adminLink.href = '/';
+    const homeLink = document.querySelector('.nav-link');
+    if (homeLink) homeLink.href = '/';
+    const params = new URLSearchParams(window.location.search);
+    const dateColumn = params.get('date_column');
+    const select = document.getElementById('date_column');
+
+    if (dateColumn && select) {
+        select.value = dateColumn;
+    }
+    
+
+    const floatingForm = document.getElementById('floating-save-form');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const saveBtn = document.getElementById('save-btn');
+    const deleteBtn = document.getElementById('delete-btn');
+
+    saveBtn.addEventListener('click', (event) => {
+        event.preventDefault();  // Optional, if needed
+        const form = currentRow.querySelector('form');
+        form.action = '/admin/dynamictable'; // Just to be explicit
+        form.submit();
+    });
+    
+    deleteBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        const form = currentRow.querySelector('form');
+        const hiddenInputs = currentRow.querySelectorAll('input[type="text"][title="Primary Key (read-only)"]');
+        // Initialize an object to store the name-value pairs
+        const hiddenValues = {};
+        // Loop through the NodeList of hidden inputs and collect values
+        hiddenInputs.forEach(input => {
+            hiddenValues[input.name] = input.value;
+        });
+        const hiddenValuesString = JSON.stringify(hiddenValues, null, 2);
+        if (confirm("Do you really want to delete this record? " + hiddenValuesString)) {
+            form.action = '/delete_record';
+            form.submit();
+        }
+    });
+
+    let currentRow = null;
+    let rowChanged = false;  // Track if any input is changed in the current row
+    
+    // Set up each editable row
+    document.querySelectorAll('tr[data-row-id]').forEach(row => {
+        const inputs = row.querySelectorAll('input');
+        const form = row.querySelector('form');
+    
+        inputs.forEach(input => {
+            input.dataset.originalValue = input.value;
+    
+            input.addEventListener('focus', () => {
+                if (currentRow !== row) {
+                    activateRow(row);
+                }
+            });
+    
+            input.addEventListener('input', () => {
+                // Track if the value has changed
+                input.classList.toggle('unsaved', input.value !== input.dataset.originalValue);
+                rowChanged = Array.from(inputs).some(input => input.value !== input.dataset.originalValue);
+                if (rowChanged) {
+                    activateRow(currentRow)
+                    showFloatingButtons(false);
+                } else {
+                    deactivateAllRows()
+                    floatingForm.style.display = 'none';
+                }
+            });
+    
+            // Prevent form submission when pressing Enter
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();  // Prevent the form from submitting
+                }
+            });
+        });
+    });
+    
+    function activateRow(row) {
+        currentRow = row;
+    
+        // Only disable other rows if there are changes in the current row
+        if (rowChanged) {
+            document.querySelectorAll('tr[data-row-id]').forEach(r => {
+                if (r !== row) {
+                    r.classList.add('disabled-row');
+                    r.querySelectorAll('input').forEach(i => i.disabled = true);
+                }
+            });
+        }
+    }
+    
+    function deactivateAllRows() {
+        currentRow = null;
+    
+        document.querySelectorAll('tr[data-row-id]').forEach(r => {
+            r.classList.remove('disabled-row');
+            r.querySelectorAll('input').forEach(i => {
+                i.disabled = false;
+                i.classList.remove('unsaved');
+                i.blur();
+            });
+        });
+    }
+    
+    window.showFloatingButtons = function(del) {
+        floatingForm.style.display = 'flex';
+        if (del)
+            saveBtn.style.display='none'
+        else
+            saveBtn.style.display='flex'
+        floatingForm.onsubmit = () => {
+            deactivateAllRows();
+            floatingForm.style.display = 'none';
+        };
+    }
+
+    cancelBtn.addEventListener('click', () => {
+        if (currentRow) {
+            const inputs = currentRow.querySelectorAll('input');
+            inputs.forEach(input => {
+                input.value = input.dataset.originalValue;
+                input.classList.remove('unsaved');
+            });
+        }
+    
+        deactivateAllRows();
+        floatingForm.style.display = 'none';
+    });
+    
+
+//*************************************************************
+//*************************************************************
+//*************************************************************
+
+
+  // When the modal is shown, set the iframe's source
+    $('#iframeModal').on('show.bs.modal', function () {
+        const iframe = $(this).find('iframe');  // Select the iframe within the modal
+        if (!iframe.attr('src')) {
+        iframe.attr('src', "{{ url_for('static', filename='help.html') }}");
+        }
+    });
+
+    // Optional: Clear the iframe's source when the modal is closed
+    $('#iframeModal').on('hidden.bs.modal', function () {
+        $(this).find('iframe').attr('src', '');  // Reset the iframe's src when modal closes
+    });
+
+
+
+    document.getElementById('splash-screen').style.display = 'none';
+    // Initialize filter dropdown on page load
+    updateFilterNamesDropdown();
+
+    $('#start_date').on('blur', function() {
+        var dateValue = $(this).val();
+        // Validate the date format (YYYY-MM-DD) and ensure the year is not starting with 0
+        var datePattern = /^(?!0\d{3})\d{4}-\d{2}-\d{2}$/;  // Disallow years starting with 0
+        if ($(this)[0].validity.badInput ||
+            (dateValue != '' && (!datePattern.test(dateValue) || isNaN(Date.parse(dateValue))))) {
+          alert('Invalid date! Please enter a valid date in the format YYYY-MM-DD, and the year should not start with 0.');
+          $(this).val('');  // Set to null if not a valid date or year starts with 0
+          localStorage.setItem('startDateValue', '');
+        }
+      });
+
+      $('#end_date').on('blur', function() {
+        var dateValue = $(this).val();
+        // Validate the date format (YYYY-MM-DD) and ensure the year is not starting with 0
+        var datePattern = /^(?!0\d{3})\d{4}-\d{2}-\d{2}$/;  // Disallow years starting with 0
+        if ($(this)[0].validity.badInput || 
+            (dateValue != '' && (!datePattern.test(dateValue) || isNaN(Date.parse(dateValue))))) {
+          alert('Invalid date! Please enter a valid date in the format YYYY-MM-DD, and the year should not start with 0.');
+          $(this).val('');  // Set to null if not a valid date or year starts with 0
+          localStorage.setItem('endDateValue', '');
+        }
+      });
+
+    // Load saved filters from localStorage (previously saved search input)
+    const saved = JSON.parse(localStorage.getItem('savedFilters'));
+    if (saved) {
+        if (saved.search) {
+            const searchInput = document.getElementById('search-input');
+            if (searchInput) {
+                searchInput.value = saved.search;
+            }
+        }
+    }
+
+    /**
+    // Initialize DataTables with server-side processing for column filters
+    $('#data-table').DataTable({
+        initComplete: function () {
+            this.api().columns().every(function () {
+                const column = this;
+                const select = $('<select multiple style="width: 100%; margin-top: 5px;"><option value=""></option></select>')
+                    .appendTo($(column.footer()).empty())
+                    .on('change', function () {
+                        const vals = $(this).val() || [];
+                        if (vals.length === 0) {
+                            column.search('', true, false).draw();
+                        } else {
+                            const regex = vals.map(val => `^${val}$`).join('|');
+                            column.search(regex, true, false).draw();
+                        }
+                    });
+                column.data().unique().sort().each(function (d) {
+                    if (d != null && d !== '') {
+                        select.append(`<option value="${d}">${d}</option>`);
+                    }
+                });
+            });
+        }
+    });
+    **/
+
+
+    /* Load most recent saved filter set, if any
+    let mostRecentFilterName = null;
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('savedFilters_')) {
+            mostRecentFilterName = key.split('savedFilters_')[1];
+            break; // Load the first saved filter set found
+        }
+    }
+    
+    if (mostRecentFilterName) {
+        loadFiltersByName(mostRecentFilterName);
+        $('#filter-names-dropdown').val(mostRecentFilterName); // Update dropdown
+        //$('#filter-names-dropdown option:first').prop('selected', true).trigger('change');
+    }
+    */
+
+    // Load the last jump value from localStorage or set default to 10
+    const jumpInput = document.getElementById('jump-amount');
+    const lastJumpValue = localStorage.getItem('lastJumpValue');
+    if (jumpInput) {
+        if (lastJumpValue) {
+            jumpInput.value = lastJumpValue;
+        } else {
+            jumpInput.value = '10'; // Default value
+            localStorage.setItem('lastJumpValue', '10');
+        }
+    }
+
+    const toggleBtn = document.getElementById('theme-toggle');
+    const darkClass = 'dark-mode';
+
+    // Load theme from localStorage
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.classList.add(darkClass);
+        toggleBtn.textContent = '☀️ Light Mode';
+    }
+
+    toggleBtn.addEventListener('click', () => {
+        const isDark = document.body.classList.toggle(darkClass);
+        toggleBtn.textContent = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    });
+
+    const schema = localStorage.getItem("selected_schema");
+    const table = localStorage.getItem("selected_table");
+    document.getElementById('schema').value = schema;
+    document.getElementById('table').value = table;
+
+    $('#addRecordModal').on('shown.bs.modal', function () {
+        document.getElementById("schema_name").value = schema;
+        document.getElementById("table_name").value = table;
+    });
+
+    const dynamicText = schema && table ? `${schema}.${table}` : 'Dynamic Table';
+    const dynamicLink = document.querySelector('a.nav-link[href="/admin/dynamictable/"]');
+    if (dynamicLink) {
+        dynamicLink.textContent = dynamicText;
+        dynamicLink.removeAttribute('href');
+    }
+
+    const lastStart = localStorage.getItem("startDateValue");
+    if (lastStart) document.getElementById("start_date").value = lastStart;
+
+    const lastEnd = localStorage.getItem("endDateValue");
+    if (lastEnd) document.getElementById("end_date").value = lastEnd;
+
+    document.getElementById("start_date").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") event.preventDefault();
+    });
+    document.getElementById('start_date').addEventListener('change', function () {
+        const val = this.value;
+        if (val) {
+            localStorage.setItem('startDateValue', val);
+        }
+    });
+
+    document.getElementById("end_date").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+        }
+    });
+
+    document.getElementById('end_date').addEventListener('change', function () {
+        const val = this.value;
+        if (val) {
+            localStorage.setItem('endDateValue', val);
+        }
+    });
+
+
+    // Initialize event handlers for filters
+    $('#add-filter').on('click', addFilterRow);
+    $('#apply-filters').on('click', function() {
+        applyFilters(baseUrl);
+    });
+    $('#clear-filters').on('click', clearFilters);
+
+    // Handle delete button click for filters
+    $('#filter-container').on('click', '.remove-filter', function() {
+        const $filterRow = $(this).closest('.filter-row');
+        const index = $filterRow.index();
+        $filterRow.remove();
+        $('#filter-container .filter-row').each(function(i) {
+            if (i === 0) {
+                $(this).find('.logical-operator').remove();
+            } else {
+                $(this).find('.logical-operator').val('AND');
+            }
+        });
+    });
+
+  
+    restoreFiltersFromUrl();
+
+    document.querySelectorAll('div.dt-length').forEach(el => el.remove());
+    document.querySelectorAll('div.dt-search').forEach(el => el.remove());
+    let rowss = document.querySelectorAll('div.dt-layout-row');
+    if (rowss.length > 0) {
+        rowss[rows.length - 1].remove();
+    }
+    document.querySelectorAll('tfoot').forEach(el => el.remove());
+
+    function addFilterRow() {
+        const $template = $('#filter-template').html();
+        const $row = $($template);
+        $('#filter-container').append($row);
+        $('#filter-container .filter-row').each(function(i) {
+            if (i === 0) {
+                $(this).find('.logical-operator').remove();
+            }
+        });
+    }
+
+    function clearFilters() {
+        localStorage.removeItem('savedFilters');
+        $('#filter-container').empty();
+        updateFilterNamesDropdown();
+        el = document.getElementById('end_date')
+        const event = new Event('change');
+        el.value = '';
+        localStorage.setItem('endDateValue', '');
+        el = document.getElementById('start_date')
+        el.value = '';
+        localStorage.setItem('startDateValue', '');
+        const queryParams = new URLSearchParams();
+        add_date_args(queryParams)
+        const url = `${baseUrl}?${queryParams.toString()}`;
+        window.location.href = url;
+    }
+
+    function restoreFiltersFromUrl() {
+        const queryParams = new URLSearchParams(window.location.search);
+        let filterCount = 0;
+        while (queryParams.has(`filter_column_${filterCount}`)) {
+            filterCount++;
+        }
+        $('#filter-container').empty();
+        for (let i = 0; i < filterCount; i++) {
+            const column = queryParams.get(`filter_column_${i}`);
+            const value = queryParams.get(`filter_value_${i}`);
+            const comparisonOp = queryParams.get(`filter_operator_${i}`);
+            const logicalOp = queryParams.get(`filter_logical_${i}`);
+            const $row = $($('#filter-template').html());
+            if (i === 0) {
+                $row.find('.logical-operator').remove();
+            } else {
+                $row.find('.logical-operator').val(logicalOp || 'AND');
+            }
+            $row.find('.column-select').val(column);
+            $row.find('.operator-select').val(comparisonOp || '=');
+            $row.find('.filter-value').val(value);
+            $('#filter-container').append($row);
+        }
+    }
+});
+
+function add_date_args(queryParams){
+    queryParams.set('start_date', document.getElementById("start_date").value);
+    queryParams.set('end_date', document.getElementById("end_date").value);
+    queryParams.set('date_column', document.getElementById("date_column").value);
+    return queryParams
+}
+
+function applyFilters(path) {
+    const filters = getActiveFilters();
+    console.log("Applying filters:", filters);
+    const queryParams = new URLSearchParams();
+    queryParams.set('page', 1);
+    Object.entries(filters).forEach(([key, value]) => {
+        queryParams.set(key, value);
+        console.log(`Setting param: ${key} = ${value}`);
+    });
+    add_date_args(queryParams)
+    const url = `${path}?${queryParams.toString()}`;
+    console.log("Navigating to:", url);
+    document.getElementById('splash-screen').style.display = 'flex';
+    window.location.href = url;
+    // Fallback: hide splash after 2 seconds
+    setTimeout(() => {
+        document.getElementById('splash-screen').style.display = 'none';
+    }, 2500);
+}
+
+document.getElementById("download").addEventListener("submit", function(e) {
+    e.preventDefault(); // Prevent default form submission
+    applyFilters('/download');
+});
+
+function updateFilterNamesDropdown() {
+const filterDropdown = $('#filter-names-dropdown');
+filterDropdown.empty();
+filterDropdown.append('<option value="">Select Saved Filter</option>');
+for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.startsWith('savedFilters_')) {
+        const filterName = key.split('savedFilters_')[1];
+        filterDropdown.append(`<option value="${filterName}">${filterName}</option>`);
+    }
+}
+}
+
+function loadFiltersByName(name) {
+try {
+    const savedFilters = localStorage.getItem(`savedFilters_${name}`);
+    if (savedFilters) {
+        const filters = JSON.parse(savedFilters);
+        console.log("Loaded filters:", filters);
+        $('#filter-container').empty();
+        Object.entries(filters).forEach(([key, value], index) => {
+            if (key.startsWith('filter_column_')) {
+
+                const filterIndex = key.split('_')[2];
+                const column = value;
+                const filterValue = filters[`filter_value_${filterIndex}`];
+                const operator = filters[`filter_operator_${filterIndex}`];
+                const logicalOp = filters[`filter_logical_${filterIndex}`];
+                const $row = $($('#filter-template').html());
+                if (filterIndex == 0) {
+                    $row.find('.logical-operator').remove();
+                } else {
+                    $row.find('.logical-operator').val(logicalOp || 'AND');
+                }
+                $row.find('.column-select').val(column);
+                $row.find('.operator-select').val(operator);
+                $row.find('.filter-value').val(filterValue);
+                $('#filter-container').append($row);
+            }
+        });
+    }
+} catch (e) {
+    console.error('Error parsing savedFilters:', e);
+    localStorage.removeItem('savedFilters'); // Clear corrupted data
+}
+}
+
+$(document).ready(function() {
+    $('#filter-names-dropdown').change(function() {
+        const selectedFilter = $(this).val();
+        console.log('RRRRRRR', selectedFilter)
+        if (selectedFilter) {
+            loadFiltersByName(selectedFilter);
+            $('#filter-name').val($(this).val());
+        $(this).blur()
+        }
+    });
+
+    $('#filter-names-dropdown').on('keydown', function(e) {
+        console.log('QQQQQQQQQ')
+        if (e.key === 'Enter' || e.keyCode === 13) {
+            e.preventDefault(); // optional: prevent form submission or default action
+            $(this).trigger('change');
+        }
+    });
+
+    $('#filter-names-dropdown').on('blur', function () {
+        // Only change if nothing selected (e.g. placeholder is selected)
+        //if (this.selectedIndex <= 0) {
+          this.selectedIndex = 0; // Select first real option
+        //}
+      });
+
+    // Attach event listeners to navigation buttons to pass the event
+    document.querySelectorAll('.btn[onclick="handleJump(this)"]').forEach(button => {
+        button.addEventListener('click', (event) => handleJump(button, event));
+    });
+});
+
+function saveFiltersWithName(name) {
+    if (!name) {
+        alert('Please enter a filter name.');
+        return;
+    }
+    const filters = getActiveFilters();
+    if (Object.keys(filters).length === 0) {
+        alert('No filters to save.');
+        return;
+    }
+    localStorage.setItem(`savedFilters_${name}`, JSON.stringify(filters));
+    console.log(`Filters saved with name: ${name}`);
+    updateFilterNamesDropdown();
+    $('#filter-names-dropdown').val(name); // Select the newly saved filter
+    alert(`Filter "${name}" saved successfully.`);
+}
+
+function getActiveFilters() {
+    const filters = {};
+    let filterIndex = 0;
+    $('.filter-row').each((_, row) => {
+        const $row = $(row);
+        const column = $row.find('.column-select').val()?.trim();
+        const value = $row.find('.filter-value').val()?.trim();
+        const operator = $row.find('.operator-select').val()?.trim();
+        const logicalOp = $row.find('.logical-operator').val()?.trim();
+        if (column && value) {
+            filters[`filter_column_${filterIndex}`] = column;
+            filters[`filter_value_${filterIndex}`] = value;
+            filters[`filter_operator_${filterIndex}`] = operator;
+            if (filterIndex > 0 && logicalOp) {
+                filters[`filter_logical_${filterIndex}`] = logicalOp;
+            }
+            filterIndex++;
+        }
+    });
+    return filters;
+}
+
+function handleJump(el, event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    const currentPage = parseInt(getQueryParam('page'), 10);
+    const label = el.textContent.trim();
+    console.log("Clicked:", label);
+    let jumpValue = null;
+    const totalPages = {{ pagination.total_pages | default(4246) }};
+    if (!isNaN(label)) {
+        const pg = parseInt(label);
+        jumpValue = pg - currentPage;
+    } else if (label === "First") {
+        jumpValue = (currentPage - 1) * -1;
+    }  else if (label === "Last") {
+        jumpValue = totalPages - currentPage + 1;;
+    } else if (label === "Prev") {
+        jumpValue = -1;
+    } else if (label === "Next") {
+        jumpValue = 1;
+    } else if (label === "Jump") {
+        jumpValue = parseInt(document.getElementById("jump-amount").value, 10);
+        console.log("Jump by:", jumpValue);
+        if (isNaN(jumpValue) || jumpValue === 0) {
+            alert("Please enter a valid number");
+            const lastJumpValue = localStorage.getItem('lastJumpValue') || '10';
+            document.getElementById('jump-amount').value = lastJumpValue;
+            return;
+        }
+        localStorage.setItem('lastJumpValue', jumpValue);
+    } else if (label === 'First') {
+        jumpValue = currentPage * -1;
+    } else if (label === 'Last') {
+        jumpValue = totalPages - currentPage + 1;
+    }
+
+ 
+    const queryParams = new URLSearchParams();
+    let newPage = Math.max(1, Math.min(currentPage + jumpValue, totalPages));
+    const filters = getActiveFilters();
+    Object.entries(filters).forEach(([key, value]) => {
+        queryParams.set(key, value);
+        console.log(`Setting param: ${key} = ${value}`);
+    });
+    //const filterQueryString = Object.entries(filterParams)
+    //    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    //    .join('&');
+    //const pageParam = `page=${newPage}`;
+    //const queryParams = filterQueryString ? `${filterQueryString}&${pageParam}` : pageParam;
+    queryParams.set('page', `${newPage}`);
+    add_date_args(queryParams)
+    const url = `${baseUrl}?${queryParams.toString()}`; //###baseUrl + '?' + pageParam + (filterQueryString ? '&' + filterQueryString : '');
+    window.location.href = url;
+}
+
+function updateFilterNamesDropdown() {
+    const filterDropdown = $('#filter-names-dropdown');
+    filterDropdown.empty();
+    filterDropdown.append('<option value="">Select Saved Filter</option>');
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('savedFilters_')) {
+            const filterName = key.split('savedFilters_')[1];
+            filterDropdown.append(`<option value="${filterName}">${filterName}</option>`);
+        }
+    }
+    filterDropdown.selectedIndex = 0;
+}
+
+function getQueryParam(param) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return parseInt(urlParams.get(param)) || 1;
+}
+
+window.addEventListener("pagehide", function () {
+    document.getElementById('splash-screen').style.display = 'flex';
+});
+</script>
+{% endblock %}

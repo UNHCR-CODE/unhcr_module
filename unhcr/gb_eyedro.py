@@ -20,7 +20,7 @@ from unhcr import err_handler
 
 run_dt = datetime.now().date()
 mods = [["app_utils", "app_utils"],["constants", "const"],["db", "db"],["err_handler", "err_handler"]]
-res = app_utils.app_init(mods=mods, log_file="unhcr.gb_eyedro.log", version="0.4.7", level="INFO", override=False)
+res = app_utils.app_init(mods=mods, log_file="unhcr.gb_eyedro.log", version="0.4.8", level="INFO", override=False)
 logger = res[0]
 if const.LOCAL:  # testing with local python files
     logger, app_utils, const, db, err_handler = res
@@ -486,6 +486,7 @@ def db_create_tables_2(serials, db_eng=db.set_local_defaultdb_engine()):
                 if cnt != 1 or res[0][0] != 55:
                     sql = f"""
                         CREATE INDEX gb_{serial}_ts_idx ON eyedro.gb_{serial} USING btree (ts DESC);
+                        CREATE UNIQUE INDEX gb_{serial}_ts_epoch_idx ON eyedro.gb_{serial} USING btree (ts, epoch_secs);
                         """
                     res = conn.execute(text(sql))
                     cnt = res.rowcount
@@ -501,6 +502,7 @@ def db_create_tables_2(serials, db_eng=db.set_local_defaultdb_engine()):
                 cnt = res.rowcount
                 print(f"ZZZZZZZ' {serial} {cnt}")
                 pass
+            pass
         return 'All good Houston', None
     except psycopg2.DatabaseError as e:
         logger.error(f"Database error during table creation: {e}")

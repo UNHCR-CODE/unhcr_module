@@ -462,10 +462,10 @@ def test_str_to_float_or_zero(mock_log_error, value, expected):
 # --- Module Versioning ---
 
 
-@patch("importlib.metadata.version", return_value="0.4.7")
+@patch("importlib.metadata.version", return_value="0.4.8")
 def test_get_module_version_success(mock_version):
     version, err = utils.get_module_version("unhcr_module")
-    assert version == "0.4.7"
+    assert version == "0.4.8"
     assert err is None
     #!!! 0 mock_version.assert_called_once_with('unhcr_module')
 
@@ -481,9 +481,9 @@ def test_get_module_version_failure(mock_version):
 @pytest.mark.parametrize(
     "current_ver_mock, compare_ver, expected",
     [
-        ("0.4.7", "0.4.7", True),
-        ("0.4.7", "0.4.6", True),
-        ("0.4.7", "0.5.0", False),
+        ("0.4.8", "0.4.8", True),
+        ("0.4.8", "0.4.6", True),
+        ("0.4.8", "0.5.0", False),
         ("1.0.0", "0.9.9", True),
         ("1.0.0", "1.0.0", True),
         ("1.0.0", "1.0.1", False),

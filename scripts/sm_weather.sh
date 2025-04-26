@@ -1,11 +1,13 @@
 #!/bin/bash
 
 # every 6 hours
-# 0 */6 * * * cd ~/code/unhcr_module && pgrep -fx "/bin/bash ./scripts/sm_weather.sh" > /dev/null || (/bin/bash ./scripts/sm_weather.sh | tee -a ~/code/logs/sm_weather.log 2>&1 && echo $(( $(cat ~/code/logs/run_count_sm_weather.log 2>/dev/null || echo 0) + 1 )) > ~/code/logs/run_count_sm_weather.log)
+# 0 */6 * * * cd /datadrive/unhcr_module && pgrep -fx "sudo /bin/bash ./scripts/sm_weather.sh" > /dev/null || (sudo /bin/bash ./scripts/sm_weather.sh | sudo tee -a /datadrive/logs/sm_weather.log 2>&1 && sudo bash -c 'echo $(( $(cat /datadrive/logs/run_count_sm_weather.log 2>/dev/null || echo 0) + 1 )) > /datadrive/logs/run_count_sm_weather.log')
 
 
 # change to your repo root dir
-cd ~/code/unhcr_module || exit 1
+cd /home/unhcr_admin/code/unhcr_module || exit 1
+echo "Current directory: $(pwd)"
+echo "Current user: $(whoami)"
 
 # Activate the virtual environment directory
 VENV_DIR="vfedot"
@@ -44,7 +46,7 @@ deactivate
 
 # If Python script fails, log the exit code
 if [ $EXIT_CODE -ne 0 ]; then
-    echo "$(date): app_sm_weather.py FAILED with exit code $EXIT_CODE" >> ~/code/logs/error_sm_weather.log
+    echo "$(date): app_sm_weather.py FAILED with exit code $EXIT_CODE" >> /datadrive/logs/error_sm_weather.log
 fi
 
 # Exit with the same exit code as Python

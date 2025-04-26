@@ -23,7 +23,7 @@ from unhcr import app_utils
 from unhcr import constants as const
 
 mods=[["app_utils", "app_utils"],["constants", "const"]]
-res = app_utils.app_init(mods=mods, log_file="unhcr.s3.log", version="0.4.7", level="INFO", override=False)
+res = app_utils.app_init(mods=mods, log_file="unhcr.s3.log", version="0.4.8", level="INFO", override=False)
 logger = res[0]
 if const.LOCAL:  # testing with local python files
     logger, app_utils, const = res
