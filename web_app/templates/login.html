@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='unhcr.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-5" style="max-width: 400px;">
+  <h2 class="mb-4">Login</h2>
+
+  <form method="POST" class="login-form">
+    <div class="form-group mb-3">
+      <label for="email">Email:</label>
+      <input type="email" name="email" id="email" class="form-control" required>
+    </div>
+
+    <div class="form-group mb-4">
+      <label for="password">Password:</label>
+      <input type="password" name="password" id="password" class="form-control" required>
+    </div>
+
+    <button type="submit" class="btn btn-primary w-100">Log In</button>
+  </form>
+  <br>
+  <br>
+
+  {% if error %}
+  <div class="alert alert-danger mt-3">{{ error }}</div>
+  {% endif %}
+</div>
+</div>
+{% endblock %}
+<script>
+    var logoutDiv = document.getElementById('logout');
+    if (logoutDiv) {
+        logoutDiv.remove();
+    }
+</script>
