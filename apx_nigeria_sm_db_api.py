@@ -43,6 +43,47 @@ db_eng = db.set_local_defaultdb_engine()
 #models.Base.metadata.create_all(db_eng)
 # pass
 
+
+site_id_list =api_solarman.db_all_site_ids(db_eng)
+ar = []
+res_list = []
+for site in site_id_list:
+    print(site)
+    res, err = api_solarman.api_get_devices(site, deviceType="INVERTER")
+    if err:
+        logger.error(err)
+        exit(9)
+    res_list.extend(res)
+
+# Extract device_sn and create DataFrame
+df_inverter_api = pd.DataFrame([item["device_sn"] for item in res_list], columns=["device_sn"])
+print(df_inverter_api)
+pass
+
+
+df_inverter_db, err = api_solarman.db_get_devices_site_sn_id(db_eng, dev_type="INVERTER") #, site_key="'%'")
+if err:
+    logger.error(err)
+    exit(9)
+print(df_inverter_db)
+pass
+
+only_in_api = df_inverter_api[~df_inverter_api['device_sn'].isin(df_inverter_db['device_sn'])]
+only_in_db = df_inverter_db[~df_inverter_db['device_sn'].isin(df_inverter_api['device_sn'])]
+
+print("Device SNs only in API:")
+print(only_in_api)
+
+print("\nDevice SNs only in DB:")
+print(only_in_db)
+
+# Optional: combine differences
+diff_df = pd.concat([only_in_api.assign(source='API'), only_in_db.assign(source='DB')])
+print("\nAll differences:")
+print(diff_df)
+pass
+
+
 #!!!!!! create and execute migration TODO: only execute if DB needs upgrade -- generalize schema and env.py & alembic.ini
 # res, err = models.create_solarman_migration('Change device history key and remove id', db_eng)
 # logger.info('Added created and updated columns to solarman schema tables')
@@ -634,7 +675,7 @@ genset_gbs = ['00980b6d']
 
 def meter_response(serial, epoch):
     try:
-        EYEDRO_KEY_GET_DATA_EMPTY = 'UGwoH3C6Y2CE7k8vZhWdVfIAhVaKVhEfxLt9Rk8U' #old "URcLQ4MNDKgCPOacW8PB4jbTxBdEXvk3sajrD7SU"
+        EYEDRO_KEY_GET_DATA_EMPTY = const.GB_API_V1_EMPTY_KEY
         print("EyeDro Endpoint and Key Set", serial, epoch)
         meter_url = "https://api.eyedro.com/Unhcr/DeviceData?DeviceSerial=" + str(serial) + "&DateStartSecUtc=" + str(epoch) + f"&DateNumSteps=1440&UserKey={EYEDRO_KEY_GET_DATA_EMPTY}"
         response = requests.get(meter_url, timeout=600)
