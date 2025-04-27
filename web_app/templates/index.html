@@ -9,9 +9,6 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-  <h2>Select Schema and Table</h2>
-
   {% if logs %}
   <div class="logs">
     <strong>Startup Logs:</strong>
@@ -22,35 +19,43 @@
     </ul>
   </div>
   {% endif %}
-  <form method="POST" class="w-auto me-2 " onsubmit="return validateFormAndSave()">
-    <input type="hidden" name="prev_schema" value="{{ selected_schema }}">
-
-    <label for="schema">Select Schema:</label>
-    <select name="schema" id="schema" onchange="saveSchema(); this.form.submit();" autofocus>
-      <option value="">-- choose schema --</option>
-      {% for schema in schemas %}
-        <option value="{{ schema }}">{{ schema }}</option>
-      {% endfor %}
-    </select>
-
-    <label for="table">Select Table:</label>
-    <select name="tabledb" id="tabledb" onchange="saveTable(); removeErrorHighlight(this);">
-      <option value="">-- choose table --</option>
-      {% for table, row_count, size in tables %}
-        <option value="{{ table }}">
-          {{ table }} (Rows: {{ row_count }} | Size: {{ size }})
-        </option>
-      {% endfor %}
-    </select>
-    <div class="d-flex justify-content-between">
-      <button type="submit" data-tooltip="Display the selected table">Open</button>
-      <button type="button" data-toggle="modal" data-target="#iframeModal" data-tooltip="User guide">Help</button>
+  <form method="POST" action="/logout" style="position: absolute; top: 10px; right: 10px;">
+    <div>
+      <button id="theme-toggle" class="btn btn-outline-secondary" style="position: relative; top: -12px;" data-tooltip="Toggle between light and dark mode">☀️ Light Mode</button>
+      <span class="me-2 text-muted small">hermes@unhcr.org</span>
+      <button type="submit" class="btn btn-sm btn-outline-danger">Logout</button>
     </div>
   </form>
-  <button id="theme-toggle" class="btn btn-outline-secondary" 
-  style="height: 29px;top: 18px;position: absolute;left: 430px;" data-tooltip="Toggle between light and dark mode">
-    🌙 Dark Mode
-</button>
+  
+  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;">
+    <br>
+    <h2 style="top: 0px; position: relative;">Select Schema and Table</h2>  
+    <form method="POST" class="w-auto me-2" onsubmit="return validateFormAndSave()">  
+      <input type="hidden" name="prev_schema" value="{{ selected_schema }}">
+      <label for="schema">Select Schema:</label>
+      <select name="schema" id="schema" onchange="saveSchema(); this.form.submit();" autofocus>
+        <option value="">-- choose schema --</option>
+        {% for schema in schemas %}
+          <option value="{{ schema }}">{{ schema }}</option>
+        {% endfor %}
+      </select>
+  
+      <label for="table">Select Table:</label>
+      <select name="tabledb" id="tabledb" onchange="saveTable(); removeErrorHighlight(this);">
+        <option value="">-- choose table --</option>
+        {% for table, row_count, size in tables %}
+          <option value="{{ table }}">
+            {{ table }} (Rows: {{ row_count }} | Size: {{ size }})
+          </option>
+        {% endfor %}
+      </select>
+      <div class="d-flex justify-content-between">
+        <button type="submit" data-tooltip="Display the selected table">Open</button>
+        <button type="button" data-toggle="modal" data-target="#iframeModal" data-tooltip="User guide">Help</button>
+      </div>
+    </form>
+  </div>
+  
   <!-- Modal -->
   <div class="modal fade" id="iframeModal" tabindex="-1" role="dialog" aria-labelledby="iframeModalLabel">
     <div class="modal-dialog modal-lg" role="document" style="width: 90%;">
