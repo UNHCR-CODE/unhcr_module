@@ -20,17 +20,24 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <!-- Page Content -->
-<div id="total-rows-display" class="d-flex align-items-center justify-content-between gap-3" style="gap: 1rem;left: 11px;position: relative;width: 600px;">
-    <strong data-tooltip="Total number of rows in the table">
-        Total Rows: {{ count }}
-    </strong>
+<div id="total-rows-display" class="d-flex align-items-center justify-content-between gap-3" style="
+    position: fixed;
+    right: 100px;
+    top: -1px;
+    min-width: 280px;
+    z-index: 101;
+    gap: 0.5rem;
+    overflow-x: hidden; 
+">
     <button id="theme-toggle" class="btn btn-outline-secondary" style="height: 29px;" data-tooltip="Toggle between light and dark mode">☀️ Light Mode</button>
-
-    <div class="d-flex align-items-center">
+    <strong data-tooltip="Total number of rows in the table">
+        Total Rows: {{count}}
+    </strong>
+    <div class="d-flex align-items-center" style="position: fixed; top: 21px; right: 93px;">
         <span class="me-2 text-muted small">
             {{ session.get('user_email', '') }}
         </span>
-        <form method="POST" action="{{ url_for('logout') }}">
+        <form method="POST" action="/logout">
             <button type="submit" class="btn btn-sm btn-outline-danger">Logout</button>
         </form>
     </div>
