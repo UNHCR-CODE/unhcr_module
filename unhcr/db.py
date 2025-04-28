@@ -63,6 +63,7 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, exc, orm, text
+from sqlalchemy.dialects import postgresql
 
 from unhcr import app_utils
 from unhcr import constants as const
@@ -218,6 +219,19 @@ def sql_execute(sql, engine=default_engine, data=None):
     session = Session()
     ######session.execute(text("SET search_path TO solarman;"))
     try:
+        if data:
+            stmt = text(sql).bindparams(**data)
+        else:
+            stmt = text(sql)
+
+        compiled = stmt.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True}
+        )
+
+        print(str(compiled))
+        logger.debug(compiled)
+        
         # Use SQLAlchemy's execute method
         result = session.execute(text(sql), params=data)
 

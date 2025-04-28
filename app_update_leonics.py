@@ -117,7 +117,7 @@ def execute(token, start_ts=None):
             return
     if PROSPECT:
         if BACKFILL_DT:
-            db.update_prospect(eng, start_ts=start_ts, local=True)  # AZURE
+            db.update_prospect(eng, start_ts=start_ts, local=True)
         else:
             res, err = utils.prospect_running()
             if err:

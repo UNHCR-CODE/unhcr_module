@@ -81,7 +81,8 @@ run_dt = datetime.now().date()
 FILTERED_GB_SN_PATH=const.add_csv_dt(const.ALL_API_GBS_CSV_PATH, (run_dt).isoformat()) #const.add_csv_dt(const.ALL_API_GBS_CSV_PATH, run_dt.isoformat())
 
 if os.path.exists(FILTERED_GB_SN_PATH):
-    filtered_gb_sn_df = pd.read_csv(FILTERED_GB_SN_PATH)
+    df = pd.read_csv(FILTERED_GB_SN_PATH)
+    filtered_gb_sn_df = df[df['gb_serial'].str.startswith('B') | df['gb_serial'].str.startswith('009')]['gb_serial'].drop_duplicates()
 else:
     df, err = gb_eyedro.api_get_user_info_as_df()
     if err:
@@ -97,7 +98,7 @@ sn_array = sorted(filtered_gb_sn_df.str.replace('-', '').tolist())
 num_parts = 10
 chunks = [list(chunk) for chunk in np.array_split(sn_array, num_parts)]  # Ensure list format
 
-days = 5
+days = 3
 dt_start = datetime.now(timezone.utc)
 cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 epoch_cutoff = app_utils.get_previous_midnight_epoch(int(cutoff.timestamp()))

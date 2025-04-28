@@ -20,14 +20,11 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <!-- Page Content -->
-<div id="total-rows-display" class="d-flex align-items-center justify-content-between gap-3" style="gap: 1rem;right: 400px;top: 8px;">
-    <strong style="color: white;" data-tooltip="Total number of rows in the table">
+<div id="total-rows-display" class="d-flex align-items-center justify-content-between gap-3" style="gap: 1rem;left: 11px;position: relative;width: 600px;">
+    <strong data-tooltip="Total number of rows in the table">
         Total Rows: {{ count }}
     </strong>
-
-    <button id="theme-toggle" class="btn btn-outline-secondary" style="height: 29px;" data-tooltip="Toggle between light and dark mode">
-        🌙 Dark Mode
-    </button>
+    <button id="theme-toggle" class="btn btn-outline-secondary" style="height: 29px;" data-tooltip="Toggle between light and dark mode">☀️ Light Mode</button>
 
     <div class="d-flex align-items-center">
         <span class="me-2 text-muted small">
@@ -460,9 +457,9 @@
 </div>
 
 <script>
-
 const baseUrl = "/admin/dynamictable";
 document.addEventListener('DOMContentLoaded', function () {
+
     const adminLink = document.querySelector('.navbar-brand');
     if (adminLink) adminLink.href = '/';
     const homeLink = document.querySelector('.nav-link');

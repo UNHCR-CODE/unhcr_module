@@ -257,8 +257,7 @@ def db_get_sm_weather_max_epoch(db_eng, device_sn):
     return epoch, None
 
 
-
-def db_get_devices_site_sn_id(db_eng, dev_type='%', site_key='%'):
+def db_get_devices_site_sn_id(db_eng, dev_type="%", site_key="%"):
     sql = """
         WITH site_devices AS (
             SELECT s."name", dsh.station_id, dsh.device_sn, dsh.device_id, d.device_type 
@@ -280,6 +279,7 @@ def db_get_devices_site_sn_id(db_eng, dev_type='%', site_key='%'):
         logger.error(f"db_get_devices_site_sn_id ERROR: {err}")
         return None, err
     return pd.DataFrame(df), None
+
 
 def camel_to_snake(name):
     """Converts a camelCase string to snake_case."""
@@ -316,6 +316,36 @@ def round_to_nearest_5_minutes(dt):
 
     return dt.replace(minute=rounded_minutes, second=0, microsecond=0)
 
+def api_get_all_stations(db_eng=None):
+
+    payload = json.dumps({
+    "page": 1,
+    "size": 200
+    })
+    url = BASE_URL + "/station/v1.0/list?language=en"
+
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "UNHCR_STEVE",
+        "Authorization": f"Bearer {BIZ_ACCESS_TOKEN}",
+    }
+
+    response = requests.request("POST", url, headers=headers, data=payload)
+
+    res = response.json()
+    if "success" not in res or res["success"] != True:
+        return None, "API call not successful"
+    data = res["stationList"]
+    data = convert_keys_to_snake_case(data)
+    err = None
+    if db_eng:
+        #TODO: upsert DB
+        ######res, err = err_handler.error_wrapper(lambda: insert_station_data_daily(db_eng, data))
+        ####db_insert_devices(db_eng, data)
+        pass
+    if err:
+        return None, err
+    return pd.DataFrame(data), None
 
 def db_all_site_ids(db_eng):
     with Session(db_eng) as session:
@@ -378,14 +408,15 @@ def db_insert_devices(db_eng, records=None):
     logger.info("Data inserted successfully!")
 
 
-def api_get_devices(site_id, db_eng=None):
+def api_get_devices(site_id, deviceType=None, db_eng=None):
     url = BASE_URL + "/station/v1.0/device?language=en"
 
-    payload = json.dumps(
-        {
-            "stationId": site_id,
-        }
-    )
+    pl = {"stationId": site_id }
+    if deviceType:
+        pl["deviceType"] = deviceType
+     #"stationId": "{{stationId_Ogoja_gh}}",
+    #"deviceType": "INVERTER"
+    payload = json.dumps(pl)
     headers = {
         "Content-Type": "application/json",
         "User-Agent": "UNHCR_STEVE",

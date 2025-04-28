@@ -394,7 +394,7 @@ def db_create_tables_2(serials, db_eng=db.set_local_defaultdb_engine()):
         wh_p1 float8 NULL,
         wh_p2 float8 NULL,
         wh_p3 float8 NULL,
-        CONSTRAINT gb_{serial}_pkey PRIMARY KEY (ts, epoch_secs)
+        CONSTRAINT gb_{serial}_pkey PRIMARY KEY (ts)
     );
 
     SELECT create_hypertable('eyedro.gb_{serial}', 'ts', if_not_exists => TRUE, migrate_data => true);
@@ -514,7 +514,6 @@ def db_create_tables_2(serials, db_eng=db.set_local_defaultdb_engine()):
         conn.close()  # ✅ Always close the connection
 
     return res, err
-
 
 
 def log_gb_errors(errs, logger):
@@ -896,7 +895,6 @@ def db_get_all_gb_gaps(src='local'):
     #Print summary
     print(df.head())
     print(f"✅ Data gaps found in {len(df)} rows. Results saved to 'eyedro_data_gaps.csv'.")
-
 
 
 
