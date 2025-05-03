@@ -512,7 +512,7 @@ def update_prospect(eng, start_ts=None, local=None):
     # try:
     start_ts = prospect_get_start_ts(local, start_ts)
     rows, err = sql_execute(
-        f"select * FROM takum_leonics_api_raw where DatetimeServer >= '{start_ts}' order by DatetimeServer  limit 50000;",
+        f"select * FROM takum_leonics_api_raw where DatetimeServer >= '{start_ts}' order by DatetimeServer  limit 10000;",
         eng,
     )
     assert err is None
@@ -541,10 +541,57 @@ def update_prospect(eng, start_ts=None, local=None):
     logger.info("Data has been saved to 'sys_pros'")
     return res, None
 
-    # except Exception as e:
-    #     logger.error(f"PROSPECT Error occurred: {e}")
-    #     return None, e
 
+def update_prospect_gb(eng, sn, start_ts, op='<', num_rows=10000):
+    sn = sn.lower()
+    logger.info(f"Starting update_prospect_gb ts: {start_ts}  serial number: {sn}")
+    num_rows = min(num_rows, 10000)
+    rows, err = sql_execute(
+        f"select * FROM eyedro.gb_{sn} where ts {op} '{start_ts}' order by ts limit {num_rows};",
+        eng,
+    )
+    if err:
+        return None, err
+
+    if len(rows) == 0:
+        return None, "No data found"
+    # Convert the result to a Pandas DataFrame
+    columns = columns = list(rows[0]._fields) if rows else []
+    # Get column names
+    df = pd.DataFrame(rows, columns=columns)
+    postfix = f"gb_{sn}_"
+    df["external_id"] = df["epoch_secs"].astype(str).apply(lambda x: postfix + x)
+    df['ts'] = pd.to_datetime(df['ts'], unit='ms', utc=True)
+
+    res, err = api_prospect.api_in_prospect_gb(df)
+    if err:
+        msg = f"Prospect API in GB failed ERROR: {err}"
+        logger.error(msg)
+        return None, msg
+    logger.info(f"importing to Prospect: {res.status_code}  {res.text}")
+
+    # Save the DataFrame to a CSV file
+    if logger.getEffectiveLevel() < logging.INFO:
+        sts = start_ts.replace(" ", "_").replace(":", "HM")
+        df.to_csv(f"sys_pros_{sts}.csv", index=False)
+
+    logger.info(f"Data has been saved to 'gb_{sn}'")
+    return df, None
+
+def db_get_dates_gb(sn, engine=default_engine):
+    dt, err = sql_execute(
+        f"select max(ts) FROM eyedro.gb_{sn}", engine
+    )
+    if err:
+        return(None, None, err)
+    max_dt = dt[0][0]
+    dt, err = sql_execute(
+        f"select min(ts) FROM eyedro.gb_{sn}", engine
+    )
+    if err:
+        return(None, None, err)
+    min_dt = dt[0][0]
+    return min_dt, max_dt, None
 
 # WIP
 def backfill_prospect(start_ts=None, local=True):

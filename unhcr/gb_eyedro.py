@@ -626,6 +626,9 @@ FROM insert_attempt;
     except psycopg2.DatabaseError as e:
         conn.rollback()  # Rollback on failure
         logger.error(f"ZZZ {serial} update_gb_db Database error during UPSERT: {e}")
+        if 'does not exist' in str(e):
+            res, err = db_create_tables_2([serial], engine)
+            logger.info(f"TTTTT db_create_tables_2 {serial} {res}, {err}")
         return None, e
     except Exception as e:
         conn.rollback()  # Rollback on any other failure

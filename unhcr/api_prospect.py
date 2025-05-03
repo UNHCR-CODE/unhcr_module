@@ -288,3 +288,82 @@ def get_prospect_last_data(response, key="datetimeserver"):
     except Exception as e:
         logger.error(f"ERROR: get_prospect_last_data {e}")
     return res
+
+
+def get_prospect_last_data_gb(sn, key="ts", op="max", last='false'):
+    try:
+        msg = 'get_prospect_last_data_gb Trying API'
+        url = const.BASE_URL
+        api_key = const.API_OUT_KEY
+        #https://app.prospect.energy/api/v1/out/custom?q[source_id_eq]=1029&last_page=true&filter[][field]=external_id&filter[][type]=matches&filter[][value]=gb_00980A00%25&page=1&size=1&s[]=external_id asc
+        #https://app.prospect.energy/api/v1/out/custom?q[source_id_eq]=1029&last_page=true&filter[][field]=external_id&filter[][type]=matches&filter[][value]=gb_00980A00_%25&page=1&size=1&s[]=external_id desc
+        url += f"/v1/out/custom?q[source_id_eq]=1029&last_page={last}&filter[][field]=external_id&filter[][type]=matches&filter[][value]=gb_{sn}_%25&page=1&size=1&s[]=external_id desc;"
+        if op == 'min':
+            url += url.replace(" desc;", " asc;")
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+        res = requests.request("GET", url, headers=headers)
+        if res and res.status_code > 399:
+            return None, f'get_prospect_last_data_gb Bad status_code ERROR: {res.status_code}'
+        j = json.loads(res.text)
+        # print(json.dumps(j, indent=2))
+        # logger.info(f'\n\n{j['data'][0]}')
+        if j["errors"] != []:
+            return None, f'get_prospect_last_data_gb ERROR: {j["errors"]}'
+        if len(j["data"]) == 0:
+            return None, None #f'get_prospect_last_data_gb ERROR: No data'
+        dt = None
+        if "custom" in j["data"][0] and key in j["data"][0]["custom"]:
+            return j["data"][0]["custom"][key], None
+            # elif op == 'max' and 'last_page' in j:
+            #     last_page = j["last_page"]
+            #     url = url.replace('external_id asc', f'external_id desc')
+            #     res = requests.request("GET", url, headers=headers)
+            #     if res and res.status_code > 399:
+            #         return None, f'get_prospect_last_data_gb last_page, Bad status_code ERROR: {res.status_code}'
+            #     j = json.loads(res.text)
+            #     if "custom" in j["data"][0] and key in j["data"][0]["custom"]:
+            #         return j["data"][0]["custom"][key], None
+        msg = 'get_prospect_last_data_gb ERROR: key not found'
+    except Exception as e:
+        msg = f"ERROR: get_prospect_last_data_gb {e}"
+        logger.error(msg)
+    return None, msg
+
+
+def api_in_prospect_gb(df):
+
+    if df is None:
+        return df
+
+    try:
+        url = const.BASE_URL
+        key = const.PROS_GB_IN_KEY
+        url += "/v1/in/custom"
+
+        #df['custom'] = df['custom'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
+        json_str = df.to_json(orient="records", date_format="iso")
+        data = '{"data": ' + json_str + '}'
+        # # Wrap the JSON string in a dictionary and convert it back to a JSON-formatted string
+        # data_dict = {"data": json.loads(json_str)}
+
+        # # Convert the dictionary back to a JSON string
+        # data = json.dumps(data_dict)
+        if len(data) == 0:
+            return None, 'api_in_prospect ERROR: len(data) == 0'
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+
+        res = requests.request(
+            "POST", url, headers=headers, data=data, verify=const.VERIFY
+        )
+        if res and res.status_code > 399:
+            logger.error(f"api_in_prospect ERROR: {res.status_code}")
+            return None, f"api_in_prospect ERROR: {res.status_code}"
+        if 'Import started' not in res.text:
+            return None, f'get_prospect_last_gb_data ERROR: {res.text}'
+        return res, None
+    # TODO more specific error trapping
+    except Exception as e:
+        msg = f"api_in_prospect ERROR: {e}"
+        logger.error(msg)
+        return None, msg

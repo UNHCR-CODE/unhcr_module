@@ -16,19 +16,21 @@ from unhcr import app_utils
 from unhcr import constants as const
 from unhcr import db
 from unhcr import gb_eyedro
+from unhcr import api_prospect
 
 mods=[
     ["app_utils", "app_utils"],
     ["constants", "const"],
     ["db", "db"],
     ["gb_eyedro", "gb_eyedro"],
+    ["api_prospect", "api_prospect"],
 ]
 
 res = app_utils.app_init(mods, log_file="unhcr.app_gb_1min_data.log", version="0.4.8", 
                          level="INFO", override=True, quiet=False)
 logger = res[0]
 if const.LOCAL:
-    logger,app_utils, const, db, gb_eyedro = res
+    logger,app_utils, const, db, gb_eyedro, api_prospect = res
 
 
 #!!!!!! upload new gb data to db concurrent -- update all_api_gbs using unhcr_module\gb_serial_nums.py
@@ -44,6 +46,7 @@ def process_chunk_new(chunk, param1, param2, param3, param4):
     results = []
     item_count = itertools.count(0)  # Reset counter for each chunk
     item_lock = threading.Lock()
+    dt_5days = datetime.now(timezone.utc) - timedelta(days=5)
 
     for item in chunk:
         with item_lock:
@@ -52,8 +55,58 @@ def process_chunk_new(chunk, param1, param2, param3, param4):
         print(f"Processing chunk #{chunk_count} item #{current_item_count}")
         msg = f'{chunk_count}:{current_item_count} of {chunk_size}'
         result = gb_eyedro.upsert_gb_data(s_num=item, engine=param1, epoch_cutoff=param2, MAX_EMPTY=param3, msg=msg, logger=logger)  # Apply function to each item
+
         #########result = add_constraints(db_eng=param1, serial=item)
         results.append(result)
+
+
+       
+       
+       
+        ops_max = ['max', '>']
+        ops_min = ['min', '<']
+        last_ts = None
+        min_dt, max_dt, err = db.db_get_dates_gb(item, param1)
+        if err or min_dt is None or max_dt is None:
+            if err:
+                logger.error(f"get_prospect_last_gb_data ERROR: {err}")
+            else:
+                logger.info(f"get_prospect_last_gb_data min max dt No dates min max")
+            continue
+
+        min_dt = min_dt.replace(tzinfo=timezone.utc)
+        max_dt = max_dt.replace(tzinfo=timezone.utc)
+        if max_dt < dt_5days:
+            continue
+            max_dt = datetime.now().replace(tzinfo=timezone.utc)
+        # start at oldest data
+        dt_str, err = api_prospect.get_prospect_last_data_gb(item, key="ts", op=ops_max[0])
+        if err:
+            logger.error(f"get_prospect_last_gb_data dt_str ERROR: {err}")
+            continue
+        if dt_str is None:
+            last_ts = max_dt - timedelta(days=5)
+        else:
+            last_ts = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S.000Z") - timedelta(days=1)
+            last_ts = last_ts.replace(tzinfo=timezone.utc)
+
+        if (last_ts + timedelta(minutes=1440 + (4 *60))) < max_dt:
+            while (last_ts + timedelta(minutes=1)) < max_dt:
+                days = (max_dt - last_ts).days + 1
+                df, err = db.update_prospect_gb(
+                        param1, item, op=ops_max[1], 
+                        start_ts=last_ts.replace(tzinfo=timezone.utc),
+                        num_rows= days * 2000)
+                if err:
+                    logger.error(f"update_prospect_gb ERROR: {err}")
+                else:
+                    logger.info(f"update_prospect_gb ts: {last_ts}  serial number: {item}  rows: {len(df)}")
+                    
+                last_ts = last_ts + timedelta(days=1)
+        else:
+            logger.info(f"last_ts {last_ts} is greater than max_dt {max_dt}")
+
+
 
     return results
 
@@ -95,7 +148,7 @@ sn_array = sorted(filtered_gb_sn_df.str.replace('-', '').tolist())
 
 #!!!!sn_array = ['00980AA3']
 
-num_parts = 10
+num_parts = 5
 chunks = [list(chunk) for chunk in np.array_split(sn_array, num_parts)]  # Ensure list format
 
 days = 3

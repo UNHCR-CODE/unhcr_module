@@ -316,6 +316,7 @@ def round_to_nearest_5_minutes(dt):
 
     return dt.replace(minute=rounded_minutes, second=0, microsecond=0)
 
+
 def api_get_all_stations(db_eng=None):
 
     payload = json.dumps({
@@ -346,6 +347,7 @@ def api_get_all_stations(db_eng=None):
     if err:
         return None, err
     return pd.DataFrame(data), None
+
 
 def db_all_site_ids(db_eng):
     with Session(db_eng) as session:
@@ -987,8 +989,21 @@ def get_inverter_data(
             logger.warning(f"get_inverter_data max data ERROR: {err}")
             days = 4
         else:
-            end_date = (res[0][0]).date()
-            days = (start_date - end_date).days + 1
+            if res[0][0] is None:
+                res, err = db.sql_execute(f" SELECT start_time FROM solarman.device_site_history WHERE device_sn = '{sn}';", db_eng)
+                if err:
+                    logger.warning(f"get_inverter_data max data ERROR: {err}")
+                    return None, err
+                if len(res) == 0:
+                    logger.warning(f"get_inverter_data max data ERROR: {err}")
+                    days = 30
+                else:
+                    start_date = (res[0][0]).date()
+                    days = ( datetime.today().date() - start_date ).days + 1
+                    start_date = datetime.today().date()
+            else:
+                end_date = (res[0][0]).date()
+                days = (start_date - end_date).days + 1
     data = []
     for i in range(days):
         payload = json.dumps(

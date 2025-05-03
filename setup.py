@@ -5,7 +5,7 @@ with open("fedotreqs.txt") as f:
 
 setup(
     name='unhcr_module',
-    version='0.4.8',
+    version='1.0.0',
     packages=find_packages(),
     install_requires=requirements,
     package_data={'': ['migrations/*', 'migrations/**/*']}, # Include migrations

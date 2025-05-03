@@ -1,5 +1,25 @@
 # UNHCR Data Integration Module
 
+2025-05-02 v_1.0.0  (WIP branch)
+
+You have to use --no-deps to PIP install:
+
+```bash
+pip install --no-deps .
+```
+
+Also: 
+
+```bash
+pip install -r --no-deps fedotreqs.txt
+```
+
+This is to allow incompatibilities with the fedotreqs.txt file. These will be resolved in the future.
+
+##  
+
+
+
 2025-02-16  v_0.4.7
 
 This module facilitates the integration of data from the Leonics API into UNHCR's systems, specifically a MySQL database, and the Prospect system.  It handles authentication with the Leonics API, data retrieval, filtering, and updates to both target systems.

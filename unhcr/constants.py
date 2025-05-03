@@ -85,6 +85,7 @@ GB_API_V1_USER_KEY=None
 # Prospect API
 BASE_URL = None
 API_IN_KEY = None
+PROS_GB_IN_KEY = None
 API_OUT_KEY = None
 
 # if your running a local instance of Prospect
@@ -179,6 +180,8 @@ def set_environ():  # sourcery skip: extract-duplicate-method
         Base URL for Prospect API.
     API_IN_KEY : str
         API key for incoming requests to Prospect.
+    PROS_GB_IN_KEY : str
+        API key for incoming requests to Prospect from GB.
     API_OUT_KEY : str
         API key for outgoing requests from Prospect.
     LOCAL_BASE_URL : str
@@ -241,6 +244,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
 
     global BASE_URL
     global API_IN_KEY
+    global PROS_GB_IN_KEY
     global API_OUT_KEY
 
     global LOCAL_BASE_URL
@@ -339,6 +343,7 @@ def set_environ():  # sourcery skip: extract-duplicate-method
     # Prospect API
     BASE_URL = os.getenv("PROS_BASE_URL", "PROS_BASE_URL missing")
     API_IN_KEY = os.getenv("PROS_IN_API_KEY", "PROS_IN_API_KEY missing")
+    PROS_GB_IN_KEY = os.getenv("PROS_GB_IN_KEY", "PROS_GB_IN_KEY missing")
     API_OUT_KEY = os.getenv("PROS_OUT_API_KEY", "PROS_OUT_API_KEY missing")
 
     # if your running a local instance of Prospect
