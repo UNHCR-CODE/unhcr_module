@@ -360,16 +360,100 @@ def db_all_site_ids(db_eng):
         return results
 
 
-def db_get_inverter_sns(db_eng):
+def db_get_inverter_sns(
+    db_eng,
+    join_clauses=None,
+    where_clauses=None,
+    group_by=None,
+    order_by=None,
+    limit=None
+):
+    """
+    Get a list of device serial numbers (device_sn) of all the devices with type "INVERTER" in the database.
+
+    Parameters
+    ----------
+    db_eng : sqlalchemy.engine.Engine
+        The database engine to use.
+    join_clauses : list of sqlalchemy.sql.selectable.Select
+        A list of join clauses to apply to the query.
+    where_clauses : list of sqlalchemy.sql.expression.BinaryExpression
+        A list of filters to apply to the query.
+    group_by : sqlalchemy.sql.expression.ColumnClause or list of sqlalchemy.sql.expression.ColumnClause
+        A column or list of columns to group the results by.
+    order_by : sqlalchemy.sql.expression.ColumnClause or list of sqlalchemy.sql.expression.ColumnClause
+        A column or list of columns to order the results by.
+    limit : int
+        The maximum number of results to return.
+
+    Returns
+    -------
+    list of str
+        A list of device serial numbers.
+    
+    Examples:
+    sns = db_get_inverter_sns(
+        db_eng,
+        join_clauses=[
+            (models.DeviceSiteHistory, models.Device.device_id == models.DeviceSiteHistory.device_id),
+        ],
+        where_clauses=[
+            models.DeviceSiteHistory.end_time.is_(None),
+            models.Device.status == "ACTIVE"
+        ],
+        group_by=[models.Device.device_sn],
+        order_by=[desc(models.Device.device_sn)],
+        limit=50
+    )
+    ==============================
+    sns = db_get_inverter_sns(
+        db_eng,
+        join_clauses=[
+            (models.DeviceSiteHistory, models.Device.device_id == models.DeviceSiteHistory.device_id),
+        ],
+        where_clauses=[
+            and_(
+                models.DeviceSiteHistory.end_time.is_(None),
+                or_(
+                    models.Device.manufacturer == "Huawei",
+                    models.Device.manufacturer == "Sungrow"
+                )
+            )
+        ]
+    )
+
+    """
     with Session(db_eng) as session:
-        # Construct the SELECT statement
-        stmt = select(models.Device.device_sn).where(
-            models.Device.device_type == "INVERTER"
-        )
+        stmt = select(models.Device.device_sn)
 
-        # Execute the query and fetch the results
+        # Apply joins
+        if join_clauses:
+            for join_clause in join_clauses:
+                if isinstance(join_clause, tuple):
+                    stmt = stmt.join(*join_clause)
+                else:
+                    stmt = stmt.join(join_clause)
+
+        # Apply filters
+        filters = [models.Device.device_type == "INVERTER"]
+        if where_clauses:
+            filters.extend(where_clauses)
+        stmt = stmt.where(*filters)
+
+        # Apply group by
+        if group_by:
+            stmt = stmt.group_by(*group_by) if isinstance(group_by, (list, tuple)) else stmt.group_by(group_by)
+
+        # Apply order by
+        if order_by:
+            stmt = stmt.order_by(*order_by) if isinstance(order_by, (list, tuple)) else stmt.order_by(order_by)
+
+        # Apply limit
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
         results = session.execute(stmt).scalars().all()
-
+        logger.debug(f"db_get_inverter_sns {stmt} results: {results}")
         return results
 
 

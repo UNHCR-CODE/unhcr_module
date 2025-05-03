@@ -11,23 +11,34 @@ from unhcr import constants as const
 from unhcr import db
 from unhcr import err_handler
 
+from unhcr import models
+
 mods=[
     ["api_solarman", "api_solarman"],
     ["app_utils", "app_utils"],
     ["constants", "const"],
     ["db", "db"],
     ["err_handler", "err_handler"],
+    ["models", "models"]
 ]
 
 res =app_utils.app_init(mods=mods,  log_file="unhcr.app_nigeria_sm_db_api.log", version= '0.4.8', level="INFO", override=True, quiet=False)
 logger = res[0]
 # local testing ===================================
 if const.LOCAL:  # testing with local python files
-    logger, api_solarman, app_utils, const, db, err_handler = res
+    logger, api_solarman, app_utils, const, db, err_handler, models = res
 
 db_eng = db.set_local_defaultdb_engine()
 # Fetch inverter serial numbers
-inverters_sn = api_solarman.db_get_inverter_sns(db_eng)
+inverters_sn = api_solarman.db_get_inverter_sns(
+        db_eng,
+        join_clauses=[
+            (models.DeviceSiteHistory, models.Device.device_id == models.DeviceSiteHistory.device_id),
+        ],
+        where_clauses=[
+            models.DeviceSiteHistory.end_time.is_(None)
+        ]
+    )
 
 num_threads = len(inverters_sn)  # Number of parallel threads (adjust as needed)
 #num_threads = 1  # For testing, set to 1 to avoid parallel processing
