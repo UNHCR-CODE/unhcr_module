@@ -1,6 +1,16 @@
 # UNHCR Data Integration Module
 
-2025-05-02 v_1.0.0  (WIP branch)
+## 2025-05-02 v_1.0.0  (WIP branch)
+
+### NOTE:
+
+This is a work in progress branch. The current version is v_0.4.9
+Also the solarman API key expires every 2 months (July 1st 2025)
+
+    You have to get the biz token and manually add it to the .env file:
+
+    SM_BIZ_ACCESS_TOKEN="your token"
+
 
 You have to use --no-deps to PIP install:
 
